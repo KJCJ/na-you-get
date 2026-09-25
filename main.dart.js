@@ -91200,7 +91200,7 @@ A.Zk.prototype={}
 A.Zi.prototype={}
 A.Zu.prototype={}
 A.Ng.prototype={
-H(a){return new A.AO(B.MH,"Na You Get (NUG)",A.vF(B.BH,null,A.aDI(B.ae,null,B.bZ,B.h9,B.bZ),B.Ex,!0),!1,null)}}
+H(a){return new A.AO(B.MH,"Na You Get (NYG)",A.vF(B.BH,null,A.aDI(B.ae,null,B.bZ,B.h9,B.bZ),B.Ex,!0),!1,null)}}
 A.kv.prototype={
 ac(){var s=$.aj()
 return new A.Er(new A.em(new A.cq("+232",B.di,B.aX),s),new A.em(B.bU,s),new A.em(B.bU,s))}}
