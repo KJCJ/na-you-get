@@ -23,7 +23,8 @@ Future<String?> pickAndUploadImage(BuildContext context) async {
 
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/upload'));
     request.headers['x-api-key'] = apiKey;
-    request.files.add(await http.MultipartFile.fromPath('file', picked.path));
+    final bytes = await picked.readAsBytes();
+    request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: 'upload.jpg'));
 
     final response = await request.send();
     final body = await response.stream.bytesToString();
