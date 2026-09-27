@@ -396,6 +396,56 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   Map<String, dynamic>? _currentUser;
   bool _loadingUser = true;
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _checkForUpdate();
+  }
+
+  Future<void> _checkForUpdate() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/version'));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body);
+        final latest = data['version']?.toString() ?? appVersion;
+        if (latest != appVersion) {
+          if (!mounted) return;
+          _showUpdateDialog(latest);
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _showUpdateDialog(String latestVersion) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Update Available'),
+        content: Text(
+          'A new version of Na You Get is available ($latestVersion). '
+          'Please update to get the latest features and fixes.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Later'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final uri = Uri.parse(apkDownloadUrl);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+            child: const Text('Update Now'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
