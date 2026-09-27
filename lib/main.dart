@@ -500,39 +500,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 // ==========================================
 // IMAGE UPLOAD HELPER
 // ==========================================
-Future<String?> pickAndUploadImage(BuildContext context) async {
-  final picker = ImagePicker();
-  try {
-    final XFile? picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1200,
-      maxHeight: 1200,
-      imageQuality: 80,
-    );
-    if (picked == null) return null;
-
-    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/upload'));
-    request.headers['x-api-key'] = apiKey;
-    request.files.add(await http.MultipartFile.fromPath('file', picked.path));
-
-    final response = await request.send();
-    final body = await response.stream.bytesToString();
-
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      final data = jsonDecode(body);
-      return data['url']?.toString();
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Upload failed. Try again.')),
-        );
-      }
-      return null;
-    }
-  } catch (e) {
-    return null;
-  }
-}
 
 // ==========================================
 // REUSABLE: SHOP PRODUCT GRID
