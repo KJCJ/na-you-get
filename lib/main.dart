@@ -2,10 +2,47 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 
 const String baseUrl = 'https://random.taila91e03.ts.net';
 const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785acabfd295';
+const String appVersion = '1.0.0';
+const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/raw/main/apk/NaYouGet.apk';
 
+Future<String?> pickAndUploadImage(BuildContext context) async {
+  final picker = ImagePicker();
+  try {
+    final XFile? picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
+      maxHeight: 1200,
+      imageQuality: 80,
+    );
+    if (picked == null) return null;
+
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/upload'));
+    request.headers['x-api-key'] = apiKey;
+    request.files.add(await http.MultipartFile.fromPath('file', picked.path));
+
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final data = jsonDecode(body);
+      return data['url']?.toString();
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Upload failed. Try again.')),
+        );
+      }
+      return null;
+    }
+  } catch (e) {
+    return null;
+  }
+}
 void main() {
   runApp(const NaYouGetApp());
 }
