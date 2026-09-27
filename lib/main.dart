@@ -825,6 +825,10 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     CircleAvatar(
                       radius: 24,
                       backgroundColor: const Color(0xFF1B5E20),
+                      backgroundImage: shop['logo_url'] != null &&
+                              shop['logo_url'].toString().isNotEmpty
+                          ? NetworkImage(shop['logo_url'])
+                          : null,
                       child: Text(
                         (shop['shop_name'] ?? '?')[0].toUpperCase(),
                         style: const TextStyle(
@@ -1080,15 +1084,22 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                                     CircleAvatar(
                                       radius: 28,
                                       backgroundColor: const Color(0xFF1B5E20),
-                                      child: Text(
-                                        (shop['shop_name'] ?? '?')[0]
-                                            .toUpperCase(),
-                                        style: const TextStyle(
-                                          fontSize: 24,
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
+                                      backgroundImage: shop['logo_url'] != null &&
+                                              shop['logo_url'].toString().isNotEmpty
+                                          ? NetworkImage(shop['logo_url'])
+                                          : null,
+                                      child: shop['logo_url'] != null &&
+                                              shop['logo_url'].toString().isNotEmpty
+                                          ? null
+                                          : Text(
+                                              (shop['shop_name'] ?? '?')[0]
+                                                  .toUpperCase(),
+                                              style: const TextStyle(
+                                                fontSize: 24,
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
                                     ),
                                     const SizedBox(width: 14),
                                     Expanded(
