@@ -424,6 +424,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final screens = [
       MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
       ShopsBrowseScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
+      const MarketplaceLocationsScreen(),
       RunnerDashboardScreen(
           currentUser: _currentUser, onUserChanged: _refreshUser),
     ];
@@ -435,10 +436,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.storefront), label: 'Marketplace'),
+              icon: Icon(Icons.shopping_bag_outlined), label: 'Shopping'),
           NavigationDestination(icon: Icon(Icons.store), label: 'Shops'),
           NavigationDestination(
-              icon: Icon(Icons.delivery_dining), label: 'Runner Jobs'),
+              icon: Icon(Icons.location_on_outlined), label: 'Marketplace'),
+          NavigationDestination(
+              icon: Icon(Icons.directions_run), label: 'Runner'),
         ],
       ),
     );
@@ -2308,6 +2311,54 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                     );
                   },
                 ),
+    );
+  }
+}
+
+
+
+// ==========================================
+// MARKETPLACE LOCATIONS SCREEN
+// ==========================================
+class MarketplaceLocationsScreen extends StatelessWidget {
+  const MarketplaceLocationsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Image.asset('assets/logo.png', height: 60),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.location_on_outlined,
+                  size: 80, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text(
+                'No markets yet.',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Markets like Lumley, Bo Central, and Freetown Central will appear here once sellers add their locations.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
