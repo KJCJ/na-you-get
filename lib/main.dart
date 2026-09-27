@@ -43,6 +43,7 @@ Future<String?> pickAndUploadImage(BuildContext context) async {
     return null;
   }
 }
+
 void main() {
   runApp(const NaYouGetApp());
 }
@@ -73,7 +74,6 @@ class NaYouGetApp extends StatelessWidget {
     );
   }
 }
-
 
 // ==========================================
 // USER SESSION
@@ -381,9 +381,8 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 
-
 // ==========================================
-// MAIN NAVIGATION — 3 TABS
+// MAIN NAVIGATION — 4 TABS
 // ==========================================
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -396,7 +395,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   Map<String, dynamic>? _currentUser;
   bool _loadingUser = true;
-  
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -447,12 +452,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _loadUser();
-  }
-
   Future<void> _loadUser() async {
     final user = await UserSession.load();
     if (mounted) {
@@ -495,6 +494,43 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ],
       ),
     );
+  }
+}
+
+// ==========================================
+// IMAGE UPLOAD HELPER
+// ==========================================
+Future<String?> pickAndUploadImage(BuildContext context) async {
+  final picker = ImagePicker();
+  try {
+    final XFile? picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
+      maxHeight: 1200,
+      imageQuality: 80,
+    );
+    if (picked == null) return null;
+
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/upload'));
+    request.headers['x-api-key'] = apiKey;
+    request.files.add(await http.MultipartFile.fromPath('file', picked.path));
+
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final data = jsonDecode(body);
+      return data['url']?.toString();
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Upload failed. Try again.')),
+        );
+      }
+      return null;
+    }
+  } catch (e) {
+    return null;
   }
 }
 
@@ -598,6 +634,52 @@ class ShopProductGrid extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ==========================================
+// MARKETPLACE LOCATIONS SCREEN
+// ==========================================
+class MarketplaceLocationsScreen extends StatelessWidget {
+  const MarketplaceLocationsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Image.asset('assets/logo.png', height: 60),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.location_on_outlined,
+                  size: 80, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text(
+                'No markets yet.',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Markets like Lumley, Bo Central, and Freetown Central will appear here once sellers add their locations.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -741,8 +823,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                        content:
-                            Text('Order placed! Runner will be assigned.')),
+                        content: Text('Order placed! Runner will be assigned.')),
                   );
                 }
               },
@@ -985,13 +1066,6 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                if (searchQuery.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    'in "$searchQuery"',
-                    style: TextStyle(color: Colors.grey.shade500),
-                  ),
-                ],
               ],
             ),
           ),
@@ -1333,6 +1407,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         text: widget.currentUser?['phone_number'] ?? '+232');
     final cityController = TextEditingController(text: 'Freetown');
     String selectedCategory = 'Fashion';
+    String? uploadedLogoUrl;
 
     if (!mounted) return;
     showDialog(
@@ -1376,6 +1451,36 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final url = await pickAndUploadImage(context);
+                      if (url != null) {
+                        setDialogState(() => uploadedLogoUrl = url);
+                      }
+                    },
+                    icon: const Icon(Icons.photo_camera),
+                    label: Text(uploadedLogoUrl == null
+                        ? 'Pick Shop Logo'
+                        : 'Logo Uploaded'),
+                  ),
+                ),
+                if (uploadedLogoUrl != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        uploadedLogoUrl!,
+                        height: 100,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
                   decoration: const InputDecoration(
@@ -1392,8 +1497,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     DropdownMenuItem(value: 'Other', child: Text('Other')),
                   ],
                   onChanged: (value) {
-                    if (value != null)
+                    if (value != null) {
                       setDialogState(() => selectedCategory = value);
+                    }
                   },
                 ),
               ],
@@ -1421,6 +1527,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     'phone_number': phoneController.text,
                     'city': cityController.text,
                     'category': selectedCategory,
+                    'logo_url': uploadedLogoUrl,
                   }),
                 );
 
@@ -1460,25 +1567,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       fetchProducts();
       _loadEverything();
     });
-  }
-
-  void _openShopFromProduct(dynamic product) {
-    final shop = {
-      'id': product['merchant_id'],
-      'shop_name': product['shop_name'],
-      'city': product['shop_city'],
-      'category': product['shop_category'],
-    };
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ShopPageScreen(
-          shop: shop,
-          currentUser: widget.currentUser,
-          onUserChanged: widget.onUserChanged,
-        ),
-      ),
-    );
   }
 
   Future<void> _showCheckout(dynamic product) async {
@@ -1555,8 +1643,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                        content:
-                            Text('Order placed! Runner will be assigned.')),
+                        content: Text('Order placed! Runner will be assigned.')),
                   );
                 }
               },
@@ -1856,10 +1943,40 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                     DropdownMenuItem(value: 'Other', child: Text('Other')),
                   ],
                   onChanged: (value) {
-                    if (value != null)
+                    if (value != null) {
                       setDialogState(() => selectedCategory = value);
+                    }
                   },
                 ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final url = await pickAndUploadImage(context);
+                      if (url != null) {
+                        imageUrlController.text = url;
+                        setDialogState(() {});
+                      }
+                    },
+                    icon: const Icon(Icons.photo_camera),
+                    label: const Text('Pick Photo from Phone'),
+                  ),
+                ),
+                if (imageUrlController.text.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        imageUrlController.text,
+                        height: 120,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: imageUrlController,
@@ -2159,8 +2276,6 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
   }
 }
 
-
-
 // ==========================================
 // MY ORDERS SCREEN
 // ==========================================
@@ -2361,54 +2476,6 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                     );
                   },
                 ),
-    );
-  }
-}
-
-
-
-// ==========================================
-// MARKETPLACE LOCATIONS SCREEN
-// ==========================================
-class MarketplaceLocationsScreen extends StatelessWidget {
-  const MarketplaceLocationsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Image.asset('assets/logo.png', height: 60),
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.location_on_outlined,
-                  size: 80, color: Colors.grey.shade400),
-              const SizedBox(height: 16),
-              Text(
-                'No markets yet.',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Markets like Lumley, Bo Central, and Freetown Central will appear here once sellers add their locations.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
