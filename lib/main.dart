@@ -10,6 +10,9 @@ const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785
 const String appVersion = '1.0.0';
 const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/raw/main/apk/NaYouGet.apk';
 
+// ==========================================
+// IMAGE UPLOAD HELPER
+// ==========================================
 Future<String?> pickAndUploadImage(BuildContext context) async {
   final picker = ImagePicker();
   try {
@@ -41,10 +44,18 @@ Future<String?> pickAndUploadImage(BuildContext context) async {
       return null;
     }
   } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cannot pick image: $e')),
+      );
+    }
     return null;
   }
 }
 
+// ==========================================
+// MAIN APP
+// ==========================================
 void main() {
   runApp(const NaYouGetApp());
 }
@@ -91,7 +102,7 @@ class UserSession {
     await prefs.setInt(_idKey, user['id']);
     await prefs.setString(_nameKey, user['name']);
     await prefs.setString(_phoneKey, user['phone_number']);
-    await prefs.setString(_roleKey, user['role']);
+    await prefs.setString(_roleKey, user['role'] ?? 'customer');
     await prefs.setString(_tokenKey, token);
   }
 
@@ -129,6 +140,7 @@ class ShopSession {
   static const _phoneKey = 'phone_number';
   static const _cityKey = 'city';
   static const _categoryKey = 'category';
+  static const _logoKey = 'logo_url';
 
   static Future<void> save(Map<String, dynamic> merchant) async {
     final prefs = await SharedPreferences.getInstance();
@@ -138,6 +150,9 @@ class ShopSession {
     await prefs.setString(_phoneKey, merchant['phone_number']);
     await prefs.setString(_cityKey, merchant['city'] ?? 'Freetown');
     await prefs.setString(_categoryKey, merchant['category'] ?? 'Other');
+    if (merchant['logo_url'] != null) {
+      await prefs.setString(_logoKey, merchant['logo_url']);
+    }
   }
 
   static Future<Map<String, dynamic>?> load() async {
@@ -151,6 +166,7 @@ class ShopSession {
       'phone_number': prefs.getString(_phoneKey) ?? '',
       'city': prefs.getString(_cityKey) ?? 'Freetown',
       'category': prefs.getString(_categoryKey) ?? 'Other',
+      'logo_url': prefs.getString(_logoKey),
     };
   }
 
@@ -162,6 +178,7 @@ class ShopSession {
     await prefs.remove(_phoneKey);
     await prefs.remove(_cityKey);
     await prefs.remove(_categoryKey);
+    await prefs.remove(_logoKey);
   }
 }
 
@@ -499,21 +516,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // ==========================================
-// IMAGE UPLOAD HELPER
-// ==========================================
-
-// ==========================================
 // REUSABLE: SHOP PRODUCT GRID
 // ==========================================
 class ShopProductGrid extends StatelessWidget {
   final List<dynamic> products;
   final void Function(dynamic product) onBuy;
+  final void Function(dynamic product)? onDelete;
   final VoidCallback? onRefresh;
 
   const ShopProductGrid({
     super.key,
     required this.products,
     required this.onBuy,
+    this.onDelete,
     this.onRefresh,
   });
 
@@ -590,12 +605,23 @@ class ShopProductGrid extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 const SizedBox(height: 4),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => onBuy(item),
-                    child: const Text('Buy'),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => onBuy(item),
+                        child: const Text('Buy'),
+                      ),
+                    ),
+                    if (onDelete != null) ...[
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        tooltip: 'Delete product',
+                        onPressed: () => onDelete!(item),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
@@ -653,8 +679,9 @@ class MarketplaceLocationsScreen extends StatelessWidget {
 }
 
 
+
 // ==========================================
-// SHOP PAGE — VIEWING A SHOP
+// SHOP PAGE — PUBLIC VIEW
 // ==========================================
 class ShopPageScreen extends StatefulWidget {
   final Map<String, dynamic> shop;
@@ -675,10 +702,12 @@ class ShopPageScreen extends StatefulWidget {
 class _ShopPageScreenState extends State<ShopPageScreen> {
   List<dynamic> products = [];
   bool isLoading = true;
+  late Map<String, dynamic> shop;
 
   @override
   void initState() {
     super.initState();
+    shop = Map<String, dynamic>.from(widget.shop);
     _fetchProducts();
   }
 
@@ -686,16 +715,16 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     setState(() => isLoading = true);
     try {
       final res = await http.get(
-        Uri.parse('$baseUrl/merchants/${widget.shop['id']}/products/'),
+        Uri.parse('$baseUrl/merchants/${shop['id']}/products/'),
       );
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final data = jsonDecode(res.body) as List;
         final enriched = data.map((p) {
           return {
             ...p,
-            'shop_name': widget.shop['shop_name'],
-            'shop_city': widget.shop['city'],
-            'shop_category': widget.shop['category'],
+            'shop_name': shop['shop_name'],
+            'shop_city': shop['city'],
+            'shop_category': shop['category'],
           };
         }).toList();
         setState(() {
@@ -707,6 +736,145 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       }
     } catch (_) {
       setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _deleteProduct(int productId, String productTitle) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete product?'),
+        content: Text('Delete "$productTitle"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final user = await UserSession.load();
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/products/$productId'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Product deleted')),
+          );
+          _fetchProducts();
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('You cannot delete this product')),
+          );
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot reach server')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteShop() async {
+    final confirmController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete this shop?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'This will delete the shop and all its products. This cannot be undone.',
+            ),
+            const SizedBox(height: 12),
+            const Text('Type DELETE to confirm:'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: confirmController,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'DELETE',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              if (confirmController.text.trim() == 'DELETE') {
+                Navigator.pop(ctx, true);
+              }
+            },
+            child: const Text('Delete Shop'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final user = await UserSession.load();
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/merchants/${shop['id']}'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        await ShopSession.clear();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Shop deleted')),
+          );
+          Navigator.pop(context);
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('You do not own this shop')),
+          );
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot reach server')),
+        );
+      }
     }
   }
 
@@ -803,13 +971,36 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     );
   }
 
+  bool get _isOwner {
+    if (widget.currentUser == null) return false;
+    return widget.currentUser!['phone_number'] == shop['phone_number'];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final shop = widget.shop;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(shop['shop_name'] ?? 'Shop'),
+        actions: [
+          if (_isOwner)
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'delete') _deleteShop();
+              },
+              itemBuilder: (ctx) => const [
+                PopupMenuItem<String>(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Delete Shop', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -829,13 +1020,16 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                               shop['logo_url'].toString().isNotEmpty
                           ? NetworkImage(shop['logo_url'])
                           : null,
-                      child: Text(
-                        (shop['shop_name'] ?? '?')[0].toUpperCase(),
-                        style: const TextStyle(
-                            fontSize: 22,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold),
-                      ),
+                      child: shop['logo_url'] != null &&
+                              shop['logo_url'].toString().isNotEmpty
+                          ? null
+                          : Text(
+                              (shop['shop_name'] ?? '?')[0].toUpperCase(),
+                              style: const TextStyle(
+                                  fontSize: 22,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold),
+                            ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -912,6 +1106,12 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 : ShopProductGrid(
                     products: products,
                     onBuy: _showCheckout,
+                    onDelete: _isOwner
+                        ? (product) => _deleteProduct(
+                              product['id'],
+                              product['title'] ?? 'this product',
+                            )
+                        : null,
                   ),
           ),
         ],
@@ -995,7 +1195,7 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
           onUserChanged: widget.onUserChanged,
         ),
       ),
-    );
+    ).then((_) => _fetchShops());
   }
 
   @override
@@ -1156,7 +1356,6 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
     );
   }
 }
-
 
 // ==========================================
 // MARKETPLACE SCREEN
@@ -1825,8 +2024,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 }
 
+
 // ==========================================
-// SHOP PROFILE (SELLER'S OWN VIEW)
+// SHOP PROFILE — SELLER'S OWN VIEW
 // ==========================================
 class ShopProfileScreen extends StatefulWidget {
   final Map<String, dynamic> merchant;
@@ -1839,10 +2039,12 @@ class ShopProfileScreen extends StatefulWidget {
 class _ShopProfileScreenState extends State<ShopProfileScreen> {
   List<dynamic> myProducts = [];
   bool isLoading = true;
+  late Map<String, dynamic> merchant;
 
   @override
   void initState() {
     super.initState();
+    merchant = Map<String, dynamic>.from(widget.merchant);
     fetchShopProducts();
   }
 
@@ -1850,7 +2052,7 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
     setState(() => isLoading = true);
     try {
       final res = await http.get(
-        Uri.parse('$baseUrl/merchants/${widget.merchant['id']}/products/'),
+        Uri.parse('$baseUrl/merchants/${merchant['id']}/products/'),
       );
       if (res.statusCode >= 200 && res.statusCode < 300) {
         setState(() {
@@ -1865,6 +2067,216 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
     }
   }
 
+  Future<void> _showEditShopDialog() async {
+    final shopNameController =
+        TextEditingController(text: merchant['shop_name'] ?? '');
+    final ownerNameController =
+        TextEditingController(text: merchant['owner_name'] ?? '');
+    final phoneController =
+        TextEditingController(text: merchant['phone_number'] ?? '');
+    final cityController =
+        TextEditingController(text: merchant['city'] ?? 'Freetown');
+    String? currentLogo = merchant['logo_url'];
+    String selectedCategory = merchant['category'] ?? 'Other';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Shop Info'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: shopNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Shop Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: ownerNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Owner Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: cityController,
+                  decoration: const InputDecoration(
+                    labelText: 'City',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final url = await pickAndUploadImage(context);
+                      if (url != null) {
+                        setDialogState(() => currentLogo = url);
+                      }
+                    },
+                    icon: const Icon(Icons.photo_camera),
+                    label: Text((currentLogo ?? '').isEmpty
+                        ? 'Pick Shop Logo'
+                        : 'Change Logo'),
+                  ),
+                ),
+                if ((currentLogo ?? '').isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        currentLogo ?? '',
+                        height: 100,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: const InputDecoration(
+                    labelText: 'Category',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
+                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
+                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
+                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
+                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
+                    DropdownMenuItem(value: 'Services', child: Text('Services')),
+                    DropdownMenuItem(value: 'Other', child: Text('Other')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => selectedCategory = value);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final user = await UserSession.load();
+                final response = await http.put(
+                  Uri.parse('$baseUrl/merchants/${merchant['id']}'),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
+                  },
+                  body: jsonEncode({
+                    'shop_name': shopNameController.text,
+                    'owner_name': ownerNameController.text,
+                    'phone_number': phoneController.text,
+                    'city': cityController.text,
+                    'category': selectedCategory,
+                    'logo_url': currentLogo,
+                  }),
+                );
+
+                if (response.statusCode >= 200 && response.statusCode < 300) {
+                  final updated = jsonDecode(response.body)['merchant'];
+                  await ShopSession.save(updated);
+                  if (mounted) {
+                    Navigator.pop(ctx);
+                    setState(() => merchant = Map<String, dynamic>.from(updated));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Shop updated')),
+                    );
+                  }
+                } else {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Failed to update shop')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteProduct(int productId, String productTitle) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete product?'),
+        content: Text('Delete "$productTitle"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final user = await UserSession.load();
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/products/$productId'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Product deleted')),
+          );
+          fetchShopProducts();
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('You cannot delete this product')),
+          );
+        }
+      }
+    } catch (_) {}
+  }
+
   void _showAddItemDialog() {
     final titleController = TextEditingController();
     final descController = TextEditingController();
@@ -1876,7 +2288,7 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text('Add Item to ${widget.merchant['shop_name']}'),
+          title: Text('Add Item to ${merchant['shop_name']}'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1986,7 +2398,7 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                     'x-api-key': apiKey,
                   },
                   body: jsonEncode({
-                    'merchant_id': widget.merchant['id'],
+                    'merchant_id': merchant['id'],
                     'title': titleController.text,
                     'description': descController.text,
                     'category': selectedCategory,
@@ -2017,44 +2429,16 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
     );
   }
 
-  void _confirmLogout() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Sign out of this shop?'),
-        content: const Text(
-          'Your products will stay on the marketplace. You can always sign back in later.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              await ShopSession.clear();
-              if (mounted) {
-                Navigator.pop(ctx);
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Sign Out of Shop'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.merchant['shop_name']),
+        title: Text(merchant['shop_name'] ?? 'My Shop'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out of shop',
-            onPressed: _confirmLogout,
+            icon: const Icon(Icons.edit),
+            tooltip: 'Edit shop info',
+            onPressed: _showEditShopDialog,
           ),
         ],
       ),
@@ -2067,16 +2451,42 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.merchant['shop_name'],
-                  style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.bold),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundColor: const Color(0xFF1B5E20),
+                      backgroundImage: merchant['logo_url'] != null &&
+                              merchant['logo_url'].toString().isNotEmpty
+                          ? NetworkImage(merchant['logo_url'])
+                          : null,
+                      child: merchant['logo_url'] != null &&
+                              merchant['logo_url'].toString().isNotEmpty
+                          ? null
+                          : Text(
+                              (merchant['shop_name'] ?? '?')[0].toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 24,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        merchant['shop_name'] ?? '',
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text('Owner: ${widget.merchant['owner_name']}'),
-                Text('Location: ${widget.merchant['city']}, Sierra Leone'),
-                Text('Category: ${widget.merchant['category'] ?? 'Other'}'),
-                Text('Contact: ${widget.merchant['phone_number']}'),
+                const SizedBox(height: 8),
+                Text('Owner: ${merchant['owner_name']}'),
+                Text('Location: ${merchant['city']}, Sierra Leone'),
+                Text('Category: ${merchant['category'] ?? 'Other'}'),
+                Text('Contact: ${merchant['phone_number']}'),
               ],
             ),
           ),
@@ -2119,6 +2529,14 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                               title: Text(item['title']),
                               subtitle: Text(
                                   'Price: SLE ${item['price_sle']} • ${item['category'] ?? 'Other'}'),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                tooltip: 'Delete product',
+                                onPressed: () => _deleteProduct(
+                                  item['id'],
+                                  item['title'] ?? 'this product',
+                                ),
+                              ),
                             ),
                           );
                         },
