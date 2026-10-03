@@ -2482,6 +2482,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                                   p['id'], p['title'] ?? 'this product')
                               : null,
                           isOwner: _isOwner,
+                          sellerUserId: product['seller_user_id'],
                         ),
                       ),
                     ),
@@ -3030,6 +3031,7 @@ class ProductDetailScreen extends StatelessWidget {
   final void Function(Map<String, dynamic> product) onBuy;
   final void Function(Map<String, dynamic> product)? onDelete;
   final bool isOwner;
+  final int? sellerUserId;
 
   const ProductDetailScreen({
     super.key,
@@ -3037,6 +3039,7 @@ class ProductDetailScreen extends StatelessWidget {
     required this.onBuy,
     this.onDelete,
     this.isOwner = false,
+    this.sellerUserId,
   });
 
   @override
@@ -3146,6 +3149,27 @@ class ProductDetailScreen extends StatelessWidget {
                   },
                 ),
               if (isOwner && onDelete != null) const SizedBox(width: 8),
+              if (!isOwner && sellerUserId != null) ...[
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF1B5E20),
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                  ),
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  label: const Text('Message'),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ChatScreen(
+                        otherUserId: sellerUserId!,
+                        otherUserName: product['shop_name'] ?? 'Seller',
+                        shopId: product['merchant_id'],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
               Expanded(
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
@@ -3712,6 +3736,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                 product: product,
                                 onBuy: _showCheckout,
                                 isOwner: false,
+                                sellerUserId: product['seller_user_id'],
                               ),
                             ),
                           ),
@@ -4691,6 +4716,31 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                                 ),
                               ],
                             ),
+                            if (order['driver_id'] != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 10),
+                                child: Row(
+                                  children: [
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFF1B5E20),
+                                      ),
+                                      icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                                      label: const Text('Message Runner'),
+                                      onPressed: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => ChatScreen(
+                                            otherUserId: (order['driver_id'] as num).toInt(),
+                                            otherUserName: 'Runner',
+                                            orderId: order['id'],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
                       ),
