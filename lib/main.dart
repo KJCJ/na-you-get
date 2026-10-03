@@ -1288,16 +1288,13 @@ class _ChatBubbleState extends State<ChatBubble> {
   @override
   Widget build(BuildContext context) {
     if (widget.currentUser == null) return const SizedBox.shrink();
-    return Positioned(
-      right: 16,
-      bottom: 90,
-      child: GestureDetector(
-        onTap: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => MessagesScreen(currentUser: widget.currentUser!),
-            ),
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MessagesScreen(currentUser: widget.currentUser!),
+          ),
           );
           _refresh();
         },
@@ -1333,8 +1330,7 @@ class _ChatBubbleState extends State<ChatBubble> {
               ),
           ],
         ),
-      ),
-    );
+      );
   }
 }
 
@@ -1475,7 +1471,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ],
       ),
         ),
-        ChatBubble(currentUser: _currentUser),
+        Positioned(
+          right: 16,
+          bottom: 90,
+          child: ChatBubble(currentUser: _currentUser),
+        ),
       ],
     );
   }
