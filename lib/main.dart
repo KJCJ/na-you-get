@@ -1545,13 +1545,13 @@ class ShopProductGrid extends StatelessWidget {
               children: [
                 Expanded(
                   child: Container(
-                    color: Colors.green.shade100,
+                    color: Colors.white,
                     width: double.infinity,
                     child: item['image_url'] != null &&
                             item['image_url'].toString().isNotEmpty
                         ? Image.network(
                             item['image_url'],
-                            fit: BoxFit.cover,
+                            fit: BoxFit.contain,
                             errorBuilder: (context, error, stackTrace) =>
                                 const Center(
                                     child: Icon(Icons.shopping_bag, size: 40)),
@@ -3054,15 +3054,16 @@ class ProductDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
+            Container(
               width: double.infinity,
               height: 280,
+              color: Colors.white,
               child: hasImage
                   ? Image.network(
                       imageUrl,
-                      fit: BoxFit.cover,
+                      fit: BoxFit.contain,
                       errorBuilder: (context, error, stackTrace) => Container(
-                        color: Colors.green.shade100,
+                        color: Colors.white,
                         child: const Center(
                           child: Icon(Icons.shopping_bag,
                               size: 80, color: Colors.green),
@@ -3070,7 +3071,7 @@ class ProductDetailScreen extends StatelessWidget {
                       ),
                     )
                   : Container(
-                      color: Colors.green.shade100,
+                      color: Colors.white,
                       child: const Center(
                         child: Icon(Icons.shopping_bag,
                             size: 80, color: Colors.green),
