@@ -400,6 +400,196 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // ==========================================
+// ACCOUNT SHEET + ACCOUNT BUTTON (shared by all tabs)
+// ==========================================
+void showAccountSheet(
+  BuildContext context,
+  Map<String, dynamic>? currentUser,
+  VoidCallback onUserChanged, {
+  Future<bool> Function({String? suggestedRole})? ensureLoggedIn,
+  VoidCallback? onSignOut,
+  VoidCallback? onRefreshUser,
+}) {
+  final user = currentUser;
+
+  Future<void> handleSignIn() async {
+    if (ensureLoggedIn != null) {
+      await ensureLoggedIn();
+    }
+    onUserChanged();
+    onRefreshUser?.call();
+  }
+
+  showModalBottomSheet(
+    context: context,
+    builder: (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 16),
+          if (user == null) ...[
+            const Icon(Icons.person_outline, size: 48, color: Colors.grey),
+            const SizedBox(height: 12),
+            const Text('Welcome to Na You Get',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                'You can browse as a guest. Sign in when you want to sell, deliver, or buy.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1B5E20),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.login),
+                  label: const Text('Sign In'),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await handleSignIn();
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.person_add),
+                  label: const Text('Create Account'),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await handleSignIn();
+                  },
+                ),
+              ),
+            ),
+          ] else ...[
+            CircleAvatar(
+              radius: 32,
+              backgroundColor: const Color(0xFF1B5E20),
+              child: Text(
+                user['name'].toString().isNotEmpty
+                    ? user['name'][0].toUpperCase()
+                    : '?',
+                style: const TextStyle(
+                    fontSize: 28,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              user['name'] ?? 'User',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            Text(user['phone_number'] ?? ''),
+            const SizedBox(height: 4),
+            Chip(
+              label: Text(
+                (user['role'] ?? 'customer').toUpperCase(),
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+            const Divider(height: 24),
+            ListTile(
+              leading: const Icon(Icons.receipt_long),
+              title: const Text('My Orders'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MyOrdersScreen(currentUser: user),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title:
+                  const Text('Sign Out', style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await UserSession.clear();
+                await ShopSession.clear();
+                onUserChanged();
+                onSignOut?.call();
+              },
+            ),
+          ],
+          const SizedBox(height: 12),
+        ],
+      ),
+    ),
+  );
+}
+
+class AccountButton extends StatelessWidget {
+  final Map<String, dynamic>? currentUser;
+  final VoidCallback onUserChanged;
+  final Future<bool> Function({String? suggestedRole})? ensureLoggedIn;
+  final VoidCallback? onSignOut;
+  final VoidCallback? onRefreshUser;
+
+  const AccountButton({
+    super.key,
+    required this.currentUser,
+    required this.onUserChanged,
+    this.ensureLoggedIn,
+    this.onSignOut,
+    this.onRefreshUser,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final user = currentUser;
+    final isLoggedIn = user != null;
+    return IconButton(
+      tooltip: isLoggedIn ? 'My Account' : 'Sign In',
+      icon: isLoggedIn
+          ? CircleAvatar(
+              radius: 16,
+              backgroundColor: const Color(0xFF1B5E20),
+              child: Text(
+                (user['name']?.toString() ?? '?').isNotEmpty
+                    ? user['name'][0].toUpperCase()
+                    : '?',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14),
+              ),
+            )
+          : const Icon(Icons.login),
+      onPressed: () => showAccountSheet(
+        context,
+        currentUser,
+        onUserChanged,
+        ensureLoggedIn: ensureLoggedIn,
+        onSignOut: onSignOut,
+        onRefreshUser: onRefreshUser,
+      ),
+    );
+  }
+}
+
+// ==========================================
 // MAIN NAVIGATION — 4 TABS
 // ==========================================
 class MainNavigationScreen extends StatefulWidget {
@@ -491,7 +681,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final screens = [
       MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
       ShopsBrowseScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
-      const MarketplaceLocationsScreen(),
+      MarketplaceLocationsScreen(
+          currentUser: _currentUser, onUserChanged: _refreshUser),
       RunnerDashboardScreen(
           currentUser: _currentUser, onUserChanged: _refreshUser),
     ];
@@ -636,7 +827,14 @@ class ShopProductGrid extends StatelessWidget {
 // MARKETPLACE LOCATIONS SCREEN
 // ==========================================
 class MarketplaceLocationsScreen extends StatefulWidget {
-  const MarketplaceLocationsScreen({super.key});
+  final Map<String, dynamic>? currentUser;
+  final VoidCallback onUserChanged;
+
+  const MarketplaceLocationsScreen({
+    super.key,
+    required this.currentUser,
+    required this.onUserChanged,
+  });
 
   @override
   State<MarketplaceLocationsScreen> createState() =>
@@ -654,6 +852,23 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
   void initState() {
     super.initState();
     _fetchShops();
+  }
+
+  Future<bool> _ensureLoggedIn({String? suggestedRole}) async {
+    if (widget.currentUser != null) return true;
+
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AuthScreen(suggestedRole: suggestedRole),
+      ),
+    );
+
+    if (result == true) {
+      widget.onUserChanged();
+      return true;
+    }
+    return false;
   }
 
   Future<void> _fetchShops() async {
@@ -862,6 +1077,10 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
+          AccountButton(
+              currentUser: widget.currentUser,
+              onUserChanged: widget.onUserChanged,
+              ensureLoggedIn: _ensureLoggedIn),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _fetchShops,
@@ -1682,6 +1901,14 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
+          AccountButton(
+              currentUser: widget.currentUser,
+              onUserChanged: widget.onUserChanged,
+              ensureLoggedIn: _ensureLoggedIn,
+              onRefreshUser: () {
+                if (mounted) setState(() => myShop = null);
+                _loadMyShop();
+              }),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _fetchShops,
@@ -1924,132 +2151,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       return true;
     }
     return false;
-  }
-
-  void _showAccountSheet() {
-    final user = widget.currentUser;
-
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 16),
-            if (user == null) ...[
-              const Icon(Icons.person_outline, size: 48, color: Colors.grey),
-              const SizedBox(height: 12),
-              const Text('Welcome to Na You Get',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24),
-                child: Text(
-                  'You can browse as a guest. Sign in when you want to sell, deliver, or buy.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1B5E20),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    icon: const Icon(Icons.login),
-                    label: const Text('Sign In'),
-                    onPressed: () async {
-                      Navigator.pop(ctx);
-                      final ok = await _ensureLoggedIn();
-                      if (ok && mounted) setState(() {});
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    icon: const Icon(Icons.person_add),
-                    label: const Text('Create Account'),
-                    onPressed: () async {
-                      Navigator.pop(ctx);
-                      final ok = await _ensureLoggedIn();
-                      if (ok && mounted) setState(() {});
-                    },
-                  ),
-                ),
-              ),
-            ] else ...[
-              CircleAvatar(
-                radius: 32,
-                backgroundColor: const Color(0xFF1B5E20),
-                child: Text(
-                  user['name'].toString().isNotEmpty
-                      ? user['name'][0].toUpperCase()
-                      : '?',
-                  style: const TextStyle(
-                      fontSize: 28,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                user['name'] ?? 'User',
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              Text(user['phone_number'] ?? ''),
-              const SizedBox(height: 4),
-              Chip(
-                label: Text(
-                  (user['role'] ?? 'customer').toUpperCase(),
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-              const Divider(height: 24),
-              ListTile(
-                leading: const Icon(Icons.receipt_long),
-                title: const Text('My Orders'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => MyOrdersScreen(currentUser: user),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.red),
-                title: const Text('Sign Out',
-                    style: TextStyle(color: Colors.red)),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await UserSession.clear();
-                  await ShopSession.clear();
-                  widget.onUserChanged();
-                  if (mounted) setState(() => myShop = null);
-                },
-              ),
-            ],
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _showCreateShopDialog() async {
@@ -2401,7 +2502,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   @override
   Widget build(BuildContext context) {
     final visible = filteredProducts;
-    final isLoggedIn = widget.currentUser != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -2411,11 +2511,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: _loadEverything,
           ),
-          IconButton(
-            icon: Icon(isLoggedIn ? Icons.account_circle : Icons.login),
-            tooltip: isLoggedIn ? 'My Account' : 'Sign In',
-            onPressed: _showAccountSheet,
-          ),
+          AccountButton(
+              currentUser: widget.currentUser,
+              onUserChanged: widget.onUserChanged,
+              ensureLoggedIn: _ensureLoggedIn,
+              onSignOut: () {
+                if (mounted) setState(() => myShop = null);
+              },
+              onRefreshUser: () {
+                if (mounted) setState(() {});
+              }),
         ],
       ),
       body: isLoading
@@ -3054,6 +3159,23 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
     fetchJobs();
   }
 
+  Future<bool> _ensureLoggedIn({String? suggestedRole}) async {
+    if (widget.currentUser != null) return true;
+
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AuthScreen(suggestedRole: suggestedRole),
+      ),
+    );
+
+    if (result == true) {
+      widget.onUserChanged();
+      return true;
+    }
+    return false;
+  }
+
   Future<void> fetchJobs() async {
     setState(() => _loadingJobs = true);
     try {
@@ -3095,6 +3217,10 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
+          AccountButton(
+              currentUser: widget.currentUser,
+              onUserChanged: widget.onUserChanged,
+              ensureLoggedIn: _ensureLoggedIn),
           IconButton(icon: const Icon(Icons.refresh), onPressed: fetchJobs),
         ],
       ),
