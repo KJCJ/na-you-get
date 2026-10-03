@@ -950,12 +950,33 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Future<void> _loadUser() async {
     final user = await UserSession.load();
+    if (user != null) {
+      await _syncShopSession(user);
+    }
     if (mounted) {
       setState(() {
         _currentUser = user;
         _loadingUser = false;
       });
     }
+  }
+
+  Future<void> _syncShopSession(Map<String, dynamic> user) async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/shops/')).timeout(const Duration(seconds: 5));
+      if (res.statusCode < 200 || res.statusCode >= 300) return;
+
+      final shops = jsonDecode(res.body) as List;
+      final phone = user['phone_number'];
+      final Map<String, dynamic>? mine = shops.firstWhere(
+        (s) => s['phone_number'] == phone,
+        orElse: () => null,
+      );
+
+      if (mine != null) {
+        await ShopSession.save(mine);
+      }
+    } catch (_) {}
   }
 
   void _refreshUser() => _loadUser();
