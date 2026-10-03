@@ -1509,6 +1509,255 @@ Future<void> showChangePasswordDialog(BuildContext context) async {
 }
 
 // ==========================================
+// MERCHANT ORDERS SCREEN
+// ==========================================
+class MerchantOrdersScreen extends StatefulWidget {
+  final Map<String, dynamic> merchant;
+  const MerchantOrdersScreen({super.key, required this.merchant});
+
+  @override
+  State<MerchantOrdersScreen> createState() => _MerchantOrdersScreenState();
+}
+
+class _MerchantOrdersScreenState extends State<MerchantOrdersScreen> {
+  List<dynamic> _orders = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final user = await UserSession.load();
+    if (user == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/orders/merchant/${widget.merchant['id']}'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        if (mounted) setState(() {
+          _orders = jsonDecode(res.body);
+          _loading = false;
+        });
+        return;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'delivered':
+      case 'completed':
+        return Colors.green;
+      case 'accepted':
+      case 'in_transit':
+        return Colors.blue;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.orange;
+    }
+  }
+
+  String _formatDate(String? iso) {
+    if (iso == null) return '';
+    try {
+      final dt = DateTime.parse(iso);
+      return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Orders'),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _orders.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.receipt_long_outlined, size: 80, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No orders yet.',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Orders placed for your shop will appear here.',
+                        style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(10),
+                  itemCount: _orders.length,
+                  itemBuilder: (ctx, i) {
+                    final o = _orders[i];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    o['product_title'] ?? 'Order',
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: _statusColor(o['delivery_status'] ?? '').withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    (o['delivery_status'] ?? 'pending').toString().toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: _statusColor(o['delivery_status'] ?? ''),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(Icons.person, size: 14, color: Colors.grey),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${o['customer_name'] ?? 'Unknown'} • ${o['customer_phone'] ?? ''}',
+                                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    o['delivery_address'] ?? '',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Total: SLE ${(o['price_sle'] ?? 0) + (o['delivery_fee_sle'] ?? 0)}',
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20)),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${o['payment_method'] ?? ''} • ${o['payment_status'] ?? ''}',
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatDate(o['created_at']),
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                            ),
+                            if (o['driver_id'] != null) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  const Icon(Icons.directions_run, size: 14, color: Colors.blue),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Runner: ${o['driver_name'] ?? 'Unknown'} • ${o['driver_phone'] ?? ''}',
+                                    style: const TextStyle(fontSize: 12, color: Colors.blue),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF1B5E20),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  ),
+                                  icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                                  label: const Text('Message Buyer', style: TextStyle(fontSize: 12)),
+                                  onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ChatScreen(
+                                        otherUserId: (o['customer_id'] as num).toInt(),
+                                        otherUserName: o['customer_name'] ?? 'Customer',
+                                        orderId: o['id'],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (o['driver_id'] != null)
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.blue,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
+                                    icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                                    label: const Text('Message Runner', style: TextStyle(fontSize: 12)),
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ChatScreen(
+                                          otherUserId: (o['driver_id'] as num).toInt(),
+                                          otherUserName: o['driver_name'] ?? 'Runner',
+                                          orderId: o['id'],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+// ==========================================
 // MAIN NAVIGATION — 4 TABS
 // ==========================================
 class MainNavigationScreen extends StatefulWidget {
@@ -4334,6 +4583,16 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
       appBar: AppBar(
         title: Text(merchant['shop_name'] ?? 'My Shop'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.receipt_long),
+            tooltip: 'Orders',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MerchantOrdersScreen(merchant: merchant),
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.edit),
             tooltip: 'Edit shop info',
