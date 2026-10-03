@@ -635,26 +635,161 @@ class ShopProductGrid extends StatelessWidget {
 // ==========================================
 // MARKETPLACE LOCATIONS SCREEN
 // ==========================================
-class MarketplaceLocationsScreen extends StatelessWidget {
+class MarketplaceLocationsScreen extends StatefulWidget {
   const MarketplaceLocationsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Image.asset('assets/logo.png', height: 60),
+  State<MarketplaceLocationsScreen> createState() =>
+      _MarketplaceLocationsScreenState();
+}
+
+class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen> {
+  List<dynamic> shops = [];
+  List<String> cities = [];
+  bool isLoading = true;
+  bool hasError = false;
+  String selectedCity = 'All Cities';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchShops();
+  }
+
+  Future<void> _fetchShops() async {
+    setState(() {
+      isLoading = true;
+      hasError = false;
+    });
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/shops/'),
+        headers: {'x-api-key': apiKey},
+      );
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body) as List;
+        final uniqueCities = <String>{};
+        for (final s in data) {
+          final city = (s['city'] ?? '').toString().trim();
+          if (city.isNotEmpty && city != 'null') uniqueCities.add(city);
+        }
+        final sortedCities = uniqueCities.toList()..sort();
+        setState(() {
+          shops = data;
+          cities = sortedCities;
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          isLoading = false;
+          hasError = true;
+        });
+      }
+    } catch (_) {
+      setState(() {
+        isLoading = false;
+        hasError = true;
+      });
+    }
+  }
+
+  List<dynamic> get _filteredShops {
+    if (selectedCity == 'All Cities') return shops;
+    return shops
+        .where((s) => (s['city'] ?? '').toString().trim() == selectedCity)
+        .toList();
+  }
+
+  void _openShop(Map<String, dynamic> shop) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShopPageScreen(
+          shop: shop,
+          currentUser: null,
+          onUserChanged: () {},
+        ),
       ),
-      body: Center(
+    );
+  }
+
+  Widget _buildCityDropdown() {
+    final items = ['All Cities', ...cities];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      child: DropdownButtonFormField<String>(
+        value: selectedCity,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: 'Filter by city',
+          prefixIcon: const Icon(Icons.location_on_outlined),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          filled: true,
+          fillColor: Colors.white,
+        ),
+        items: items
+            .map((city) => DropdownMenuItem<String>(
+                  value: city,
+                  child: Text(city),
+                ))
+            .toList(),
+        onChanged: (value) {
+          if (value != null) setState(() => selectedCity = value);
+        },
+      ),
+    );
+  }
+
+  Widget _buildShopCard(Map<String, dynamic> shop) {
+    final logoUrl = shop['logo_url'];
+    final name = (shop['shop_name'] ?? 'Shop').toString();
+    final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: ListTile(
+        leading: (logoUrl != null && logoUrl.toString().isNotEmpty)
+            ? CircleAvatar(
+                backgroundImage: NetworkImage(logoUrl.toString()),
+                child: Text(initial),
+              )
+            : CircleAvatar(
+                backgroundColor: const Color(0xFF1B5E20),
+                child: Text(
+                  initial,
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+        title: Text(
+          name,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          '${shop['city'] ?? ''} • ${shop['category'] ?? ''}',
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _openShop(shop),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (hasError) {
+      return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.location_on_outlined,
-                  size: 80, color: Colors.grey.shade400),
+              Icon(Icons.wifi_off, size: 80, color: Colors.grey.shade400),
               const SizedBox(height: 16),
               Text(
-                'No markets yet.',
+                'Could not load shops.',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -663,17 +798,77 @@ class MarketplaceLocationsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Markets like Lumley, Bo Central, and Freetown Central will appear here once sellers add their locations.',
+                'Check your connection and try again.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _fetchShops,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
               ),
             ],
           ),
         ),
+      );
+    }
+
+    final filtered = _filteredShops;
+
+    return Column(
+      children: [
+        _buildCityDropdown(),
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.store_outlined,
+                            size: 80, color: Colors.grey.shade400),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No shops in this city yet',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _fetchShops,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) =>
+                        _buildShopCard(filtered[index]),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Image.asset('assets/logo.png', height: 60),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _fetchShops,
+          ),
+        ],
       ),
+      body: _buildBody(),
     );
   }
 }
