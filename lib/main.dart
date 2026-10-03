@@ -164,6 +164,39 @@ class UserSession {
     return false;
   }
 
+  static Future<String?> changePassword(String currentPassword, String newPassword) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return 'You are not signed in';
+
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/auth/me/password'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'current_password': currentPassword,
+          'new_password': newPassword,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        return null; // null = success
+      }
+      try {
+        final data = jsonDecode(res.body);
+        return data['detail']?.toString() ?? 'Could not change password';
+      } catch (_) {
+        return 'Could not change password';
+      }
+    } catch (_) {
+      return 'Cannot reach server';
+    }
+  }
+
   static Future<bool> deleteAccount() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('user_token');
@@ -681,6 +714,14 @@ void showAccountSheet(
                     ),
                   ),
                 );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.lock_outline),
+              title: const Text('Change Password'),
+              onTap: () {
+                Navigator.pop(ctx);
+                showChangePasswordDialog(context);
               },
             ),
             ListTile(
@@ -1332,6 +1373,139 @@ class _ChatBubbleState extends State<ChatBubble> {
         ),
       );
   }
+}
+
+// ==========================================
+// CHANGE PASSWORD DIALOG
+// ==========================================
+Future<void> showChangePasswordDialog(BuildContext context) async {
+  final currentCtrl = TextEditingController();
+  final newCtrl = TextEditingController();
+  final confirmCtrl = TextEditingController();
+  bool saving = false;
+  String? error;
+
+  await showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Change Password'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: currentCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Current Password',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock_outline),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: newCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'New Password (min 6 characters)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Confirm New Password',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock),
+                ),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    error!,
+                    style: TextStyle(color: Colors.red.shade700),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: saving ? null : () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B5E20),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: saving
+                ? null
+                : () async {
+                    if (currentCtrl.text.isEmpty) {
+                      setDialogState(() => error = 'Enter your current password');
+                      return;
+                    }
+                    if (newCtrl.text.length < 6) {
+                      setDialogState(() => error = 'New password must be at least 6 characters');
+                      return;
+                    }
+                    if (newCtrl.text != confirmCtrl.text) {
+                      setDialogState(() => error = 'New passwords do not match');
+                      return;
+                    }
+                    if (newCtrl.text == currentCtrl.text) {
+                      setDialogState(() => error = 'New password must be different');
+                      return;
+                    }
+
+                    setDialogState(() {
+                      saving = true;
+                      error = null;
+                    });
+
+                    final err = await UserSession.changePassword(
+                      currentCtrl.text,
+                      newCtrl.text,
+                    );
+
+                    if (!context.mounted) return;
+
+                    if (err == null) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Password updated')),
+                      );
+                    } else {
+                      setDialogState(() {
+                        saving = false;
+                        error = err;
+                      });
+                    }
+                  },
+            child: saving
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Text('Save'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 // ==========================================
