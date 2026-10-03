@@ -714,6 +714,7 @@ class ShopProductGrid extends StatelessWidget {
   final void Function(dynamic product) onBuy;
   final void Function(dynamic product)? onDelete;
   final VoidCallback? onRefresh;
+  final void Function(Map<String, dynamic> product)? onOpen;
 
   const ShopProductGrid({
     super.key,
@@ -721,6 +722,7 @@ class ShopProductGrid extends StatelessWidget {
     required this.onBuy,
     this.onDelete,
     this.onRefresh,
+    this.onOpen,
   });
 
   @override
@@ -757,7 +759,10 @@ class ShopProductGrid extends StatelessWidget {
       itemCount: products.length,
       itemBuilder: (ctx, i) {
         final item = products[i];
-        return Card(
+        return InkWell(
+          onTap: onOpen == null ? null : () => onOpen!(item),
+          borderRadius: BorderRadius.circular(12),
+          child: Card(
           child: Padding(
             padding: const EdgeInsets.all(8.0),
             child: Column(
@@ -817,6 +822,7 @@ class ShopProductGrid extends StatelessWidget {
               ],
             ),
           ),
+        ),
         );
       },
     );
@@ -1526,6 +1532,20 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                               product['title'] ?? 'this product',
                             )
                         : null,
+                    onOpen: (product) => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProductDetailScreen(
+                          product: product,
+                          onBuy: _showCheckout,
+                          onDelete: _isOwner
+                              ? (p) => _deleteProduct(
+                                  p['id'], p['title'] ?? 'this product')
+                              : null,
+                          isOwner: _isOwner,
+                        ),
+                      ),
+                    ),
                   ),
           ),
         ],
@@ -2058,6 +2078,152 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                       ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// PRODUCT DETAIL SCREEN
+// ==========================================
+class ProductDetailScreen extends StatelessWidget {
+  final Map<String, dynamic> product;
+  final void Function(Map<String, dynamic> product) onBuy;
+  final void Function(Map<String, dynamic> product)? onDelete;
+  final bool isOwner;
+
+  const ProductDetailScreen({
+    super.key,
+    required this.product,
+    required this.onBuy,
+    this.onDelete,
+    this.isOwner = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = product['image_url'];
+    final hasImage =
+        imageUrl != null && imageUrl.toString().isNotEmpty;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(product['title'] ?? 'Product')),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 280,
+              child: hasImage
+                  ? Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.green.shade100,
+                        child: const Center(
+                          child: Icon(Icons.shopping_bag,
+                              size: 80, color: Colors.green),
+                        ),
+                      ),
+                    )
+                  : Container(
+                      color: Colors.green.shade100,
+                      child: const Center(
+                        child: Icon(Icons.shopping_bag,
+                            size: 80, color: Colors.green),
+                      ),
+                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product['title'] ?? 'Product',
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'SLE ${product['price_sle']}',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1B5E20),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Chip(
+                    label: Text(
+                      (product['category'] ?? 'Other').toString(),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  const Divider(height: 32),
+                  Row(
+                    children: [
+                      const Icon(Icons.store, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${product['shop_name'] ?? ''} • ${product['shop_city'] ?? ''}',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Description',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    product['description'] ?? 'No description provided.',
+                    style: const TextStyle(fontSize: 14, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              if (isOwner && onDelete != null)
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  label: const Text('Delete',
+                      style: TextStyle(color: Colors.red)),
+                  onPressed: () {
+                    onDelete!(product);
+                    Navigator.pop(context);
+                  },
+                ),
+              if (isOwner && onDelete != null) const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1B5E20),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  icon: const Icon(Icons.shopping_cart),
+                  label: const Text('Buy Now'),
+                  onPressed: () {
+                    onBuy(product);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2600,6 +2766,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           products: visible,
                           onBuy: _showCheckout,
                           onRefresh: fetchProducts,
+                          onOpen: (product) => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ProductDetailScreen(
+                                product: product,
+                                onBuy: _showCheckout,
+                                isOwner: false,
+                              ),
+                            ),
+                          ),
                         ),
                 ),
               ],
