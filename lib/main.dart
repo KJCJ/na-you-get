@@ -1902,7 +1902,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               ),
               icon: Icon(hasShop ? Icons.open_in_new : Icons.store),
               label: Text(
-                hasShop ? 'Open My Shop' : 'Create My Shop',
+                hasShop ? 'Upload Your Goods Items You Are Selling' : 'Create My Shop',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               onPressed: () {
