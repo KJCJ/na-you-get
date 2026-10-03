@@ -1142,11 +1142,19 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
   List<dynamic> filteredShops = [];
   bool isLoading = true;
   String searchQuery = '';
+  Map<String, dynamic>? myShop;
 
   @override
   void initState() {
     super.initState();
+    _loadMyShop();
     _fetchShops();
+  }
+
+  Future<void> _loadMyShop() async {
+    final shop = await ShopSession.load();
+    if (!mounted) return;
+    setState(() => myShop = shop);
   }
 
   Future<void> _fetchShops() async {
@@ -1198,6 +1206,281 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
     ).then((_) => _fetchShops());
   }
 
+  Future<bool> _ensureLoggedIn({String? suggestedRole}) async {
+    if (widget.currentUser != null) return true;
+
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AuthScreen(suggestedRole: suggestedRole),
+      ),
+    );
+
+    if (result == true) {
+      widget.onUserChanged();
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _showCreateShopDialog() async {
+    final loggedIn = await _ensureLoggedIn(suggestedRole: 'merchant');
+    if (!loggedIn) return;
+    if (!mounted) return;
+
+    final shopNameController = TextEditingController();
+    final ownerNameController =
+        TextEditingController(text: widget.currentUser?['name'] ?? '');
+    final phoneController = TextEditingController(
+        text: widget.currentUser?['phone_number'] ?? '+232');
+    final cityController = TextEditingController(text: 'Freetown');
+    String selectedCategory = 'Fashion';
+    String? uploadedLogoUrl;
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Create Your Shop Page'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: shopNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Shop Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: ownerNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Your Full Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: cityController,
+                  decoration: const InputDecoration(
+                    labelText: 'City in Sierra Leone',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final url = await pickAndUploadImage(context);
+                      if (url != null) {
+                        setDialogState(() => uploadedLogoUrl = url);
+                      }
+                    },
+                    icon: const Icon(Icons.photo_camera),
+                    label: Text(uploadedLogoUrl == null
+                        ? 'Pick Shop Logo'
+                        : 'Logo Uploaded'),
+                  ),
+                ),
+                if (uploadedLogoUrl != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        uploadedLogoUrl!,
+                        height: 100,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: const InputDecoration(
+                    labelText: 'Shop Category',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
+                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
+                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
+                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
+                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
+                    DropdownMenuItem(value: 'Services', child: Text('Services')),
+                    DropdownMenuItem(value: 'Other', child: Text('Other')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => selectedCategory = value);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (shopNameController.text.isEmpty ||
+                    ownerNameController.text.isEmpty) return;
+
+                final response = await http.post(
+                  Uri.parse('$baseUrl/merchants/'),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                  },
+                  body: jsonEncode({
+                    'shop_name': shopNameController.text,
+                    'owner_name': ownerNameController.text,
+                    'phone_number': phoneController.text,
+                    'city': cityController.text,
+                    'category': selectedCategory,
+                    'logo_url': uploadedLogoUrl,
+                  }),
+                );
+
+                if (response.statusCode >= 200 && response.statusCode < 300) {
+                  final merchantData = jsonDecode(response.body)['merchant'];
+                  await ShopSession.save(merchantData);
+                  if (mounted) {
+                    Navigator.pop(ctx);
+                    setState(() => myShop = merchantData);
+                    _openShopProfilePage(merchantData);
+                  }
+                } else {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text(
+                              'Failed to create shop. Try a different name.')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Create Shop'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openShopProfilePage(Map<String, dynamic> merchantData) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (pageContext) => ShopProfileScreen(merchant: merchantData),
+      ),
+    ).then((_) {
+      _fetchShops();
+      _loadMyShop();
+    });
+  }
+
+  Widget _buildTopCard() {
+    final hasShop = myShop != null;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: hasShop
+              ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
+              : [const Color(0xFF0D47A1), const Color(0xFF1565C0)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.store,
+                color: Colors.white,
+                size: 28,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  hasShop ? myShop!['shop_name'] : 'Sell on Na You Get',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            hasShop
+                ? 'Owner: ${myShop!['owner_name']} • ${myShop!['city']}'
+                : 'Create your shop to start selling.',
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: hasShop
+                    ? const Color(0xFF1B5E20)
+                    : const Color(0xFF0D47A1),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              icon: Icon(hasShop ? Icons.open_in_new : Icons.store),
+              label: Text(
+                hasShop ? 'Open My Shop' : 'Create My Shop',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onPressed: () {
+                if (hasShop) {
+                  _openShopProfilePage(myShop!);
+                } else {
+                  _showCreateShopDialog();
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1212,6 +1495,7 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
       ),
       body: Column(
         children: [
+          _buildTopCard(),
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
