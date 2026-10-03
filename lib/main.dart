@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -233,6 +234,85 @@ class ShopSession {
     await prefs.remove(_cityKey);
     await prefs.remove(_categoryKey);
     await prefs.remove(_logoKey);
+  }
+}
+
+// ==========================================
+// MESSAGE SESSION
+// ==========================================
+class MessageSession {
+  static Future<List<dynamic>> getInbox() async {
+    final user = await UserSession.load();
+    if (user == null) return [];
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/messages/inbox'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+      ).timeout(const Duration(seconds: 5));
+      if (res.statusCode < 200 || res.statusCode >= 300) return [];
+      return jsonDecode(res.body) as List;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<List<dynamic>> getConversation(int otherUserId) async {
+    final user = await UserSession.load();
+    if (user == null) return [];
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/messages/conversation/$otherUserId'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+      ).timeout(const Duration(seconds: 5));
+      if (res.statusCode < 200 || res.statusCode >= 300) return [];
+      final data = jsonDecode(res.body);
+      return data['messages'] as List;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<bool> send(int recipientId, String text, {int? shopId, int? orderId}) async {
+    final user = await UserSession.load();
+    if (user == null) return false;
+    try {
+      // Map<String, dynamic> so the optional int values below can be added.
+      final Map<String, dynamic> body = {'recipient_id': recipientId, 'text': text};
+      if (shopId != null) body['shop_id'] = shopId;
+      if (orderId != null) body['order_id'] = orderId;
+      final res = await http.post(
+        Uri.parse('$baseUrl/messages/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 5));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> markRead(int otherUserId) async {
+    final user = await UserSession.load();
+    if (user == null) return;
+    try {
+      await http.put(
+        Uri.parse('$baseUrl/messages/conversation/$otherUserId/read'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+      ).timeout(const Duration(seconds: 5));
+    } catch (_) {}
   }
 }
 
@@ -575,6 +655,19 @@ void showAccountSheet(
               },
             ),
             ListTile(
+              leading: const Icon(Icons.chat_bubble_outline),
+              title: const Text('Messages'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MessagesScreen(currentUser: currentUser!),
+                  ),
+                );
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.edit),
               title: const Text('Edit Profile'),
               onTap: () {
@@ -878,6 +971,374 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 }
 
 // ==========================================
+// MESSAGES SCREEN (conversation list)
+// ==========================================
+class MessagesScreen extends StatefulWidget {
+  final Map<String, dynamic> currentUser;
+  const MessagesScreen({super.key, required this.currentUser});
+
+  @override
+  State<MessagesScreen> createState() => _MessagesScreenState();
+}
+
+class _MessagesScreenState extends State<MessagesScreen> {
+  List<dynamic> _conversations = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await MessageSession.getInbox();
+    if (!mounted) return;
+    setState(() {
+      _conversations = data;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Messages'),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _conversations.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.chat_bubble_outline, size: 80, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      Text('No messages yet.', style: TextStyle(fontSize: 18, color: Colors.grey.shade700)),
+                      const SizedBox(height: 8),
+                      Text('Start a chat from any product page.', style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: _conversations.length,
+                  itemBuilder: (ctx, i) {
+                    final c = _conversations[i];
+                    final other = c['other_user'];
+                    if (other == null) return const SizedBox.shrink();
+                    final unread = c['unread_count'] ?? 0;
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: const Color(0xFF1B5E20),
+                        backgroundImage: (other['photo_url'] != null && other['photo_url'].toString().isNotEmpty)
+                            ? NetworkImage(other['photo_url'])
+                            : null,
+                        child: (other['photo_url'] == null || other['photo_url'].toString().isEmpty)
+                            ? Text(
+                                (other['name']?.toString() ?? '?')[0].toUpperCase(),
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              )
+                            : null,
+                      ),
+                      title: Text(other['name'] ?? 'User', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(
+                        c['last_message'] ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: unread > 0
+                          ? CircleAvatar(
+                              radius: 12,
+                              backgroundColor: Colors.red,
+                              child: Text('$unread', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                            )
+                          : null,
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              otherUserId: other['id'],
+                              otherUserName: other['name'] ?? 'User',
+                            ),
+                          ),
+                        );
+                        _load();
+                      },
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+// ==========================================
+// CHAT SCREEN
+// ==========================================
+class ChatScreen extends StatefulWidget {
+  final int otherUserId;
+  final String otherUserName;
+  final int? shopId;
+  final int? orderId;
+  const ChatScreen({
+    super.key,
+    required this.otherUserId,
+    required this.otherUserName,
+    this.shopId,
+    this.orderId,
+  });
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  List<dynamic> _messages = [];
+  bool _loading = true;
+  final _textController = TextEditingController();
+  final _scrollController = ScrollController();
+  Timer? _pollTimer;
+  int? _myId;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final user = await UserSession.load();
+    _myId = user?['id'];
+    await _load();
+    await MessageSession.markRead(widget.otherUserId);
+    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _load());
+  }
+
+  Future<void> _load() async {
+    final msgs = await MessageSession.getConversation(widget.otherUserId);
+    if (!mounted) return;
+    setState(() {
+      _messages = msgs;
+      _loading = false;
+    });
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  Future<void> _send() async {
+    final text = _textController.text.trim();
+    if (text.isEmpty) return;
+    _textController.clear();
+    await MessageSession.send(
+      widget.otherUserId,
+      text,
+      shopId: widget.shopId,
+      orderId: widget.orderId,
+    );
+    await _load();
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    _textController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.otherUserName)),
+      body: Column(
+        children: [
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _messages.isEmpty
+                    ? const Center(child: Text('No messages yet. Say hello!'))
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(12),
+                        itemCount: _messages.length,
+                        itemBuilder: (ctx, i) {
+                          final m = _messages[i];
+                          final isMine = m['sender_id'] == _myId;
+                          return Align(
+                            alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(vertical: 3),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+                              decoration: BoxDecoration(
+                                color: isMine ? const Color(0xFF1B5E20) : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(
+                                m['text'] ?? '',
+                                style: TextStyle(
+                                  color: isMine ? Colors.white : Colors.black87,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+          SafeArea(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Colors.grey.shade300)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _textController,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      decoration: InputDecoration(
+                        hintText: 'Type a message...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  CircleAvatar(
+                    backgroundColor: const Color(0xFF1B5E20),
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                      onPressed: _send,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// CHAT BUBBLE (floating overlay)
+// ==========================================
+class ChatBubble extends StatefulWidget {
+  final Map<String, dynamic>? currentUser;
+  const ChatBubble({super.key, required this.currentUser});
+
+  @override
+  State<ChatBubble> createState() => _ChatBubbleState();
+}
+
+class _ChatBubbleState extends State<ChatBubble> {
+  int _unread = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+    _timer = Timer.periodic(const Duration(seconds: 8), (_) => _refresh());
+  }
+
+  Future<void> _refresh() async {
+    if (widget.currentUser == null) {
+      if (mounted) setState(() => _unread = 0);
+      return;
+    }
+    final data = await MessageSession.getInbox();
+    if (!mounted) return;
+    int total = 0;
+    for (final c in data) {
+      total += ((c['unread_count'] ?? 0) as num).toInt();
+    }
+    setState(() => _unread = total);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.currentUser == null) return const SizedBox.shrink();
+    return Positioned(
+      right: 16,
+      bottom: 90,
+      child: GestureDetector(
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MessagesScreen(currentUser: widget.currentUser!),
+            ),
+          );
+          _refresh();
+        },
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1B5E20),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 3)),
+                ],
+              ),
+              child: const Icon(Icons.chat_bubble, color: Colors.white, size: 26),
+            ),
+            if (_unread > 0)
+              Positioned(
+                right: -4,
+                top: -4,
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                  child: Text(
+                    _unread > 9 ? '9+' : '$_unread',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
 // MAIN NAVIGATION — 4 TABS
 // ==========================================
 class MainNavigationScreen extends StatefulWidget {
@@ -996,7 +1457,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           currentUser: _currentUser, onUserChanged: _refreshUser),
     ];
 
-    return Scaffold(
+    return Stack(
+      children: [
+        Scaffold(
       body: IndexedStack(index: _currentIndex, children: screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
@@ -1011,6 +1474,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               icon: Icon(Icons.directions_run), label: 'Runner'),
         ],
       ),
+        ),
+        ChatBubble(currentUser: _currentUser),
+      ],
     );
   }
 }
