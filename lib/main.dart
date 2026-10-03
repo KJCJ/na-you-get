@@ -96,6 +96,7 @@ class UserSession {
   static const _phoneKey = 'user_phone';
   static const _roleKey = 'user_role';
   static const _tokenKey = 'user_token';
+  static const _photoKey = 'user_photo';
 
   static Future<void> save(Map<String, dynamic> user, String token) async {
     final prefs = await SharedPreferences.getInstance();
@@ -103,6 +104,9 @@ class UserSession {
     await prefs.setString(_nameKey, user['name']);
     await prefs.setString(_phoneKey, user['phone_number']);
     await prefs.setString(_roleKey, user['role'] ?? 'customer');
+    if (user['photo_url'] != null) {
+      await prefs.setString(_photoKey, user['photo_url']);
+    }
     await prefs.setString(_tokenKey, token);
   }
 
@@ -116,6 +120,7 @@ class UserSession {
       'name': prefs.getString(_nameKey) ?? '',
       'phone_number': prefs.getString(_phoneKey) ?? '',
       'role': prefs.getString(_roleKey) ?? 'customer',
+      'photo_url': prefs.getString(_photoKey),
       'token': token,
     };
   }
@@ -127,6 +132,55 @@ class UserSession {
     await prefs.remove(_phoneKey);
     await prefs.remove(_roleKey);
     await prefs.remove(_tokenKey);
+    await prefs.remove(_photoKey);
+  }
+
+  static Future<bool> update(Map<String, dynamic> updates) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return false;
+
+    final res = await http.put(
+      Uri.parse('$baseUrl/auth/me'),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(updates),
+    );
+
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final data = jsonDecode(res.body);
+      final user = data['user'];
+      await prefs.setString('user_name', user['name']);
+      await prefs.setString('user_phone', user['phone_number']);
+      if (user['photo_url'] != null) {
+        await prefs.setString('user_photo', user['photo_url']);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  static Future<bool> deleteAccount() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return false;
+
+    final res = await http.delete(
+      Uri.parse('$baseUrl/auth/me'),
+      headers: {
+        'x-api-key': apiKey,
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      await clear();
+      return true;
+    }
+    return false;
   }
 }
 
@@ -521,6 +575,22 @@ void showAccountSheet(
               },
             ),
             ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text('Edit Profile'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EditProfileScreen(
+                      currentUser: currentUser!,
+                      onUserChanged: onUserChanged,
+                    ),
+                  ),
+                );
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
               title:
                   const Text('Sign Out', style: TextStyle(color: Colors.red)),
@@ -566,15 +636,17 @@ class AccountButton extends StatelessWidget {
           ? CircleAvatar(
               radius: 16,
               backgroundColor: const Color(0xFF1B5E20),
-              child: Text(
-                (user['name']?.toString() ?? '?').isNotEmpty
-                    ? user['name'][0].toUpperCase()
-                    : '?',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14),
-              ),
+              backgroundImage: (user['photo_url'] != null && user['photo_url'].toString().isNotEmpty)
+                  ? NetworkImage(user['photo_url'])
+                  : null,
+              child: (user['photo_url'] == null || user['photo_url'].toString().isEmpty)
+                  ? Text(
+                      (user['name']?.toString() ?? '?').isNotEmpty
+                          ? user['name'][0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    )
+                  : null,
             )
           : const Icon(Icons.login),
       onPressed: () => showAccountSheet(
@@ -584,6 +656,222 @@ class AccountButton extends StatelessWidget {
         ensureLoggedIn: ensureLoggedIn,
         onSignOut: onSignOut,
         onRefreshUser: onRefreshUser,
+      ),
+    );
+  }
+}
+
+// ==========================================
+// EDIT PROFILE SCREEN
+// ==========================================
+class EditProfileScreen extends StatefulWidget {
+  final Map<String, dynamic> currentUser;
+  final VoidCallback onUserChanged;
+  const EditProfileScreen({
+    super.key,
+    required this.currentUser,
+    required this.onUserChanged,
+  });
+
+  @override
+  State<EditProfileScreen> createState() => _EditProfileScreenState();
+}
+
+class _EditProfileScreenState extends State<EditProfileScreen> {
+  late TextEditingController _nameController;
+  late TextEditingController _phoneController;
+  String? _photoUrl;
+  bool _saving = false;
+  bool _deleting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.currentUser['name'] ?? '');
+    _phoneController = TextEditingController(text: widget.currentUser['phone_number'] ?? '');
+    _photoUrl = widget.currentUser['photo_url'];
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final ok = await UserSession.update({
+      'name': _nameController.text.trim(),
+      'phone_number': _phoneController.text.trim(),
+      'photo_url': _photoUrl,
+    });
+    setState(() => _saving = false);
+    if (!mounted) return;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile updated')),
+      );
+      widget.onUserChanged();
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update profile')),
+      );
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'This will delete your account permanently. If you own a shop, the shop and its products will also be deleted. This cannot be undone.',
+            ),
+            const SizedBox(height: 12),
+            const Text('Type DELETE to confirm:'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: confirmController,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'DELETE',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              if (confirmController.text.trim() == 'DELETE') {
+                Navigator.pop(ctx, true);
+              }
+            },
+            child: const Text('Delete Account'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _deleting = true);
+    final ok = await UserSession.deleteAccount();
+    if (!mounted) return;
+    setState(() => _deleting = false);
+    if (ok) {
+      await ShopSession.clear();
+      widget.onUserChanged();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Account deleted')),
+      );
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not delete account')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Edit Profile')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 50,
+              backgroundColor: const Color(0xFF1B5E20),
+              backgroundImage: (_photoUrl != null && _photoUrl!.isNotEmpty)
+                  ? NetworkImage(_photoUrl!)
+                  : null,
+              child: (_photoUrl == null || _photoUrl!.isEmpty)
+                  ? Text(
+                      (_nameController.text.isNotEmpty ? _nameController.text[0] : '?').toUpperCase(),
+                      style: const TextStyle(fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold),
+                    )
+                  : null,
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final url = await pickAndUploadImage(context);
+                if (url != null) {
+                  setState(() => _photoUrl = url);
+                }
+              },
+              icon: const Icon(Icons.photo_camera),
+              label: Text(_photoUrl == null || _photoUrl!.isEmpty ? 'Upload Profile Picture' : 'Change Picture'),
+            ),
+            const SizedBox(height: 24),
+            TextField(
+              controller: _nameController,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Full Name',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.phone),
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1B5E20),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Save Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(height: 40),
+            const Divider(),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: const BorderSide(color: Colors.red),
+                ),
+                onPressed: _deleting ? null : _deleteAccount,
+                icon: const Icon(Icons.delete_forever),
+                label: Text(_deleting ? 'Deleting...' : 'Delete My Account'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
