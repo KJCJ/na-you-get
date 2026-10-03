@@ -1396,12 +1396,176 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     return widget.currentUser!['phone_number'] == shop['phone_number'];
   }
 
+  Future<void> _showEditShopDialog() async {
+    final shopNameController =
+        TextEditingController(text: shop['shop_name'] ?? '');
+    final ownerNameController =
+        TextEditingController(text: shop['owner_name'] ?? '');
+    final phoneController =
+        TextEditingController(text: shop['phone_number'] ?? '');
+    final cityController =
+        TextEditingController(text: shop['city'] ?? 'Freetown');
+    String? currentLogo = shop['logo_url'];
+    String selectedCategory = shop['category'] ?? 'Other';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Shop Info'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: shopNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Shop Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: ownerNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Owner Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: cityController,
+                  decoration: const InputDecoration(
+                    labelText: 'City',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final url = await pickAndUploadImage(context);
+                      if (url != null) {
+                        setDialogState(() => currentLogo = url);
+                      }
+                    },
+                    icon: const Icon(Icons.photo_camera),
+                    label: Text((currentLogo ?? '').isEmpty
+                        ? 'Pick Shop Logo'
+                        : 'Change Logo'),
+                  ),
+                ),
+                if ((currentLogo ?? '').isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        currentLogo ?? '',
+                        height: 100,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: const InputDecoration(
+                    labelText: 'Category',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
+                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
+                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
+                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
+                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
+                    DropdownMenuItem(value: 'Services', child: Text('Services')),
+                    DropdownMenuItem(value: 'Other', child: Text('Other')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => selectedCategory = value);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final user = await UserSession.load();
+                final response = await http.put(
+                  Uri.parse('$baseUrl/merchants/${shop['id']}'),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
+                  },
+                  body: jsonEncode({
+                    'shop_name': shopNameController.text,
+                    'owner_name': ownerNameController.text,
+                    'phone_number': phoneController.text,
+                    'city': cityController.text,
+                    'category': selectedCategory,
+                    'logo_url': currentLogo,
+                  }),
+                );
+
+                if (response.statusCode >= 200 && response.statusCode < 300) {
+                  final updated = jsonDecode(response.body)['merchant'];
+                  await ShopSession.save(updated);
+                  if (mounted) {
+                    Navigator.pop(ctx);
+                    setState(() => shop = Map<String, dynamic>.from(updated));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Shop updated')),
+                    );
+                  }
+                } else {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Failed to update shop')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(shop['shop_name'] ?? 'Shop'),
         actions: [
+          if (_isOwner)
+            IconButton(
+              icon: const Icon(Icons.edit),
+              tooltip: 'Edit shop info',
+              onPressed: _showEditShopDialog,
+            ),
           if (_isOwner)
             PopupMenuButton<String>(
               onSelected: (value) {
