@@ -3098,56 +3098,160 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
           IconButton(icon: const Icon(Icons.refresh), onPressed: fetchJobs),
         ],
       ),
-      body: _loadingJobs
-          ? const Center(child: CircularProgressIndicator())
-          : jobs.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.delivery_dining,
-                          size: 80, color: Colors.grey.shade400),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No delivery jobs available right now.',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey.shade700,
+      body: Column(
+        children: [
+          _buildTopCard(),
+          Expanded(
+            child: _loadingJobs
+                ? const Center(child: CircularProgressIndicator())
+                : jobs.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.delivery_dining,
+                                size: 80, color: Colors.grey.shade400),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No delivery jobs available right now.',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: jobs.length,
-                  itemBuilder: (ctx, i) {
-                    final job = jobs[i];
-                    return Card(
-                      margin: const EdgeInsets.all(8),
-                      child: ListTile(
-                        leading: const Icon(Icons.delivery_dining,
-                            size: 36, color: Colors.blue),
-                        title: Text('Dropoff: ${job['delivery_address']}'),
-                        subtitle: Text(
-                            'Fee: SLE ${job['delivery_fee_sle']} | Payment: ${job['payment_method']}'),
-                        trailing: ElevatedButton(
-                          onPressed: () async {
-                            final ok = await _ensureLoggedInAsRunner();
-                            if (!ok) return;
+                      )
+                    : ListView.builder(
+                        itemCount: jobs.length,
+                        itemBuilder: (ctx, i) {
+                          final job = jobs[i];
+                          return Card(
+                            margin: const EdgeInsets.all(8),
+                            child: ListTile(
+                              leading: const Icon(Icons.delivery_dining,
+                                  size: 36, color: Colors.blue),
+                              title: Text('Dropoff: ${job['delivery_address']}'),
+                              subtitle: Text(
+                                  'Fee: SLE ${job['delivery_fee_sle']} | Payment: ${job['payment_method']}'),
+                              trailing: ElevatedButton(
+                                onPressed: () async {
+                                  final ok = await _ensureLoggedInAsRunner();
+                                  if (!ok) return;
 
-                            await http.put(
-                              Uri.parse(
-                                  '$baseUrl/deliveries/${job['id']}/accept/${widget.currentUser!['id']}'),
-                              headers: {'x-api-key': apiKey},
-                            );
-                            fetchJobs();
-                          },
-                          child: const Text('Accept'),
-                        ),
+                                  await http.put(
+                                    Uri.parse(
+                                        '$baseUrl/deliveries/${job['id']}/accept/${widget.currentUser!['id']}'),
+                                    headers: {'x-api-key': apiKey},
+                                  );
+                                  fetchJobs();
+                                },
+                                child: const Text('Accept'),
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopCard() {
+    final user = widget.currentUser;
+    final isRunner = user != null && user['role'] == 'driver';
+
+    final String subtitle;
+    if (isRunner) {
+      subtitle = 'You are registered as a Runner';
+    } else if (user == null) {
+      subtitle = 'Sign up to deliver items and earn';
+    } else {
+      subtitle = 'Sign out and create a Runner account to earn';
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isRunner
+              ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
+              : [const Color(0xFF0D47A1), const Color(0xFF1565C0)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.directions_run,
+                color: Colors.white,
+                size: 28,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Become a Runner',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: isRunner
+                    ? const Color(0xFF1B5E20)
+                    : const Color(0xFF0D47A1),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              icon: Icon(isRunner ? Icons.list_alt : Icons.directions_run),
+              label: Text(
+                isRunner ? 'View Available Jobs' : 'How to become a Runner',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onPressed: () {
+                if (isRunner) {
+                  fetchJobs();
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'Sign out from the profile menu, then create a new account and choose Runner.'),
+                    ),
+                  );
+                }
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
