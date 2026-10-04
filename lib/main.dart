@@ -212,6 +212,12 @@ class UserSession {
       final user = data['user'];
       await prefs.setString('user_name', user['name']);
       await prefs.setString('user_phone', user['phone_number']);
+      if (user['is_seller'] != null) {
+        await prefs.setBool(_isSellerKey, user['is_seller'] == 1 || user['is_seller'] == true);
+      }
+      if (user['is_runner'] != null) {
+        await prefs.setBool(_isRunnerKey, user['is_runner'] == 1 || user['is_runner'] == true);
+      }
       if (user['photo_url'] != null) {
         await prefs.setString('user_photo', user['photo_url']);
       }
@@ -602,6 +608,18 @@ class _AuthScreenState extends State<AuthScreen> {
 // ==========================================
 // ACCOUNT SHEET + ACCOUNT BUTTON (shared by all tabs)
 // ==========================================
+bool isSeller(Map<String, dynamic>? u) {
+  if (u == null) return false;
+  final v = u['is_seller'];
+  return v == true || v == 1 || v?.toString() == '1';
+}
+
+bool isRunner(Map<String, dynamic>? u) {
+  if (u == null) return false;
+  final v = u['is_runner'];
+  return v == true || v == 1 || v?.toString() == '1';
+}
+
 void showAccountSheet(
   BuildContext context,
   Map<String, dynamic>? currentUser,
@@ -723,6 +741,48 @@ void showAccountSheet(
                         builder: (_) => ShopProfileScreen(merchant: shop),
                       ),
                     );
+                  },
+                ),
+              if (!isSeller(currentUser))
+                ListTile(
+                  leading: const Icon(Icons.storefront, color: Color(0xFF1B5E20)),
+                  title: const Text('Become a Seller'),
+                  subtitle: const Text('Create your own shop'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final ok = await UserSession.becomeSeller();
+                    if (!context.mounted) return;
+                    if (ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('You can now sell on NYG')),
+                      );
+                      onUserChanged();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Could not enable selling')),
+                      );
+                    }
+                  },
+                ),
+              if (!isRunner(currentUser))
+                ListTile(
+                  leading: const Icon(Icons.directions_run, color: Color(0xFF0D47A1)),
+                  title: const Text('Become a Runner'),
+                  subtitle: const Text('Deliver items and earn'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final ok = await UserSession.becomeRunner();
+                    if (!context.mounted) return;
+                    if (ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('You can now deliver on NYG')),
+                      );
+                      onUserChanged();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Could not enable running')),
+                      );
+                    }
                   },
                 ),
               ListTile(
