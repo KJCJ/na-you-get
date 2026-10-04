@@ -9,7 +9,7 @@ import 'package:image_picker/image_picker.dart';
 const String baseUrl = 'https://random.taila91e03.ts.net';
 const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785acabfd295';
 const String appVersion = '1.0.0';
-const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/raw/main/apk/NaYouGet.apk';
+const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk';
 
 // ==========================================
 // IMAGE UPLOAD HELPER
