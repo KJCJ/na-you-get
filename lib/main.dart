@@ -1893,6 +1893,263 @@ class _MerchantOrdersScreenState extends State<MerchantOrdersScreen> {
 }
 
 // ==========================================
+// RUNNER DELIVERIES SCREEN
+// ==========================================
+class RunnerDeliveriesScreen extends StatefulWidget {
+  final Map<String, dynamic> currentUser;
+  const RunnerDeliveriesScreen({super.key, required this.currentUser});
+
+  @override
+  State<RunnerDeliveriesScreen> createState() => _RunnerDeliveriesScreenState();
+}
+
+class _RunnerDeliveriesScreenState extends State<RunnerDeliveriesScreen> {
+  List<dynamic> _jobs = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final user = await UserSession.load();
+    if (user == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/deliveries/mine/${widget.currentUser['id']}'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final all = jsonDecode(res.body) as List;
+        if (mounted) {
+          setState(() {
+            _jobs = all;
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  String _formatDate(String? iso) {
+    if (iso == null) return '';
+    try {
+      final dt = DateTime.parse(iso);
+      return '${dt.day}/${dt.month} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> _completeDelivery(int orderId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Mark as delivered?'),
+        content: const Text('Confirm you have delivered this order.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B5E20),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes, delivered'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final user = await UserSession.load();
+    if (user == null) return;
+
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/deliveries/$orderId/complete'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: jsonEncode({
+          'status': 'delivered',
+          'cash_collected': false,
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Delivery completed')),
+        );
+        _load();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not complete delivery')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot reach server')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Deliveries'),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _jobs.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.delivery_dining, size: 80, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No deliveries assigned to you yet.',
+                        style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(10),
+                  itemCount: _jobs.length,
+                  itemBuilder: (ctx, i) {
+                    final job = _jobs[i];
+                    final status = (job['delivery_status'] ?? 'pending').toString();
+                    final isDelivered = status == 'delivered' || status == 'completed';
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    job['product_title'] ?? 'Order',
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isDelivered ? Colors.green.shade100 : Colors.orange.shade100,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    status.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDelivered ? Colors.green.shade800 : Colors.orange.shade800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    job['delivery_address'] ?? '',
+                                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Fee: SLE ${job['delivery_fee_sle'] ?? 0}',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20)),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Payment: ${job['payment_method'] ?? ''} • ${job['payment_status'] ?? ''}',
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatDate(job['created_at']),
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                            ),
+                            const SizedBox(height: 10),
+                            if (!isDelivered)
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF1B5E20),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                  icon: const Icon(Icons.check_circle_outline),
+                                  label: const Text('Mark as Delivered'),
+                                  onPressed: () => _completeDelivery((job['id'] as num).toInt()),
+                                ),
+                              )
+                            else
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    'Delivered ✓',
+                                    style: TextStyle(
+                                      color: Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+// ==========================================
 // MAIN NAVIGATION — 4 TABS
 // ==========================================
 class MainNavigationScreen extends StatefulWidget {
@@ -5127,7 +5384,12 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
               ),
               onPressed: () {
                 if (isRunner) {
-                  fetchJobs();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RunnerDeliveriesScreen(currentUser: user!),
+                    ),
+                  );
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
