@@ -590,155 +590,157 @@ void showAccountSheet(
   showModalBottomSheet(
     context: context,
     builder: (ctx) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 16),
-          if (user == null) ...[
-            const Icon(Icons.person_outline, size: 48, color: Colors.grey),
-            const SizedBox(height: 12),
-            const Text('Welcome to Na You Get',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                'You can browse as a guest. Sign in when you want to sell, deliver, or buy.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-            ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
             const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B5E20),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  icon: const Icon(Icons.login),
-                  label: const Text('Sign In'),
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    await handleSignIn();
-                  },
+            if (user == null) ...[
+              const Icon(Icons.person_outline, size: 48, color: Colors.grey),
+              const SizedBox(height: 12),
+              const Text('Welcome to Na You Get',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  'You can browse as a guest. Sign in when you want to sell, deliver, or buy.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  icon: const Icon(Icons.person_add),
-                  label: const Text('Create Account'),
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    await handleSignIn();
-                  },
-                ),
-              ),
-            ),
-          ] else ...[
-            CircleAvatar(
-              radius: 32,
-              backgroundColor: const Color(0xFF1B5E20),
-              child: Text(
-                user['name'].toString().isNotEmpty
-                    ? user['name'][0].toUpperCase()
-                    : '?',
-                style: const TextStyle(
-                    fontSize: 28,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              user['name'] ?? 'User',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            Text(user['phone_number'] ?? ''),
-            const SizedBox(height: 4),
-            Chip(
-              label: Text(
-                (user['role'] ?? 'customer').toUpperCase(),
-                style: const TextStyle(fontSize: 12),
-              ),
-            ),
-            const Divider(height: 24),
-            ListTile(
-              leading: const Icon(Icons.receipt_long),
-              title: const Text('My Orders'),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => MyOrdersScreen(currentUser: user),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.chat_bubble_outline),
-              title: const Text('Messages'),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => MessagesScreen(currentUser: currentUser!),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit),
-              title: const Text('Edit Profile'),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => EditProfileScreen(
-                      currentUser: currentUser!,
-                      onUserChanged: onUserChanged,
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1B5E20),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
+                    icon: const Icon(Icons.login),
+                    label: const Text('Sign In'),
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      await handleSignIn();
+                    },
                   ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.lock_outline),
-              title: const Text('Change Password'),
-              onTap: () {
-                Navigator.pop(ctx);
-                showChangePasswordDialog(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title:
-                  const Text('Sign Out', style: TextStyle(color: Colors.red)),
-              onTap: () async {
-                Navigator.pop(ctx);
-                await UserSession.clear();
-                await ShopSession.clear();
-                onUserChanged();
-                onSignOut?.call();
-              },
-            ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.person_add),
+                    label: const Text('Create Account'),
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      await handleSignIn();
+                    },
+                  ),
+                ),
+              ),
+            ] else ...[
+              CircleAvatar(
+                radius: 32,
+                backgroundColor: const Color(0xFF1B5E20),
+                child: Text(
+                  user['name'].toString().isNotEmpty
+                      ? user['name'][0].toUpperCase()
+                      : '?',
+                  style: const TextStyle(
+                      fontSize: 28,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                user['name'] ?? 'User',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Text(user['phone_number'] ?? ''),
+              const SizedBox(height: 4),
+              Chip(
+                label: Text(
+                  (user['role'] ?? 'customer').toUpperCase(),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+              const Divider(height: 24),
+              ListTile(
+                leading: const Icon(Icons.receipt_long),
+                title: const Text('My Orders'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MyOrdersScreen(currentUser: user),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.chat_bubble_outline),
+                title: const Text('Messages'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MessagesScreen(currentUser: currentUser!),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('Edit Profile'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => EditProfileScreen(
+                        currentUser: currentUser!,
+                        onUserChanged: onUserChanged,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.lock_outline),
+                title: const Text('Change Password'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  showChangePasswordDialog(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title:
+                    const Text('Sign Out', style: TextStyle(color: Colors.red)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await UserSession.clear();
+                  await ShopSession.clear();
+                  onUserChanged();
+                  onSignOut?.call();
+                },
+              ),
+            ],
+            const SizedBox(height: 12),
           ],
-          const SizedBox(height: 12),
-        ],
+        ),
       ),
     ),
   );
