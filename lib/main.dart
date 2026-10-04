@@ -1513,6 +1513,55 @@ Future<void> showChangePasswordDialog(BuildContext context) async {
 // ==========================================
 // MERCHANT ORDERS SCREEN
 // ==========================================
+// ==========================================
+// MOBILE MONEY INSTRUCTIONS DIALOG
+// ==========================================
+Future<void> showMobileMoneyInstructions(
+  BuildContext context, {
+  required String method,
+  required String shopPhone,
+  required String total,
+  required String orderRef,
+}) async {
+  final isOrange = method == 'orange_money';
+  final dialCode = isOrange ? '*144#' : '*161#';
+  final label = isOrange ? 'Orange Money' : 'Africell Money';
+
+  await showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('Pay with $label'),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('To complete your order, send the amount via $label:'),
+            const SizedBox(height: 12),
+            Text('1. Dial $dialCode'),
+            const Text('2. Choose Send Money'),
+            Text('3. Enter the amount: SLE $total'),
+            Text('4. Enter the shop phone: $shopPhone'),
+            Text('5. Enter the reference: $orderRef'),
+            const Text('6. Complete the transaction on your phone'),
+            const Text('7. The shop will confirm once payment is received'),
+          ],
+        ),
+      ),
+      actions: [
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1B5E20),
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text("OK, I've paid"),
+        ),
+      ],
+    ),
+  );
+}
+
 class MerchantOrdersScreen extends StatefulWidget {
   final Map<String, dynamic> merchant;
   const MerchantOrdersScreen({super.key, required this.merchant});
@@ -1687,6 +1736,21 @@ class _MerchantOrdersScreenState extends State<MerchantOrdersScreen> {
                               '${o['payment_method'] ?? ''} • ${o['payment_status'] ?? ''}',
                               style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                             ),
+                            if (o['payment_status'] == 'paid_by_customer')
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'PAID',
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green),
+                                  ),
+                                ),
+                              ),
                             const SizedBox(height: 4),
                             Text(
                               _formatDate(o['created_at']),
@@ -1710,6 +1774,46 @@ class _MerchantOrdersScreenState extends State<MerchantOrdersScreen> {
                               spacing: 8,
                               runSpacing: 8,
                               children: [
+                                if ((o['payment_method'] == 'orange_money' ||
+                                        o['payment_method'] == 'africell_money') &&
+                                    o['payment_status'] == 'pending')
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.green.shade800,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
+                                    icon: const Icon(Icons.check_circle_outline, size: 16),
+                                    label: const Text('Mark as Paid', style: TextStyle(fontSize: 12)),
+                                    onPressed: () async {
+                                      final user = await UserSession.load();
+                                      if (user == null) return;
+                                      try {
+                                        final res = await http.put(
+                                          Uri.parse('$baseUrl/orders/${o['id']}/mark-paid'),
+                                          headers: {
+                                            'x-api-key': apiKey,
+                                            'Authorization': 'Bearer ${user['token']}',
+                                          },
+                                        ).timeout(const Duration(seconds: 8));
+                                        if (!context.mounted) return;
+                                        if (res.statusCode >= 200 && res.statusCode < 300) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Payment confirmed')),
+                                          );
+                                          _load();
+                                        } else {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Could not mark as paid')),
+                                          );
+                                        }
+                                      } catch (_) {
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Cannot reach server')),
+                                        );
+                                      }
+                                    },
+                                  ),
                                 OutlinedButton.icon(
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: const Color(0xFF1B5E20),
@@ -2559,7 +2663,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (deliveryController.text.isEmpty) return;
-                await http.post(
+                final response = await http.post(
                   Uri.parse('$baseUrl/orders/'),
                   headers: {
                     'Content-Type': 'application/json',
@@ -2575,12 +2679,31 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'payment_method': paymentMethod,
                   }),
                 );
+                var newOrderId = '';
+                try {
+                  final decoded = jsonDecode(response.body);
+                  if (decoded is Map) newOrderId = (decoded['id'] ?? '').toString();
+                } catch (_) {}
                 if (mounted) {
                   Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Order placed! Runner will be assigned.')),
-                  );
+                  if (paymentMethod == 'orange_money' ||
+                      paymentMethod == 'africell_money') {
+                    final shopPhone =
+                        (product['shop_phone'] ?? '+232 78 839002').toString();
+                    showMobileMoneyInstructions(
+                      context,
+                      method: paymentMethod,
+                      shopPhone: shopPhone,
+                      total: '${(product['price_sle'] ?? 0) + 25.0}',
+                      orderRef: 'NYG-$newOrderId',
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content:
+                              Text('Order placed! Runner will be assigned.')),
+                    );
+                  }
                 }
               },
               child: const Text('Confirm Order'),
@@ -3936,7 +4059,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (deliveryController.text.isEmpty) return;
-                await http.post(
+                final response = await http.post(
                   Uri.parse('$baseUrl/orders/'),
                   headers: {
                     'Content-Type': 'application/json',
@@ -3952,12 +4075,31 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     'payment_method': paymentMethod,
                   }),
                 );
+                var newOrderId = '';
+                try {
+                  final decoded = jsonDecode(response.body);
+                  if (decoded is Map) newOrderId = (decoded['id'] ?? '').toString();
+                } catch (_) {}
                 if (mounted) {
                   Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Order placed! Runner will be assigned.')),
-                  );
+                  if (paymentMethod == 'orange_money' ||
+                      paymentMethod == 'africell_money') {
+                    final shopPhone =
+                        (product['shop_phone'] ?? '+232 78 839002').toString();
+                    showMobileMoneyInstructions(
+                      context,
+                      method: paymentMethod,
+                      shopPhone: shopPhone,
+                      total: '${(product['price_sle'] ?? 0) + 25.0}',
+                      orderRef: 'NYG-$newOrderId',
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content:
+                              Text('Order placed! Runner will be assigned.')),
+                    );
+                  }
                 }
               },
               child: const Text('Confirm Order'),
