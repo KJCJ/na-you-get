@@ -192,6 +192,60 @@ class UserSession {
     return false;
   }
 
+  static Future<String?> revokeSeller() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return 'Not signed in';
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/auth/revoke-seller'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        await prefs.setBool(_isSellerKey, false);
+        return null;
+      }
+      try {
+        final data = jsonDecode(res.body);
+        return data['detail']?.toString() ?? 'Could not disable selling';
+      } catch (_) {
+        return 'Could not disable selling';
+      }
+    } catch (_) {
+      return 'Cannot reach server';
+    }
+  }
+
+  static Future<String?> revokeRunner() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return 'Not signed in';
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/auth/revoke-runner'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        await prefs.setBool(_isRunnerKey, false);
+        return null;
+      }
+      try {
+        final data = jsonDecode(res.body);
+        return data['detail']?.toString() ?? 'Could not disable running';
+      } catch (_) {
+        return 'Could not disable running';
+      }
+    } catch (_) {
+      return 'Cannot reach server';
+    }
+  }
+
   static Future<bool> update(Map<String, dynamic> updates) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('user_token');
@@ -747,6 +801,98 @@ void showAccountSheet(
                         builder: (_) => ShopProfileScreen(merchant: shop),
                       ),
                     );
+                  },
+                ),
+              if (isSeller(currentUser))
+                ListTile(
+                  leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
+                  title: const Text('Stop Selling'),
+                  subtitle: const Text('Pause your shop temporarily'),
+                  onTap: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (dctx) => AlertDialog(
+                        title: const Text('Stop selling?'),
+                        content: const Text(
+                          'You will not be able to add or edit products until you turn selling back on. Your shop, products, and existing orders all stay safe and visible — you can re-enable selling anytime.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dctx, false),
+                            child: const Text('Cancel'),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => Navigator.pop(dctx, true),
+                            child: const Text('Stop Selling'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (!context.mounted) return;
+                    if (confirmed != true) return;
+                    Navigator.pop(ctx);
+                    final err = await UserSession.revokeSeller();
+                    if (!context.mounted) return;
+                    if (err == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Selling paused')),
+                      );
+                      onUserChanged();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(err)),
+                      );
+                    }
+                  },
+                ),
+              if (isRunner(currentUser))
+                ListTile(
+                  leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
+                  title: const Text('Stop Running'),
+                  subtitle: const Text('Pause deliveries temporarily'),
+                  onTap: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (dctx) => AlertDialog(
+                        title: const Text('Stop running?'),
+                        content: const Text(
+                          'You will not see delivery jobs or be able to accept them until you turn running back on. Past deliveries stay in your history.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dctx, false),
+                            child: const Text('Cancel'),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => Navigator.pop(dctx, true),
+                            child: const Text('Stop Running'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (!context.mounted) return;
+                    if (confirmed != true) return;
+                    Navigator.pop(ctx);
+                    final err = await UserSession.revokeRunner();
+                    if (!context.mounted) return;
+                    if (err == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Running paused')),
+                      );
+                      onUserChanged();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(err)),
+                      );
+                    }
                   },
                 ),
               if (!isSeller(currentUser))
