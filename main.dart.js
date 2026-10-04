@@ -95084,7 +95084,7 @@ A.atB.prototype={
 $0(){var s=0,r=A.B(t.H),q=this,p
 var $async$$0=A.x(function(a,b){if(a===1)return A.y(b,r)
 for(;;)switch(s){case 0:A.aQ(q.a,!1).c_(null)
-p=A.bR("https://github.com/KJCJ/na-you-get/raw/main/apk/NaYouGet.apk",0,null)
+p=A.bR("https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk",0,null)
 s=4
 return A.l(A.aHv(p),$async$$0)
 case 4:s=b?2:3
