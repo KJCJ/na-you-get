@@ -54,6 +54,10 @@ Future<String?> pickAndUploadImage(BuildContext context) async {
   }
 }
 
+String normalisePhone(String raw) {
+  return raw.trim().replaceAll(RegExp(r'[\s\-\(\)]'), '');
+}
+
 // ==========================================
 // MAIN APP
 // ==========================================
@@ -379,7 +383,8 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _submit() async {
-    if (_phoneController.text.trim().length < 8) {
+    final normalisedPhone = normalisePhone(_phoneController.text);
+    if (normalisedPhone.length < 8) {
       setState(() => _error = 'Please enter a valid phone number');
       return;
     }
@@ -400,11 +405,11 @@ class _AuthScreenState extends State<AuthScreen> {
     final url = _isLogin ? '$baseUrl/auth/login' : '$baseUrl/auth/signup';
     final body = _isLogin
         ? {
-            'phone_number': _phoneController.text.trim(),
+            'phone_number': normalisedPhone,
             'password': _passwordController.text,
           }
         : {
-            'phone_number': _phoneController.text.trim(),
+            'phone_number': normalisedPhone,
             'name': _nameController.text.trim(),
             'password': _passwordController.text,
             'role': _selectedRole,
@@ -2239,9 +2244,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (res.statusCode < 200 || res.statusCode >= 300) return;
 
       final shops = jsonDecode(res.body) as List;
-      final phone = user['phone_number'];
+      final phone = normalisePhone(user['phone_number']?.toString() ?? '');
       final Map<String, dynamic>? mine = shops.firstWhere(
-        (s) => s['phone_number'] == phone,
+        (s) => normalisePhone(s['phone_number']?.toString() ?? '') == phone,
         orElse: () => null,
       );
 
@@ -4254,7 +4259,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   body: jsonEncode({
                     'shop_name': shopNameController.text,
                     'owner_name': ownerNameController.text,
-                    'phone_number': phoneController.text,
+                    'phone_number': normalisePhone(phoneController.text),
                     'city': cityController.text,
                     'category': selectedCategory,
                     'logo_url': uploadedLogoUrl,
