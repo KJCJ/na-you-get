@@ -723,7 +723,13 @@ void showAccountSheet(
               const SizedBox(height: 4),
               Chip(
                 label: Text(
-                  (user['role'] ?? 'customer').toUpperCase(),
+                  isSeller(user) && isRunner(user)
+                      ? 'SELLER + RUNNER'
+                      : isSeller(user)
+                          ? 'SELLER'
+                          : isRunner(user)
+                              ? 'RUNNER'
+                              : 'CUSTOMER',
                   style: const TextStyle(fontSize: 12),
                 ),
               ),
@@ -5302,7 +5308,7 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
 
   Future<bool> _ensureLoggedInAsRunner() async {
     if (widget.currentUser != null) {
-      if (widget.currentUser!['role'] == 'driver') return true;
+      if (isRunner(widget.currentUser)) return true;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Only Runners can accept delivery jobs.')),
@@ -5399,10 +5405,10 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
 
   Widget _buildTopCard() {
     final user = widget.currentUser;
-    final isRunner = user != null && user['role'] == 'driver';
+    final isUserRunner = isRunner(user);
 
     final String subtitle;
-    if (isRunner) {
+    if (isUserRunner) {
       subtitle = 'You are registered as a Runner';
     } else if (user == null) {
       subtitle = 'Sign up to deliver items and earn';
@@ -5415,7 +5421,7 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: isRunner
+          colors: isUserRunner
               ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
               : [const Color(0xFF0D47A1), const Color(0xFF1565C0)],
           begin: Alignment.topLeft,
@@ -5465,22 +5471,22 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
-                foregroundColor: isRunner
+                foregroundColor: isUserRunner
                     ? const Color(0xFF1B5E20)
                     : const Color(0xFF0D47A1),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              icon: Icon(isRunner ? Icons.list_alt : Icons.directions_run),
+              icon: Icon(isUserRunner ? Icons.list_alt : Icons.directions_run),
               label: Text(
-                isRunner ? 'View Available Jobs' : 'How to become a Runner',
+                isUserRunner ? 'View Available Jobs' : 'How to become a Runner',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               onPressed: () {
-                if (isRunner) {
+                if (isUserRunner) {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => RunnerDeliveriesScreen(currentUser: user),
+                      builder: (_) => RunnerDeliveriesScreen(currentUser: user!),
                     ),
                   );
                 } else {
