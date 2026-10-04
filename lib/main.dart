@@ -576,8 +576,10 @@ void showAccountSheet(
   Future<bool> Function({String? suggestedRole})? ensureLoggedIn,
   VoidCallback? onSignOut,
   VoidCallback? onRefreshUser,
+  Map<String, dynamic>? currentShop,
 }) {
   final user = currentUser;
+  final shop = currentShop;
 
   Future<void> handleSignIn() async {
     if (ensureLoggedIn != null) {
@@ -675,6 +677,21 @@ void showAccountSheet(
                 ),
               ),
               const Divider(height: 24),
+              if (shop != null)
+                ListTile(
+                  leading: const Icon(Icons.storefront),
+                  title: const Text('My Shop'),
+                  subtitle: Text(shop['shop_name'] ?? ''),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ShopProfileScreen(merchant: shop),
+                      ),
+                    );
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.receipt_long),
                 title: const Text('My Orders'),
@@ -752,6 +769,7 @@ class AccountButton extends StatelessWidget {
   final Future<bool> Function({String? suggestedRole})? ensureLoggedIn;
   final VoidCallback? onSignOut;
   final VoidCallback? onRefreshUser;
+  final Map<String, dynamic>? currentShop;
 
   const AccountButton({
     super.key,
@@ -760,6 +778,7 @@ class AccountButton extends StatelessWidget {
     this.ensureLoggedIn,
     this.onSignOut,
     this.onRefreshUser,
+    this.currentShop,
   });
 
   @override
@@ -785,14 +804,24 @@ class AccountButton extends StatelessWidget {
                   : null,
             )
           : const Icon(Icons.login),
-      onPressed: () => showAccountSheet(
-        context,
-        currentUser,
-        onUserChanged,
-        ensureLoggedIn: ensureLoggedIn,
-        onSignOut: onSignOut,
-        onRefreshUser: onRefreshUser,
-      ),
+      onPressed: () async {
+        // Tabs that already know the shop pass it in; others let it be
+        // resolved here before the sheet is shown.
+        var shop = currentShop;
+        if (shop == null && user != null) {
+          shop = await ShopSession.load();
+        }
+        if (!context.mounted) return;
+        showAccountSheet(
+          context,
+          currentUser,
+          onUserChanged,
+          ensureLoggedIn: ensureLoggedIn,
+          onSignOut: onSignOut,
+          onRefreshUser: onRefreshUser,
+          currentShop: shop,
+        );
+      },
     );
   }
 }
@@ -3423,7 +3452,8 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
               onRefreshUser: () {
                 if (mounted) setState(() => myShop = null);
                 _loadMyShop();
-              }),
+              },
+              currentShop: myShop),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _fetchShops,
@@ -4231,7 +4261,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               },
               onRefreshUser: () {
                 if (mounted) setState(() {});
-              }),
+              },
+              currentShop: myShop),
         ],
       ),
       body: isLoading
