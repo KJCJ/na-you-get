@@ -2682,7 +2682,14 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 var newOrderId = '';
                 try {
                   final decoded = jsonDecode(response.body);
-                  if (decoded is Map) newOrderId = (decoded['id'] ?? '').toString();
+                  if (decoded is Map) {
+                    final ord = decoded['order'];
+                    if (ord is Map && ord['id'] != null) {
+                      newOrderId = ord['id'].toString();
+                    } else if (decoded['id'] != null) {
+                      newOrderId = decoded['id'].toString();
+                    }
+                  }
                 } catch (_) {}
                 if (mounted) {
                   Navigator.pop(ctx);
@@ -4078,7 +4085,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 var newOrderId = '';
                 try {
                   final decoded = jsonDecode(response.body);
-                  if (decoded is Map) newOrderId = (decoded['id'] ?? '').toString();
+                  if (decoded is Map) {
+                    final ord = decoded['order'];
+                    if (ord is Map && ord['id'] != null) {
+                      newOrderId = ord['id'].toString();
+                    } else if (decoded['id'] != null) {
+                      newOrderId = decoded['id'].toString();
+                    }
+                  }
                 } catch (_) {}
                 if (mounted) {
                   Navigator.pop(ctx);
