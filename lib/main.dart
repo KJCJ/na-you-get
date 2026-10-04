@@ -102,6 +102,8 @@ class UserSession {
   static const _roleKey = 'user_role';
   static const _tokenKey = 'user_token';
   static const _photoKey = 'user_photo';
+  static const _isSellerKey = 'user_is_seller';
+  static const _isRunnerKey = 'user_is_runner';
 
   static Future<void> save(Map<String, dynamic> user, String token) async {
     final prefs = await SharedPreferences.getInstance();
@@ -109,6 +111,12 @@ class UserSession {
     await prefs.setString(_nameKey, user['name']);
     await prefs.setString(_phoneKey, user['phone_number']);
     await prefs.setString(_roleKey, user['role'] ?? 'customer');
+    if (user['is_seller'] != null) {
+      await prefs.setBool(_isSellerKey, user['is_seller'] == 1 || user['is_seller'] == true);
+    }
+    if (user['is_runner'] != null) {
+      await prefs.setBool(_isRunnerKey, user['is_runner'] == 1 || user['is_runner'] == true);
+    }
     if (user['photo_url'] != null) {
       await prefs.setString(_photoKey, user['photo_url']);
     }
@@ -125,6 +133,8 @@ class UserSession {
       'name': prefs.getString(_nameKey) ?? '',
       'phone_number': prefs.getString(_phoneKey) ?? '',
       'role': prefs.getString(_roleKey) ?? 'customer',
+      'is_seller': prefs.getBool(_isSellerKey) ?? false,
+      'is_runner': prefs.getBool(_isRunnerKey) ?? false,
       'photo_url': prefs.getString(_photoKey),
       'token': token,
     };
@@ -138,6 +148,48 @@ class UserSession {
     await prefs.remove(_roleKey);
     await prefs.remove(_tokenKey);
     await prefs.remove(_photoKey);
+    await prefs.remove(_isSellerKey);
+    await prefs.remove(_isRunnerKey);
+  }
+
+  static Future<bool> becomeSeller() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return false;
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/auth/become-seller'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        await prefs.setBool(_isSellerKey, true);
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  static Future<bool> becomeRunner() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return false;
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/auth/become-runner'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        await prefs.setBool(_isRunnerKey, true);
+        return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   static Future<bool> update(Map<String, dynamic> updates) async {
@@ -369,7 +421,6 @@ class _AuthScreenState extends State<AuthScreen> {
   final _phoneController = TextEditingController(text: '+232');
   final _nameController = TextEditingController();
   final _passwordController = TextEditingController();
-  String _selectedRole = 'customer';
   bool _loading = false;
   String? _error;
 
@@ -377,7 +428,6 @@ class _AuthScreenState extends State<AuthScreen> {
   void initState() {
     super.initState();
     if (widget.suggestedRole != null) {
-      _selectedRole = widget.suggestedRole!;
       _isLogin = false;
     }
   }
@@ -412,7 +462,7 @@ class _AuthScreenState extends State<AuthScreen> {
             'phone_number': normalisedPhone,
             'name': _nameController.text.trim(),
             'password': _passwordController.text,
-            'role': _selectedRole,
+            'role': 'customer',
           };
 
     try {
@@ -491,28 +541,6 @@ class _AuthScreenState extends State<AuthScreen> {
                   prefixIcon: Icon(Icons.lock),
                 ),
               ),
-              if (!_isLogin) ...[
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _selectedRole,
-                  decoration: const InputDecoration(
-                    labelText: 'I am a...',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.badge),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'customer', child: Text('Customer (Buy things)')),
-                    DropdownMenuItem(
-                        value: 'merchant', child: Text('Merchant (Sell things)')),
-                    DropdownMenuItem(
-                        value: 'driver', child: Text('Runner (Deliver jobs)')),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) setState(() => _selectedRole = v);
-                  },
-                ),
-              ],
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Container(
@@ -5392,7 +5420,7 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => RunnerDeliveriesScreen(currentUser: user!),
+                      builder: (_) => RunnerDeliveriesScreen(currentUser: user),
                     ),
                   );
                 } else {
