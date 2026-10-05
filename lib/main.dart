@@ -58,6 +58,19 @@ String normalisePhone(String raw) {
   return raw.trim().replaceAll(RegExp(r'[\s\-\(\)]'), '');
 }
 
+void handleSessionExpired(BuildContext context) async {
+  await UserSession.clear();
+  await ShopSession.clear();
+  if (!context.mounted) return;
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => const AuthScreen()),
+    (route) => false,
+  );
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Your session expired. Please sign in again.')),
+  );
+}
+
 // ==========================================
 // MAIN APP
 // ==========================================
@@ -152,10 +165,10 @@ class UserSession {
     await prefs.remove(_isRunnerKey);
   }
 
-  static Future<bool> becomeSeller() async {
+  static Future<String?> becomeSeller() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('user_token');
-    if (token == null) return false;
+    if (token == null) return 'Not signed in';
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/auth/become-seller'),
@@ -164,18 +177,24 @@ class UserSession {
           'Authorization': 'Bearer $token',
         },
       ).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 401) {
+        await clear();
+        return 'SESSION_EXPIRED';
+      }
       if (res.statusCode >= 200 && res.statusCode < 300) {
         await prefs.setBool(_isSellerKey, true);
-        return true;
+        return null;
       }
-    } catch (_) {}
-    return false;
+      return 'Could not enable selling';
+    } catch (_) {
+      return 'Cannot reach server';
+    }
   }
 
-  static Future<bool> becomeRunner() async {
+  static Future<String?> becomeRunner() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('user_token');
-    if (token == null) return false;
+    if (token == null) return 'Not signed in';
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/auth/become-runner'),
@@ -184,12 +203,18 @@ class UserSession {
           'Authorization': 'Bearer $token',
         },
       ).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 401) {
+        await clear();
+        return 'SESSION_EXPIRED';
+      }
       if (res.statusCode >= 200 && res.statusCode < 300) {
         await prefs.setBool(_isRunnerKey, true);
-        return true;
+        return null;
       }
-    } catch (_) {}
-    return false;
+      return 'Could not enable running';
+    } catch (_) {
+      return 'Cannot reach server';
+    }
   }
 
   static Future<String?> revokeSeller() async {
@@ -204,6 +229,10 @@ class UserSession {
           'Authorization': 'Bearer $token',
         },
       ).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 401) {
+        await clear();
+        return 'SESSION_EXPIRED';
+      }
       if (res.statusCode >= 200 && res.statusCode < 300) {
         await prefs.setBool(_isSellerKey, false);
         return null;
@@ -231,6 +260,10 @@ class UserSession {
           'Authorization': 'Bearer $token',
         },
       ).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 401) {
+        await clear();
+        return 'SESSION_EXPIRED';
+      }
       if (res.statusCode >= 200 && res.statusCode < 300) {
         await prefs.setBool(_isRunnerKey, false);
         return null;
@@ -837,6 +870,7 @@ void showAccountSheet(
                     Navigator.pop(ctx);
                     final err = await UserSession.revokeSeller();
                     if (!context.mounted) return;
+                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
                     if (err == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Selling paused')),
@@ -883,6 +917,7 @@ void showAccountSheet(
                     Navigator.pop(ctx);
                     final err = await UserSession.revokeRunner();
                     if (!context.mounted) return;
+                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
                     if (err == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Running paused')),
@@ -902,16 +937,17 @@ void showAccountSheet(
                   subtitle: const Text('Create your own shop'),
                   onTap: () async {
                     Navigator.pop(ctx);
-                    final ok = await UserSession.becomeSeller();
+                    final err = await UserSession.becomeSeller();
                     if (!context.mounted) return;
-                    if (ok) {
+                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
+                    if (err == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('You can now sell on NYG')),
                       );
                       onUserChanged();
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Could not enable selling')),
+                        SnackBar(content: Text(err)),
                       );
                     }
                   },
@@ -923,16 +959,17 @@ void showAccountSheet(
                   subtitle: const Text('Deliver items and earn'),
                   onTap: () async {
                     Navigator.pop(ctx);
-                    final ok = await UserSession.becomeRunner();
+                    final err = await UserSession.becomeRunner();
                     if (!context.mounted) return;
-                    if (ok) {
+                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
+                    if (err == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('You can now deliver on NYG')),
                       );
                       onUserChanged();
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Could not enable running')),
+                        SnackBar(content: Text(err)),
                       );
                     }
                   },
