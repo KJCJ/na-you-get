@@ -397,6 +397,33 @@ class UserSession {
     }
     return false;
   }
+
+  static Future<String?> updateProduct(int productId, Map<String, dynamic> updates) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return 'Not signed in';
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/products/$productId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(updates),
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 401) return 'SESSION_EXPIRED';
+      if (res.statusCode >= 200 && res.statusCode < 300) return null;
+      try {
+        final data = jsonDecode(res.body);
+        return data['detail']?.toString() ?? 'Could not update product';
+      } catch (_) {
+        return 'Could not update product';
+      }
+    } catch (_) {
+      return 'Cannot reach server';
+    }
+  }
 }
 
 // ==========================================
@@ -5445,6 +5472,129 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
     );
   }
 
+  void _showEditProductDialog(Map<String, dynamic> product) {
+    final titleController = TextEditingController(text: product['title'] ?? '');
+    final descController = TextEditingController(text: product['description'] ?? '');
+    final priceController = TextEditingController(text: (product['price_sle'] ?? '').toString());
+    final imageUrlController = TextEditingController(text: product['image_url'] ?? '');
+    String selectedCategory = product['category'] ?? 'Other';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Edit ${product['title']}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(labelText: 'Item Title', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: priceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Price in Leones (SLE)', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: const InputDecoration(labelText: 'Product Category', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
+                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
+                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
+                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
+                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
+                    DropdownMenuItem(value: 'Services', child: Text('Services')),
+                    DropdownMenuItem(value: 'Other', child: Text('Other')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => selectedCategory = value);
+                  },
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final url = await pickAndUploadImage(context);
+                      if (url != null) {
+                        imageUrlController.text = url;
+                        setDialogState(() {});
+                      }
+                    },
+                    icon: const Icon(Icons.photo_camera),
+                    label: const Text('Change Photo'),
+                  ),
+                ),
+                if (imageUrlController.text.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        imageUrlController.text,
+                        height: 120,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.isEmpty || priceController.text.isEmpty) return;
+                final price = double.tryParse(priceController.text) ?? 0.0;
+                final err = await UserSession.updateProduct(
+                  (product['id'] as num).toInt(),
+                  {
+                    'title': titleController.text,
+                    'description': descController.text,
+                    'category': selectedCategory,
+                    'price_sle': price,
+                    'image_url': imageUrlController.text.isNotEmpty ? imageUrlController.text : null,
+                  },
+                );
+                if (!context.mounted) return;
+                if (err == 'SESSION_EXPIRED') {
+                  handleSessionExpired(context);
+                  return;
+                }
+                if (err == null) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Product updated')),
+                  );
+                  fetchShopProducts();
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(err)),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -5555,13 +5705,23 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                               title: Text(item['title']),
                               subtitle: Text(
                                   'Price: SLE ${item['price_sle']} • ${item['category'] ?? 'Other'}'),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                tooltip: 'Delete product',
-                                onPressed: () => _deleteProduct(
-                                  item['id'],
-                                  item['title'] ?? 'this product',
-                                ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: Color(0xFF1B5E20)),
+                                    tooltip: 'Edit product',
+                                    onPressed: () => _showEditProductDialog(item),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    tooltip: 'Delete product',
+                                    onPressed: () => _deleteProduct(
+                                      item['id'],
+                                      item['title'] ?? 'this product',
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           );
