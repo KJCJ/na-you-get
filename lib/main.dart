@@ -58,6 +58,131 @@ String normalisePhone(String raw) {
   return raw.trim().replaceAll(RegExp(r'[\s\-\(\)]'), '');
 }
 
+List<String> productPhotos(Map<String, dynamic> product) {
+  // Returns list of image URLs, falls back to [image_url] if image_urls absent
+  final urlsRaw = product['image_urls'];
+
+  // Case 1 - backend returns a real List
+  if (urlsRaw is List && urlsRaw.isNotEmpty) {
+    final list = urlsRaw.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+    if (list.isNotEmpty) return list;
+  }
+
+  // Case 2 - backend returns a JSON string
+  if (urlsRaw is String && urlsRaw.isNotEmpty) {
+    try {
+      final parsed = jsonDecode(urlsRaw);
+      if (parsed is List) {
+        final list = parsed.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+  }
+  final single = product['image_url'];
+  if (single is String && single.isNotEmpty) return [single];
+  return [];
+}
+
+Future<void> showMultiPhotoPicker(
+  BuildContext context,
+  List<String> currentPhotos,
+  void Function(List<String>) onChanged,
+) async {
+  final updated = List<String>.from(currentPhotos);
+
+  await showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        return AlertDialog(
+          title: const Text('Photos (up to 4)'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: List.generate(4, (index) {
+                    final hasImage = index < updated.length;
+                    return Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: hasImage
+                          ? Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(
+                                      updated[index],
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 0,
+                                  right: 0,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setDialogState(() => updated.removeAt(index));
+                                    },
+                                    child: Container(
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      padding: const EdgeInsets.all(2),
+                                      child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : IconButton(
+                              icon: const Icon(Icons.add_a_photo, color: Colors.grey),
+                              onPressed: () async {
+                                final url = await pickAndUploadImage(context);
+                                if (url != null) {
+                                  setDialogState(() => updated.add(url));
+                                }
+                              },
+                            ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'First photo is the main image.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                onChanged(updated);
+                Navigator.pop(ctx);
+              },
+              child: const Text('Save Photos'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
 void handleSessionExpired(BuildContext context) async {
   await UserSession.clear();
   await ShopSession.clear();
@@ -2703,17 +2828,18 @@ class ShopProductGrid extends StatelessWidget {
                   child: Container(
                     color: Colors.white,
                     width: double.infinity,
-                    child: item['image_url'] != null &&
-                            item['image_url'].toString().isNotEmpty
-                        ? Image.network(
-                            item['image_url'],
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Center(
-                                    child: Icon(Icons.shopping_bag, size: 40)),
-                          )
-                        : const Center(
-                            child: Icon(Icons.shopping_bag, size: 40)),
+                    child: Builder(builder: (context) {
+                      final photos = productPhotos(item);
+                      final url = photos.isNotEmpty ? photos[0] : null;
+                      if (url == null) {
+                        return const Center(child: Icon(Icons.shopping_bag, size: 40));
+                      }
+                      return Image.network(
+                        url,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.shopping_bag, size: 40)),
+                      );
+                    }),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -4282,40 +4408,83 @@ class ProductDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = product['image_url'];
-    final hasImage =
-        imageUrl != null && imageUrl.toString().isNotEmpty;
-
     return Scaffold(
       appBar: AppBar(title: Text(product['title'] ?? 'Product')),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: double.infinity,
-              height: 280,
-              color: Colors.white,
-              child: hasImage
-                  ? Image.network(
-                      imageUrl,
+            Builder(builder: (context) {
+              final photos = productPhotos(product);
+              if (photos.isEmpty) {
+                return SizedBox(
+                  height: 280,
+                  child: Container(
+                    color: Colors.white,
+                    child: const Center(
+                      child: Icon(Icons.shopping_bag, size: 80, color: Colors.grey),
+                    ),
+                  ),
+                );
+              }
+              if (photos.length == 1) {
+                return SizedBox(
+                  height: 280,
+                  child: Container(
+                    color: Colors.white,
+                    child: Image.network(
+                      photos[0],
                       fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: Colors.white,
-                        child: const Center(
-                          child: Icon(Icons.shopping_bag,
-                              size: 80, color: Colors.green),
-                        ),
-                      ),
-                    )
-                  : Container(
-                      color: Colors.white,
-                      child: const Center(
-                        child: Icon(Icons.shopping_bag,
-                            size: 80, color: Colors.green),
+                      errorBuilder: (_, __, ___) => const Center(
+                        child: Icon(Icons.shopping_bag, size: 80, color: Colors.grey),
                       ),
                     ),
-            ),
+                  ),
+                );
+              }
+              return SizedBox(
+                height: 280,
+                child: Stack(
+                  children: [
+                    PageView.builder(
+                      itemCount: photos.length,
+                      itemBuilder: (ctx, i) => Container(
+                        color: Colors.white,
+                        child: Image.network(
+                          photos[i],
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const Center(
+                            child: Icon(Icons.shopping_bag, size: 80, color: Colors.grey),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.photo_library, size: 14, color: Colors.white),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${photos.length}',
+                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -5323,8 +5492,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
     final titleController = TextEditingController();
     final descController = TextEditingController();
     final priceController = TextEditingController();
-    final imageUrlController = TextEditingController();
     String selectedCategory = 'Other';
+    List<String> uploadedPhotos = [];
 
     showDialog(
       context: context,
@@ -5386,38 +5555,27 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      final url = await pickAndUploadImage(context);
-                      if (url != null) {
-                        imageUrlController.text = url;
-                        setDialogState(() {});
-                      }
+                      await showMultiPhotoPicker(context, uploadedPhotos, (newPhotos) {
+                        setDialogState(() => uploadedPhotos = newPhotos);
+                      });
                     },
-                    icon: const Icon(Icons.photo_camera),
-                    label: const Text('Pick Photo from Phone'),
+                    icon: const Icon(Icons.photo_library),
+                    label: Text(uploadedPhotos.isEmpty ? 'Add Photos (up to 4)' : '${uploadedPhotos.length} photo(s) added'),
                   ),
                 ),
-                if (imageUrlController.text.isNotEmpty)
+                if (uploadedPhotos.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        imageUrlController.text,
-                        height: 120,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const SizedBox.shrink(),
-                      ),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: uploadedPhotos.map((url) => ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      )).toList(),
                     ),
                   ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: imageUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Image Web Link (Optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
               ],
             ),
           ),
@@ -5447,9 +5605,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                     'description': descController.text,
                     'category': selectedCategory,
                     'price_sle': price,
-                    'image_url': imageUrlController.text.isNotEmpty
-                        ? imageUrlController.text
-                        : null,
+                    'image_url': uploadedPhotos.isNotEmpty ? uploadedPhotos[0] : null,
+                    'image_urls': uploadedPhotos,
                   }),
                 );
 
@@ -5476,7 +5633,7 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
     final titleController = TextEditingController(text: product['title'] ?? '');
     final descController = TextEditingController(text: product['description'] ?? '');
     final priceController = TextEditingController(text: (product['price_sle'] ?? '').toString());
-    final imageUrlController = TextEditingController(text: product['image_url'] ?? '');
+    List<String> uploadedPhotos = productPhotos(product);
     String selectedCategory = product['category'] ?? 'Other';
 
     showDialog(
@@ -5525,27 +5682,25 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      final url = await pickAndUploadImage(context);
-                      if (url != null) {
-                        imageUrlController.text = url;
-                        setDialogState(() {});
-                      }
+                      await showMultiPhotoPicker(context, uploadedPhotos, (newPhotos) {
+                        setDialogState(() => uploadedPhotos = newPhotos);
+                      });
                     },
-                    icon: const Icon(Icons.photo_camera),
-                    label: const Text('Change Photo'),
+                    icon: const Icon(Icons.photo_library),
+                    label: Text(uploadedPhotos.isEmpty ? 'Add Photos (up to 4)' : '${uploadedPhotos.length} photo(s)'),
                   ),
                 ),
-                if (imageUrlController.text.isNotEmpty)
+                if (uploadedPhotos.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        imageUrlController.text,
-                        height: 120,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
-                      ),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: uploadedPhotos.map((url) => ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      )).toList(),
                     ),
                   ),
               ],
@@ -5567,7 +5722,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                     'description': descController.text,
                     'category': selectedCategory,
                     'price_sle': price,
-                    'image_url': imageUrlController.text.isNotEmpty ? imageUrlController.text : null,
+                    'image_url': uploadedPhotos.isNotEmpty ? uploadedPhotos[0] : null,
+                    'image_urls': uploadedPhotos,
                   },
                 );
                 if (!context.mounted) return;
