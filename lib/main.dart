@@ -868,7 +868,7 @@ void showAccountSheet(
                     );
                   },
                 ),
-              if (isSeller(currentUser))
+              if (isSeller(currentUser) && shop != null)
                 ListTile(
                   leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
                   title: const Text('Stop Selling'),
@@ -962,7 +962,7 @@ void showAccountSheet(
                     }
                   },
                 ),
-              if (!isSeller(currentUser))
+              if (shop == null)
                 ListTile(
                   leading: const Icon(Icons.storefront, color: Color(0xFF1B5E20)),
                   title: const Text('Become a Seller'),
@@ -3179,6 +3179,9 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       );
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        // Revoke seller status so the user can become a seller again
+        await UserSession.revokeSeller();
+        widget.onUserChanged();
         await ShopSession.clear();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -3892,6 +3895,29 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
 
                 if (response.statusCode >= 200 && response.statusCode < 300) {
                   final merchantData = jsonDecode(response.body)['merchant'];
+
+                  // Creating a shop auto-enables seller status on the backend,
+                  // so refresh the user or the account sheet stays stale.
+                  final meRes = await http.get(
+                    Uri.parse('$baseUrl/auth/me'),
+                    headers: {
+                      'x-api-key': apiKey,
+                      'Authorization': 'Bearer ${user?['token'] ?? ''}',
+                    },
+                  ).timeout(const Duration(seconds: 8));
+                  if (meRes.statusCode >= 200 && meRes.statusCode < 300) {
+                    final meData = jsonDecode(meRes.body);
+                    await UserSession.save({
+                      'id': meData['id'],
+                      'phone_number': meData['phone_number'],
+                      'name': meData['name'],
+                      'role': meData['role'] ?? 'customer',
+                      'is_seller': meData['is_seller'] ?? 0,
+                      'is_runner': meData['is_runner'] ?? 0,
+                      'photo_url': meData['photo_url'],
+                    }, user?['token'] ?? '');
+                  }
+
                   await ShopSession.save(merchantData);
                   if (mounted) {
                     Navigator.pop(ctx);
@@ -4578,6 +4604,29 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
                 if (response.statusCode >= 200 && response.statusCode < 300) {
                   final merchantData = jsonDecode(response.body)['merchant'];
+
+                  // Creating a shop auto-enables seller status on the backend,
+                  // so refresh the user or the account sheet stays stale.
+                  final meRes = await http.get(
+                    Uri.parse('$baseUrl/auth/me'),
+                    headers: {
+                      'x-api-key': apiKey,
+                      'Authorization': 'Bearer ${user?['token'] ?? ''}',
+                    },
+                  ).timeout(const Duration(seconds: 8));
+                  if (meRes.statusCode >= 200 && meRes.statusCode < 300) {
+                    final meData = jsonDecode(meRes.body);
+                    await UserSession.save({
+                      'id': meData['id'],
+                      'phone_number': meData['phone_number'],
+                      'name': meData['name'],
+                      'role': meData['role'] ?? 'customer',
+                      'is_seller': meData['is_seller'] ?? 0,
+                      'is_runner': meData['is_runner'] ?? 0,
+                      'photo_url': meData['photo_url'],
+                    }, user?['token'] ?? '');
+                  }
+
                   await ShopSession.save(merchantData);
                   if (mounted) {
                     Navigator.pop(ctx);
