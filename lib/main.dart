@@ -503,24 +503,37 @@ class UserSession {
     }
   }
 
-  static Future<bool> deleteAccount() async {
+  static Future<String?> deleteAccount() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('user_token');
-    if (token == null) return false;
+    if (token == null) return 'Not signed in';
 
-    final res = await http.delete(
-      Uri.parse('$baseUrl/auth/me'),
-      headers: {
-        'x-api-key': apiKey,
-        'Authorization': 'Bearer $token',
-      },
-    );
+    try {
+      final res = await http.delete(
+        Uri.parse('$baseUrl/auth/me'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
 
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      await clear();
-      return true;
+      if (res.statusCode == 401) {
+        await clear();
+        return 'SESSION_EXPIRED';
+      }
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        await clear();
+        return null;
+      }
+      try {
+        final data = jsonDecode(res.body);
+        return data['detail']?.toString() ?? 'Could not delete account';
+      } catch (_) {
+        return 'Could not delete account';
+      }
+    } catch (_) {
+      return 'Cannot reach server';
     }
-    return false;
   }
 
   static Future<String?> updateProduct(int productId, Map<String, dynamic> updates) async {
@@ -1423,10 +1436,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (confirmed != true) return;
 
     setState(() => _deleting = true);
-    final ok = await UserSession.deleteAccount();
+    final err = await UserSession.deleteAccount();
     if (!mounted) return;
     setState(() => _deleting = false);
-    if (ok) {
+    if (err == 'SESSION_EXPIRED') {
+      handleSessionExpired(context);
+      return;
+    }
+    if (err == null) {
       await ShopSession.clear();
       widget.onUserChanged();
       if (!mounted) return;
@@ -1436,7 +1453,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not delete account')),
+        SnackBar(content: Text(err)),
       );
     }
   }
