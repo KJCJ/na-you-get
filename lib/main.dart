@@ -4891,6 +4891,7 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                       'role': meData['role'] ?? 'customer',
                       'is_seller': meData['is_seller'] ?? 0,
                       'is_runner': meData['is_runner'] ?? 0,
+                      'is_admin': meData['is_admin'] ?? 0,
                       'photo_url': meData['photo_url'],
                     }, user?['token'] ?? '');
                   }
@@ -5673,6 +5674,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       'role': meData['role'] ?? 'customer',
                       'is_seller': meData['is_seller'] ?? 0,
                       'is_runner': meData['is_runner'] ?? 0,
+                      'is_admin': meData['is_admin'] ?? 0,
                       'photo_url': meData['photo_url'],
                     }, user?['token'] ?? '');
                   }
