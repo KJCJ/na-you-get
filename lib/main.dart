@@ -607,7 +607,12 @@ class ShopSession {
 // MESSAGE SESSION
 // ==========================================
 class MessageSession {
+  /// Set when the last call was rejected with 401, so callers can tell an
+  /// expired session apart from a genuinely empty inbox.
+  static bool lastCallWasUnauthorized = false;
+
   static Future<List<dynamic>> getInbox() async {
+    lastCallWasUnauthorized = false;
     final user = await UserSession.load();
     if (user == null) return [];
     try {
@@ -618,6 +623,10 @@ class MessageSession {
           'Authorization': 'Bearer ${user['token']}',
         },
       ).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 401) {
+        lastCallWasUnauthorized = true;
+        return [];
+      }
       if (res.statusCode < 200 || res.statusCode >= 300) return [];
       return jsonDecode(res.body) as List;
     } catch (_) {
@@ -626,6 +635,7 @@ class MessageSession {
   }
 
   static Future<List<dynamic>> getConversation(int otherUserId) async {
+    lastCallWasUnauthorized = false;
     final user = await UserSession.load();
     if (user == null) return [];
     try {
@@ -636,6 +646,10 @@ class MessageSession {
           'Authorization': 'Bearer ${user['token']}',
         },
       ).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 401) {
+        lastCallWasUnauthorized = true;
+        return [];
+      }
       if (res.statusCode < 200 || res.statusCode >= 300) return [];
       final data = jsonDecode(res.body);
       return data['messages'] as List;
@@ -645,6 +659,7 @@ class MessageSession {
   }
 
   static Future<bool> send(int recipientId, String text, {int? shopId, int? orderId}) async {
+    lastCallWasUnauthorized = false;
     final user = await UserSession.load();
     if (user == null) return false;
     try {
@@ -661,6 +676,10 @@ class MessageSession {
         },
         body: jsonEncode(body),
       ).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 401) {
+        lastCallWasUnauthorized = true;
+        return false;
+      }
       return res.statusCode >= 200 && res.statusCode < 300;
     } catch (_) {
       return false;
@@ -668,16 +687,20 @@ class MessageSession {
   }
 
   static Future<void> markRead(int otherUserId) async {
+    lastCallWasUnauthorized = false;
     final user = await UserSession.load();
     if (user == null) return;
     try {
-      await http.put(
+      final res = await http.put(
         Uri.parse('$baseUrl/messages/conversation/$otherUserId/read'),
         headers: {
           'x-api-key': apiKey,
           'Authorization': 'Bearer ${user['token']}',
         },
       ).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 401) {
+        lastCallWasUnauthorized = true;
+      }
     } catch (_) {}
   }
 }
@@ -1531,6 +1554,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   Future<void> _load() async {
     final data = await MessageSession.getInbox();
+    if (MessageSession.lastCallWasUnauthorized) {
+      if (mounted) handleSessionExpired(context);
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _conversations = data;
@@ -1658,6 +1685,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _load() async {
     final msgs = await MessageSession.getConversation(widget.otherUserId);
+    if (MessageSession.lastCallWasUnauthorized) {
+      if (mounted) handleSessionExpired(context);
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _messages = msgs;
@@ -1688,6 +1719,10 @@ class _ChatScreenState extends State<ChatScreen> {
       shopId: widget.shopId,
       orderId: widget.orderId,
     );
+    if (MessageSession.lastCallWasUnauthorized) {
+      if (mounted) handleSessionExpired(context);
+      return;
+    }
     await _load();
   }
 
@@ -1810,6 +1845,10 @@ class _ChatBubbleState extends State<ChatBubble> {
     }
     final data = await MessageSession.getInbox();
     if (!mounted) return;
+    if (MessageSession.lastCallWasUnauthorized) {
+      handleSessionExpired(context);
+      return;
+    }
     int total = 0;
     for (final c in data) {
       total += ((c['unread_count'] ?? 0) as num).toInt();
