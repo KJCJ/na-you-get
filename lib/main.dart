@@ -71,6 +71,38 @@ void handleSessionExpired(BuildContext context) async {
   );
 }
 
+// Shows the right message for a failed authenticated call. Renders the
+// backend's own detail when it sends one, so guards such as "you have active
+// orders" actually reach the user instead of a generic failure.
+bool showApiError(
+  BuildContext context,
+  int statusCode,
+  String body, {
+  String fallback = 'Could not complete action.',
+}) {
+  if (statusCode == 401) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Session expired. Please sign out and back in.')),
+    );
+    return true;
+  }
+  if (statusCode >= 500) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Server error. Please try again.')),
+    );
+    return true;
+  }
+  String message = fallback;
+  try {
+    final data = jsonDecode(body);
+    final detail = data['detail'];
+    if (detail != null) message = detail.toString();
+  } catch (_) {}
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  return true;
+}
+
 // ==========================================
 // MAIN APP
 // ==========================================
@@ -2268,6 +2300,7 @@ class _RunnerDeliveriesScreenState extends State<RunnerDeliveriesScreen> {
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token'] ?? ''}',
         },
         body: jsonEncode({
           'status': 'delivered',
@@ -2282,9 +2315,8 @@ class _RunnerDeliveriesScreenState extends State<RunnerDeliveriesScreen> {
         );
         _load();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not complete delivery')),
-        );
+        showApiError(context, res.statusCode, res.body,
+            fallback: 'Could not complete delivery');
       }
     } catch (_) {
       if (!mounted) return;
@@ -3840,11 +3872,13 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                 if (shopNameController.text.isEmpty ||
                     ownerNameController.text.isEmpty) return;
 
+                final user = await UserSession.load();
                 final response = await http.post(
                   Uri.parse('$baseUrl/merchants/'),
                   headers: {
                     'Content-Type': 'application/json',
                     'x-api-key': apiKey,
+                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
                   },
                   body: jsonEncode({
                     'shop_name': shopNameController.text,
@@ -3866,11 +3900,8 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                   }
                 } else {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text(
-                              'Failed to create shop. Try a different name.')),
-                    );
+                    showApiError(context, response.statusCode, response.body,
+                        fallback: 'Failed to create shop. Try a different name.');
                   }
                 }
               },
@@ -4527,11 +4558,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 if (shopNameController.text.isEmpty ||
                     ownerNameController.text.isEmpty) return;
 
+                final user = await UserSession.load();
                 final response = await http.post(
                   Uri.parse('$baseUrl/merchants/'),
                   headers: {
                     'Content-Type': 'application/json',
                     'x-api-key': apiKey,
+                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
                   },
                   body: jsonEncode({
                     'shop_name': shopNameController.text,
@@ -4553,11 +4586,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   }
                 } else {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text(
-                              'Failed to create shop. Try a different name.')),
-                    );
+                    showApiError(context, response.statusCode, response.body,
+                        fallback: 'Failed to create shop. Try a different name.');
                   }
                 }
               },
@@ -5267,11 +5297,13 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
 
                 final price = double.tryParse(priceController.text) ?? 0.0;
 
+                final user = await UserSession.load();
                 final response = await http.post(
                   Uri.parse('$baseUrl/products/'),
                   headers: {
                     'Content-Type': 'application/json',
                     'x-api-key': apiKey,
+                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
                   },
                   body: jsonEncode({
                     'merchant_id': merchant['id'],
@@ -5291,9 +5323,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                       response.statusCode < 300) {
                     fetchShopProducts();
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Failed to add product.')),
-                    );
+                    showApiError(context, response.statusCode, response.body,
+                        fallback: 'Failed to add product.');
                   }
                 }
               },
@@ -5567,11 +5598,22 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
                                   final ok = await _ensureLoggedInAsRunner();
                                   if (!ok) return;
 
-                                  await http.put(
+                                  final session = await UserSession.load();
+                                  final res = await http.put(
                                     Uri.parse(
                                         '$baseUrl/deliveries/${job['id']}/accept/${widget.currentUser!['id']}'),
-                                    headers: {'x-api-key': apiKey},
+                                    headers: {
+                                      'x-api-key': apiKey,
+                                      'Authorization':
+                                          'Bearer ${session?['token'] ?? ''}',
+                                    },
                                   );
+                                  if (!mounted) return;
+                                  if (res.statusCode < 200 ||
+                                      res.statusCode >= 300) {
+                                    showApiError(context, res.statusCode, res.body,
+                                        fallback: 'Could not accept job.');
+                                  }
                                   fetchJobs();
                                 },
                                 child: const Text('Accept'),
