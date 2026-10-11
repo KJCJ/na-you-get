@@ -562,6 +562,50 @@ class UserSession {
       return 'Cannot reach server';
     }
   }
+
+  static Future<Map<String, dynamic>?> getOrderStatus(int orderId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return null;
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/orders/$orderId/status'),
+        headers: {
+          'x-api-key': apiKey,
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<String?> confirmOrderStep(int orderId, String step) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return 'Not signed in';
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/orders/$orderId/confirm/$step'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 401) return 'SESSION_EXPIRED';
+      if (res.statusCode >= 200 && res.statusCode < 300) return null;
+      try {
+        final data = jsonDecode(res.body);
+        return data['detail']?.toString() ?? 'Could not confirm';
+      } catch (_) {
+        return 'Could not confirm';
+      }
+    } catch (_) {
+      return 'Cannot reach server';
+    }
+  }
 }
 
 // ==========================================
@@ -2674,6 +2718,178 @@ class _RunnerDeliveriesScreenState extends State<RunnerDeliveriesScreen> {
 // ==========================================
 // MAIN NAVIGATION — 4 TABS
 // ==========================================
+class OrderDetailScreen extends StatefulWidget {
+  final int orderId;
+  final String? currentUserRole; // 'customer', 'seller', 'runner', or null
+  const OrderDetailScreen({super.key, required this.orderId, this.currentUserRole});
+
+  @override
+  State<OrderDetailScreen> createState() => _OrderDetailScreenState();
+}
+
+class _OrderDetailScreenState extends State<OrderDetailScreen> {
+  Map<String, dynamic>? _data;
+  bool _loading = true;
+  bool _confirming = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final d = await UserSession.getOrderStatus(widget.orderId);
+    if (!mounted) return;
+    setState(() {
+      _data = d;
+      _loading = false;
+    });
+  }
+
+  Future<void> _confirm(String step, String label) async {
+    setState(() => _confirming = true);
+    final err = await UserSession.confirmOrderStep(widget.orderId, step);
+    if (!mounted) return;
+    setState(() => _confirming = false);
+    if (err == 'SESSION_EXPIRED') {
+      handleSessionExpired(context);
+      return;
+    }
+    if (err == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$label confirmed')),
+      );
+      _load();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(err)),
+      );
+    }
+  }
+
+  Widget _stepRow(String title, String? time, {String? step, String? buttonLabel}) {
+    final done = time != null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(
+            done ? Icons.check_circle : Icons.radio_button_unchecked,
+            color: done ? Colors.green : Colors.grey,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                if (done)
+                  Text(
+                    _formatTime(time!),
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+              ],
+            ),
+          ),
+          if (!done && step != null && buttonLabel != null)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1B5E20),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              ),
+              onPressed: _confirming ? null : () => _confirm(step, buttonLabel),
+              child: Text(buttonLabel, style: const TextStyle(fontSize: 12)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTime(String iso) {
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      return '${dt.day}/${dt.month} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Order #${widget.orderId}'),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _data == null
+              ? const Center(child: Text('Could not load order'))
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Payment method: ${_data!['payment_method'] ?? '?'}'),
+                      Text('Payment status: ${_data!['payment_status'] ?? '?'}'),
+                      Text('Delivery status: ${_data!['delivery_status'] ?? '?'}'),
+                      const Divider(height: 32),
+                      const Text('Progress', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      _stepRow('Seller confirmed payment received', _data!['steps']?['seller_confirmed_payment'],
+                        step: widget.currentUserRole == 'seller' ? 'seller-payment' : null,
+                        buttonLabel: 'Confirm'),
+                      _stepRow('Seller handed goods to runner', _data!['steps']?['seller_handed_goods'],
+                        step: widget.currentUserRole == 'seller' ? 'seller-handed' : null,
+                        buttonLabel: 'Confirm'),
+                      _stepRow('Runner picked up', _data!['steps']?['runner_picked_up'],
+                        step: widget.currentUserRole == 'runner' ? 'runner-picked-up' : null,
+                        buttonLabel: 'Confirm'),
+                      _stepRow('Runner delivered', _data!['steps']?['runner_delivered'],
+                        step: widget.currentUserRole == 'runner' ? 'runner-delivered' : null,
+                        buttonLabel: 'Confirm'),
+                      _stepRow('Customer received goods', _data!['steps']?['customer_received'],
+                        step: widget.currentUserRole == 'customer' ? 'customer-received' : null,
+                        buttonLabel: 'Confirm'),
+                      _stepRow('Seller received money', _data!['steps']?['seller_received_money'],
+                        step: widget.currentUserRole == 'seller' ? 'seller-paid' : null,
+                        buttonLabel: 'Confirm'),
+                      const Divider(height: 32),
+                      const Text('Money breakdown', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      _moneyRow('Product price', _data!['product_price_sle']),
+                      _moneyRow('NYG commission (5%)', _data!['commission_sle']),
+                      _moneyRow('Seller receives', _data!['seller_payout_sle']),
+                      const Divider(height: 16),
+                      _moneyRow('Runner fee (80% delivery)', _data!['runner_fee_sle']),
+                      const Divider(height: 16),
+                      _moneyRow('NYG total on this order', _data!['nyg_total_sle'], bold: true),
+                    ],
+                  ),
+                ),
+    );
+  }
+
+  Widget _moneyRow(String label, dynamic value, {bool bold = false}) {
+    final v = (value is num) ? value.toStringAsFixed(2) : '0.00';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal))),
+          Text('SLE $v', style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+        ],
+      ),
+    );
+  }
+}
+
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
 
@@ -6325,115 +6541,127 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                     return Card(
                       margin: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 6),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    order['product_title'] ?? 'Order',
-                                    style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: _statusColor(
-                                            order['delivery_status'] ?? '')
-                                        .withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    (order['delivery_status'] ?? 'pending')
-                                        .toString()
-                                        .toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: _statusColor(
-                                          order['delivery_status'] ?? ''),
+                      child: InkWell(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => OrderDetailScreen(
+                              orderId: (order['id'] as num).toInt(),
+                              currentUserRole: 'customer',
+                            ),
+                          ),
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      order['product_title'] ?? 'Order',
+                                      style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Shop: ${order['shop_name'] ?? ''}',
-                              style: TextStyle(
-                                  fontSize: 13, color: Colors.grey.shade700),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Total: SLE ${(order['price_sle'] ?? 0) + (order['delivery_fee_sle'] ?? 0)}',
-                              style: const TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Delivery to: ${order['delivery_address'] ?? ''}',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade600),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(Icons.payment,
-                                    size: 12, color: Colors.grey.shade500),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${order['payment_method'] ?? ''} • ${order['payment_status'] ?? ''}',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade600),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  _formatDate(order['created_at']),
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade500),
-                                ),
-                              ],
-                            ),
-                            if (order['driver_id'] != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 10),
-                                child: Row(
-                                  children: [
-                                    OutlinedButton.icon(
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(0xFF1B5E20),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: _statusColor(
+                                              order['delivery_status'] ?? '')
+                                          .withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      (order['delivery_status'] ?? 'pending')
+                                          .toString()
+                                          .toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: _statusColor(
+                                            order['delivery_status'] ?? ''),
                                       ),
-                                      icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                                      label: const Text('Message Runner'),
-                                      onPressed: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => ChatScreen(
-                                            otherUserId: (order['driver_id'] as num).toInt(),
-                                            otherUserName: 'Runner',
-                                            orderId: order['id'],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Shop: ${order['shop_name'] ?? ''}',
+                                style: TextStyle(
+                                    fontSize: 13, color: Colors.grey.shade700),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Total: SLE ${(order['price_sle'] ?? 0) + (order['delivery_fee_sle'] ?? 0)}',
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Delivery to: ${order['delivery_address'] ?? ''}',
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey.shade600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(Icons.payment,
+                                      size: 12, color: Colors.grey.shade500),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${order['payment_method'] ?? ''} • ${order['payment_status'] ?? ''}',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade600),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    _formatDate(order['created_at']),
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade500),
+                                  ),
+                                ],
+                              ),
+                              if (order['driver_id'] != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: Row(
+                                    children: [
+                                      OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: const Color(0xFF1B5E20),
+                                        ),
+                                        icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                                        label: const Text('Message Runner'),
+                                        onPressed: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => ChatScreen(
+                                              otherUserId: (order['driver_id'] as num).toInt(),
+                                              otherUserName: 'Runner',
+                                              orderId: order['id'],
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                          ],
-                        ),
+                            ],
+                          ),
                       ),
+                        ),
                     );
                   },
                 ),
