@@ -287,6 +287,9 @@ class UserSession {
     if (user['is_runner'] != null) {
       await prefs.setBool(_isRunnerKey, user['is_runner'] == 1 || user['is_runner'] == true);
     }
+    if (user['is_admin'] != null) {
+      await prefs.setBool('user_is_admin', user['is_admin'] == 1 || user['is_admin'] == true);
+    }
     if (user['photo_url'] != null) {
       await prefs.setString(_photoKey, user['photo_url']);
     }
@@ -305,6 +308,7 @@ class UserSession {
       'role': prefs.getString(_roleKey) ?? 'customer',
       'is_seller': prefs.getBool(_isSellerKey) ?? false,
       'is_runner': prefs.getBool(_isRunnerKey) ?? false,
+      'is_admin': prefs.getBool('user_is_admin') ?? false,
       'photo_url': prefs.getString(_photoKey),
       'token': token,
     };
@@ -320,6 +324,7 @@ class UserSession {
     await prefs.remove(_photoKey);
     await prefs.remove(_isSellerKey);
     await prefs.remove(_isRunnerKey);
+    await prefs.remove('user_is_admin');
   }
 
   static Future<String?> becomeSeller() async {
@@ -462,12 +467,39 @@ class UserSession {
       if (user['is_runner'] != null) {
         await prefs.setBool(_isRunnerKey, user['is_runner'] == 1 || user['is_runner'] == true);
       }
+      if (user['is_admin'] != null) {
+        await prefs.setBool('user_is_admin', user['is_admin'] == 1 || user['is_admin'] == true);
+      }
       if (user['photo_url'] != null) {
         await prefs.setString('user_photo', user['photo_url']);
       }
       return true;
     }
     return false;
+  }
+
+  static Future<bool> isAdmin() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('user_is_admin') ?? false;
+  }
+
+  static Future<Map<String, dynamic>?> getAdminEarnings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return null;
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/admin/earnings'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
   }
 
   static Future<String?> changePassword(String currentPassword, String newPassword) async {
@@ -1251,6 +1283,19 @@ void showAccountSheet(
                   );
                 },
               ),
+              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
+                ListTile(
+                  leading: const Icon(Icons.attach_money, color: Color(0xFF1B5E20)),
+                  title: const Text('My Earnings'),
+                  subtitle: const Text('Admin only'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AdminEarningsScreen()),
+                    );
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.chat_bubble_outline),
                 title: const Text('Messages'),
@@ -2886,6 +2931,93 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           Text('SLE $v', style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
         ],
       ),
+    );
+  }
+}
+
+class AdminEarningsScreen extends StatefulWidget {
+  const AdminEarningsScreen({super.key});
+
+  @override
+  State<AdminEarningsScreen> createState() => _AdminEarningsScreenState();
+}
+
+class _AdminEarningsScreenState extends State<AdminEarningsScreen> {
+  Map<String, dynamic>? _data;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final d = await UserSession.getAdminEarnings();
+    if (!mounted) return;
+    setState(() {
+      _data = d;
+      _loading = false;
+    });
+  }
+
+  Widget _row(String label, dynamic value, {bool bold = false}) {
+    final v = (value is num) ? value.toStringAsFixed(2) : '0.00';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: 15))),
+          Text('SLE $v', style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: 15)),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Earnings'),
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _data == null
+              ? const Center(child: Text('Could not load earnings'))
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Totals', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      _row('Commission earned (5%)', _data!['total_commission_earned']),
+                      _row('Delivery cut earned (20%)', _data!['total_delivery_cut_earned']),
+                      const Divider(height: 24),
+                      _row('Settled', _data!['total_settled']),
+                      _row('Still owed to you', _data!['total_still_owed'], bold: true),
+                      const SizedBox(height: 24),
+                      const Text('Unsettled orders', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      if ((_data!['unsettled_orders'] as List?)?.isEmpty ?? true)
+                        const Text('Nothing outstanding. All settled.')
+                      else
+                        ...(_data!['unsettled_orders'] as List).map((o) {
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            child: ListTile(
+                              title: Text('Order #${o['order_id']}'),
+                              subtitle: Text('Merchant ID ${o['merchant_id']}'),
+                              trailing: Text('SLE ${(o['amount_owed'] as num).toStringAsFixed(2)}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B5E20))),
+                            ),
+                          );
+                        }).toList(),
+                    ],
+                  ),
+                ),
     );
   }
 }
