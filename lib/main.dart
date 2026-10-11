@@ -3953,6 +3953,8 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
 
   Widget _buildTopCard() {
     final hasShop = myShop != null;
+    final seller = isSeller(widget.currentUser);
+    final needsSeller = !seller;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
@@ -3979,15 +3981,19 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.store,
+              Icon(
+                hasShop
+                    ? Icons.store
+                    : (needsSeller ? Icons.person_add : Icons.store),
                 color: Colors.white,
                 size: 28,
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  hasShop ? myShop!['shop_name'] : 'Sell on Na You Get',
+                  hasShop
+                      ? myShop!['shop_name']
+                      : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -4002,7 +4008,9 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
           Text(
             hasShop
                 ? 'Owner: ${myShop!['owner_name']} • ${myShop!['city']}'
-                : 'Create your shop to start selling.',
+                : (needsSeller
+                    ? 'Turn on selling to create your shop.'
+                    : 'Create your shop to start selling.'),
             style: const TextStyle(color: Colors.white70, fontSize: 14),
           ),
           const SizedBox(height: 12),
@@ -4016,14 +4024,36 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                     : const Color(0xFF0D47A1),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              icon: Icon(hasShop ? Icons.open_in_new : Icons.store),
+              icon: Icon(hasShop
+                  ? Icons.open_in_new
+                  : (needsSeller ? Icons.storefront : Icons.store)),
               label: Text(
-                hasShop ? 'Open My Shop' : 'Create My Shop',
+                hasShop
+                    ? 'Open My Shop'
+                    : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              onPressed: () {
+              onPressed: () async {
                 if (hasShop) {
                   _openShopProfilePage(myShop!);
+                } else if (needsSeller) {
+                  final err = await UserSession.becomeSeller();
+                  if (!mounted) return;
+                  if (err == 'SESSION_EXPIRED') {
+                    handleSessionExpired(context);
+                    return;
+                  }
+                  if (err == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('You can now sell on NYG')),
+                    );
+                    widget.onUserChanged();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(err)),
+                    );
+                  }
                 } else {
                   _showCreateShopDialog();
                 }
@@ -4776,6 +4806,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     final hasShop = myShop != null;
     final user = widget.currentUser;
     final userName = user?['name'] ?? 'there';
+    final seller = isSeller(user);
+    final needsSeller = !seller;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
@@ -4803,14 +4835,18 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           Row(
             children: [
               Icon(
-                hasShop ? Icons.storefront : Icons.add_business,
+                hasShop
+                    ? Icons.storefront
+                    : (needsSeller ? Icons.person_add : Icons.add_business),
                 color: Colors.white,
                 size: 28,
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  hasShop ? myShop!['shop_name'] : 'Sell on Na You Get',
+                  hasShop
+                      ? myShop!['shop_name']
+                      : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -4825,7 +4861,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           Text(
             hasShop
                 ? 'Owner: ${myShop!['owner_name']} • ${myShop!['city']}'
-                : 'Hi $userName! Create your shop to start selling.',
+                : (needsSeller
+                    ? 'Turn on selling to create your shop.'
+                    : 'Hi $userName! Create your shop to start selling.'),
             style: const TextStyle(color: Colors.white70, fontSize: 14),
           ),
           const SizedBox(height: 12),
@@ -4839,14 +4877,36 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     : const Color(0xFF0D47A1),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              icon: Icon(hasShop ? Icons.open_in_new : Icons.store),
+              icon: Icon(hasShop
+                  ? Icons.open_in_new
+                  : (needsSeller ? Icons.storefront : Icons.store)),
               label: Text(
-                hasShop ? 'Upload Your Goods Items You Are Selling' : 'Create My Shop',
+                hasShop
+                    ? 'Upload Your Goods Items You Are Selling'
+                    : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              onPressed: () {
+              onPressed: () async {
                 if (hasShop) {
                   _openShopProfilePage(myShop!);
+                } else if (needsSeller) {
+                  final err = await UserSession.becomeSeller();
+                  if (!mounted) return;
+                  if (err == 'SESSION_EXPIRED') {
+                    handleSessionExpired(context);
+                    return;
+                  }
+                  if (err == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('You can now sell on NYG')),
+                    );
+                    widget.onUserChanged();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(err)),
+                    );
+                  }
                 } else {
                   _showCreateShopDialog();
                 }
