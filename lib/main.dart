@@ -483,6 +483,134 @@ class UserSession {
     return prefs.getBool('user_is_admin') ?? false;
   }
 
+  static Future<List<dynamic>> getMyInvoices() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return [];
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/invoices/mine'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) return jsonDecode(res.body) as List;
+    } catch (_) {}
+    return [];
+  }
+
+  static Future<List<dynamic>> getAllInvoices() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return [];
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/admin/invoices'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) return jsonDecode(res.body) as List;
+    } catch (_) {}
+    return [];
+  }
+
+  static Future<Map<String, dynamic>?> getInvoiceDetail(int invoiceId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return null;
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/invoices/$invoiceId'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) return jsonDecode(res.body) as Map<String, dynamic>;
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<String?> generateInvoice(String sellerPhone) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return 'Not signed in';
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/admin/invoices/generate'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'seller_phone': sellerPhone}),
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 401) return 'SESSION_EXPIRED';
+      if (res.statusCode >= 200 && res.statusCode < 300) return null;
+      try {
+        final data = jsonDecode(res.body);
+        return data['detail']?.toString() ?? 'Could not generate invoice';
+      } catch (_) {
+        return 'Could not generate invoice';
+      }
+    } catch (_) {
+      return 'Cannot reach server';
+    }
+  }
+
+  static Future<String?> markInvoiceSellerPaid(int invoiceId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return 'Not signed in';
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/invoices/$invoiceId/seller-paid'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 401) return 'SESSION_EXPIRED';
+      if (res.statusCode >= 200 && res.statusCode < 300) return null;
+      try {
+        final data = jsonDecode(res.body);
+        return data['detail']?.toString() ?? 'Could not confirm';
+      } catch (_) {
+        return 'Could not confirm';
+      }
+    } catch (_) {
+      return 'Cannot reach server';
+    }
+  }
+
+  static Future<String?> markInvoiceNygReceived(int invoiceId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return 'Not signed in';
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/invoices/$invoiceId/nyg-received'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 401) return 'SESSION_EXPIRED';
+      if (res.statusCode >= 200 && res.statusCode < 300) return null;
+      try {
+        final data = jsonDecode(res.body);
+        return data['detail']?.toString() ?? 'Could not confirm';
+      } catch (_) {
+        return 'Could not confirm';
+      }
+    } catch (_) {
+      return 'Cannot reach server';
+    }
+  }
+
   static Future<Map<String, dynamic>?> getAdminEarnings() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('user_token');
@@ -1296,6 +1424,30 @@ void showAccountSheet(
                     );
                   },
                 ),
+              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
+                ListTile(
+                  leading: const Icon(Icons.receipt, color: Color(0xFF1B5E20)),
+                  title: const Text('All Invoices'),
+                  subtitle: const Text('Admin - generate and confirm'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: true)),
+                    );
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: const Text('My Invoices'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: false)),
+                  );
+                },
+              ),
               ListTile(
                 leading: const Icon(Icons.chat_bubble_outline),
                 title: const Text('Messages'),
@@ -3018,6 +3170,274 @@ class _AdminEarningsScreenState extends State<AdminEarningsScreen> {
                     ],
                   ),
                 ),
+    );
+  }
+}
+
+class InvoiceDetailScreen extends StatefulWidget {
+  final int invoiceId;
+  final bool isAdmin;
+  const InvoiceDetailScreen({super.key, required this.invoiceId, required this.isAdmin});
+
+  @override
+  State<InvoiceDetailScreen> createState() => _InvoiceDetailScreenState();
+}
+
+class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
+  Map<String, dynamic>? _data;
+  bool _loading = true;
+  bool _working = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final d = await UserSession.getInvoiceDetail(widget.invoiceId);
+    if (!mounted) return;
+    setState(() {
+      _data = d;
+      _loading = false;
+    });
+  }
+
+  String _fmt(String? iso) {
+    if (iso == null) return '?';
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  Future<void> _sellerMarkPaid() async {
+    setState(() => _working = true);
+    final err = await UserSession.markInvoiceSellerPaid(widget.invoiceId);
+    if (!mounted) return;
+    setState(() => _working = false);
+    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
+    if (err == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marked as paid')));
+      _load();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+    }
+  }
+
+  Future<void> _nygReceived() async {
+    setState(() => _working = true);
+    final err = await UserSession.markInvoiceNygReceived(widget.invoiceId);
+    if (!mounted) return;
+    setState(() => _working = false);
+    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
+    if (err == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Receipt confirmed')));
+      _load();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_data?['reference'] ?? 'Invoice'),
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _data == null
+              ? const Center(child: Text('Could not load invoice'))
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Seller: ${_data!['seller_name'] ?? '?'}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text('Phone: ${_data!['seller_phone'] ?? '?'}'),
+                      Text('Status: ${_data!['status'] ?? '?'}'),
+                      const SizedBox(height: 8),
+                      Text('Total: SLE ${(_data!['total_sle'] as num).toStringAsFixed(2)}',
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20))),
+                      const Divider(height: 32),
+                      const Text('Orders covered', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      ...(_data!['orders'] as List).map((o) {
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: ListTile(
+                            title: Text('#${o['order_id']} - ${o['product_title']}'),
+                            subtitle: Text('Commission SLE ${(o['commission_sle'] as num).toStringAsFixed(2)} | Delivery SLE ${(o['delivery_cut_sle'] as num).toStringAsFixed(2)}'),
+                            trailing: Text('SLE ${(o['total_sle'] as num).toStringAsFixed(2)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        );
+                      }).toList(),
+                      const Divider(height: 32),
+                      Text('Seller marked paid: ${_fmt(_data!['seller_paid_at'])}'),
+                      Text('NYG confirmed receipt: ${_fmt(_data!['nyg_received_at'])}'),
+                      const SizedBox(height: 24),
+                      if (!widget.isAdmin && _data!['seller_paid_at'] == null)
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1B5E20),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            onPressed: _working ? null : _sellerMarkPaid,
+                            child: const Text("I've paid this invoice"),
+                          ),
+                        ),
+                      if (widget.isAdmin && _data!['seller_paid_at'] != null && _data!['nyg_received_at'] == null)
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1B5E20),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            onPressed: _working ? null : _nygReceived,
+                            child: const Text('Confirm receipt'),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+    );
+  }
+}
+
+class InvoicesScreen extends StatefulWidget {
+  final bool isAdmin;
+  const InvoicesScreen({super.key, required this.isAdmin});
+
+  @override
+  State<InvoicesScreen> createState() => _InvoicesScreenState();
+}
+
+class _InvoicesScreenState extends State<InvoicesScreen> {
+  List<dynamic> _invoices = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final data = widget.isAdmin
+        ? await UserSession.getAllInvoices()
+        : await UserSession.getMyInvoices();
+    if (!mounted) return;
+    setState(() {
+      _invoices = data;
+      _loading = false;
+    });
+  }
+
+  Future<void> _showGenerateDialog() async {
+    final phoneController = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Generate Invoice'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter the seller phone number. The invoice will include all their unsettled orders.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Seller Phone',
+                hintText: '+23278839002',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B5E20),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, normalisePhone(phoneController.text)),
+            child: const Text('Generate'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || result.isEmpty) return;
+    final err = await UserSession.generateInvoice(result);
+    if (!mounted) return;
+    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
+    if (err == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invoice generated')));
+      _load();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.isAdmin ? 'All Invoices' : 'My Invoices'),
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _invoices.isEmpty
+              ? const Center(child: Text('No invoices yet.'))
+              : ListView.builder(
+                  itemCount: _invoices.length,
+                  itemBuilder: (ctx, i) {
+                    final inv = _invoices[i];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      child: ListTile(
+                        title: Text(inv['reference'] ?? 'Invoice'),
+                        subtitle: Text(widget.isAdmin
+                            ? '${inv['seller_name'] ?? ''} | ${inv['status'] ?? ''}'
+                            : '${inv['status'] ?? ''}'),
+                        trailing: Text('SLE ${(inv['total_sle'] as num).toStringAsFixed(2)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => InvoiceDetailScreen(
+                              invoiceId: (inv['id'] as num).toInt(),
+                              isAdmin: widget.isAdmin,
+                            ),
+                          ),
+                        ).then((_) => _load()),
+                      ),
+                    );
+                  },
+                ),
+      floatingActionButton: widget.isAdmin
+          ? FloatingActionButton.extended(
+              backgroundColor: const Color(0xFF1B5E20),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('Generate Invoice'),
+              onPressed: _showGenerateDialog,
+            )
+          : null,
     );
   }
 }
