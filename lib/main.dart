@@ -742,6 +742,63 @@ class UserSession {
     return null;
   }
 
+  static Future<Map<String, dynamic>?> getFullOrderStatus(int orderId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return null;
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/orders/$orderId/full-status'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Three steps in the 10-step UI have no /flow/ route on the backend and
+  // are served only by /confirm/*. Both write the same order columns that
+  // /full-status reads, so those three are routed through /confirm/.
+  static const Map<String, String> _flowFallbackToConfirm = {
+    'seller-handed': 'seller-handed',
+    'runner-picked-up': 'runner-picked-up',
+    'runner-delivered': 'runner-delivered',
+  };
+
+  static Future<String?> confirmFlowStep(int orderId, String step) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
+    if (token == null) return 'Not signed in';
+    final fallback = _flowFallbackToConfirm[step];
+    final path = fallback != null
+        ? '$baseUrl/orders/$orderId/confirm/$fallback'
+        : '$baseUrl/orders/$orderId/flow/$step';
+    try {
+      final res = await http.put(
+        Uri.parse(path),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 401) return 'SESSION_EXPIRED';
+      if (res.statusCode >= 200 && res.statusCode < 300) return null;
+      try {
+        final data = jsonDecode(res.body);
+        return data['detail']?.toString() ?? 'Could not confirm';
+      } catch (_) {
+        return 'Could not confirm';
+      }
+    } catch (_) {
+      return 'Cannot reach server';
+    }
+  }
+
   static Future<String?> confirmOrderStep(int orderId, String step) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('user_token');
@@ -2927,7 +2984,7 @@ class OrderDetailScreen extends StatefulWidget {
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
   Map<String, dynamic>? _data;
   bool _loading = true;
-  bool _confirming = false;
+  bool _working = false;
 
   @override
   void initState() {
@@ -2937,7 +2994,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final d = await UserSession.getOrderStatus(widget.orderId);
+    final d = await UserSession.getFullOrderStatus(widget.orderId);
     if (!mounted) return;
     setState(() {
       _data = d;
@@ -2945,28 +3002,33 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     });
   }
 
-  Future<void> _confirm(String step, String label) async {
-    setState(() => _confirming = true);
-    final err = await UserSession.confirmOrderStep(widget.orderId, step);
+  Future<void> _confirmFlow(String step, String label) async {
+    setState(() => _working = true);
+    final err = await UserSession.confirmFlowStep(widget.orderId, step);
     if (!mounted) return;
-    setState(() => _confirming = false);
-    if (err == 'SESSION_EXPIRED') {
-      handleSessionExpired(context);
-      return;
-    }
+    setState(() => _working = false);
+    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
     if (err == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$label confirmed')),
       );
       _load();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(err)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
     }
   }
 
-  Widget _stepRow(String title, String? time, {String? step, String? buttonLabel}) {
+  String _fmt(String? iso) {
+    if (iso == null) return '?';
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  Widget _stepRow(String title, String? time, {String? step, String? buttonLabel, bool enabled = true}) {
     final done = time != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -2984,92 +3046,22 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               children: [
                 Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
                 if (done)
-                  Text(
-                    _formatTime(time!),
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  ),
+                  Text(_fmt(time), style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               ],
             ),
           ),
-          if (!done && step != null && buttonLabel != null)
+          if (!done && step != null && buttonLabel != null && enabled)
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1B5E20),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               ),
-              onPressed: _confirming ? null : () => _confirm(step, buttonLabel),
+              onPressed: _working ? null : () => _confirmFlow(step, buttonLabel),
               child: Text(buttonLabel, style: const TextStyle(fontSize: 12)),
             ),
         ],
       ),
-    );
-  }
-
-  String _formatTime(String iso) {
-    try {
-      final dt = DateTime.parse(iso).toLocal();
-      return '${dt.day}/${dt.month} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return iso;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Order #${widget.orderId}'),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _data == null
-              ? const Center(child: Text('Could not load order'))
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Payment method: ${_data!['payment_method'] ?? '?'}'),
-                      Text('Payment status: ${_data!['payment_status'] ?? '?'}'),
-                      Text('Delivery status: ${_data!['delivery_status'] ?? '?'}'),
-                      const Divider(height: 32),
-                      const Text('Progress', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      _stepRow('Seller confirmed payment received', _data!['steps']?['seller_confirmed_payment'],
-                        step: widget.currentUserRole == 'seller' ? 'seller-payment' : null,
-                        buttonLabel: 'Confirm'),
-                      _stepRow('Seller handed goods to runner', _data!['steps']?['seller_handed_goods'],
-                        step: widget.currentUserRole == 'seller' ? 'seller-handed' : null,
-                        buttonLabel: 'Confirm'),
-                      _stepRow('Runner picked up', _data!['steps']?['runner_picked_up'],
-                        step: widget.currentUserRole == 'runner' ? 'runner-picked-up' : null,
-                        buttonLabel: 'Confirm'),
-                      _stepRow('Runner delivered', _data!['steps']?['runner_delivered'],
-                        step: widget.currentUserRole == 'runner' ? 'runner-delivered' : null,
-                        buttonLabel: 'Confirm'),
-                      _stepRow('Customer received goods', _data!['steps']?['customer_received'],
-                        step: widget.currentUserRole == 'customer' ? 'customer-received' : null,
-                        buttonLabel: 'Confirm'),
-                      _stepRow('Seller received money', _data!['steps']?['seller_received_money'],
-                        step: widget.currentUserRole == 'seller' ? 'seller-paid' : null,
-                        buttonLabel: 'Confirm'),
-                      const Divider(height: 32),
-                      const Text('Money breakdown', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      _moneyRow('Product price', _data!['product_price_sle']),
-                      _moneyRow('NYG commission (5%)', _data!['commission_sle']),
-                      _moneyRow('Seller receives', _data!['seller_payout_sle']),
-                      const Divider(height: 16),
-                      _moneyRow('Runner fee (80% delivery)', _data!['runner_fee_sle']),
-                      const Divider(height: 16),
-                      _moneyRow('NYG total on this order', _data!['nyg_total_sle'], bold: true),
-                    ],
-                  ),
-                ),
     );
   }
 
@@ -3082,6 +3074,74 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           Expanded(child: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal))),
           Text('SLE $v', style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
         ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_data == null) return const Scaffold(body: Center(child: Text('Could not load order')));
+
+    final s = (_data!['steps'] as Map<String, dynamic>?) ?? {};
+    final role = widget.currentUserRole;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Order #${widget.orderId}'),
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Payment method: ${_data!['payment_method'] ?? '?'}'),
+            Text('Payment status: ${_data!['payment_status'] ?? '?'}'),
+            Text('Delivery status: ${_data!['delivery_status'] ?? '?'}'),
+            const Divider(height: 32),
+            const Text('Progress', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            _stepRow('Buyer paid', s['buyer_paid'] as String?,
+              step: role == 'customer' ? 'buyer-paid' : null, buttonLabel: "I've paid"),
+            _stepRow('Seller received payment', s['seller_received'] as String?,
+              step: role == 'seller' ? 'seller-received' : null, buttonLabel: "I've received",
+              enabled: s['buyer_paid'] != null),
+            _stepRow('Seller paid runner fee', s['seller_paid_runner'] as String?,
+              step: role == 'seller' ? 'seller-paid-runner' : null, buttonLabel: "I've paid runner",
+              enabled: s['seller_received'] != null),
+            _stepRow('Runner received fee', s['runner_received_fee'] as String?,
+              step: role == 'runner' ? 'runner-received-fee' : null, buttonLabel: "I've received",
+              enabled: s['seller_paid_runner'] != null),
+            _stepRow('Seller handed goods to runner', s['seller_handed_goods'] as String?,
+              step: role == 'seller' ? 'seller-handed' : null, buttonLabel: "I've handed goods",
+              enabled: s['runner_received_fee'] != null),
+            _stepRow('Runner picked up', s['runner_picked_up'] as String?,
+              step: role == 'runner' ? 'runner-picked-up' : null, buttonLabel: "I've picked up",
+              enabled: s['seller_handed_goods'] != null),
+            _stepRow('Runner delivered', s['runner_delivered'] as String?,
+              step: role == 'runner' ? 'runner-delivered' : null, buttonLabel: "I've delivered",
+              enabled: s['runner_picked_up'] != null),
+            _stepRow('Buyer received goods', s['buyer_received_goods'] as String?,
+              step: role == 'customer' ? 'buyer-received-goods' : null, buttonLabel: "I've received",
+              enabled: s['runner_delivered'] != null),
+            _stepRow('Seller paid NYG commission', s['seller_paid_nyg'] as String?,
+              step: role == 'seller' ? 'seller-paid-nyg' : null, buttonLabel: "I've paid NYG",
+              enabled: s['buyer_received_goods'] != null),
+            _stepRow('NYG confirmed commission', s['nyg_received'] as String?,
+              step: null, buttonLabel: null),
+            const Divider(height: 32),
+            const Text('Money breakdown', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            _moneyRow('Product price', _data!['product_price_sle']),
+            _moneyRow('NYG commission (5%)', _data!['commission_sle']),
+            _moneyRow('Seller receives', _data!['seller_payout_sle']),
+            const Divider(height: 16),
+            _moneyRow('Runner fee (80% delivery)', _data!['runner_fee_sle']),
+            const Divider(height: 16),
+            _moneyRow('NYG total on this order', _data!['nyg_total_sle'], bold: true),
+          ],
+        ),
       ),
     );
   }
