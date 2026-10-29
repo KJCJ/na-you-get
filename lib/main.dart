@@ -3502,6 +3502,87 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 }
 
+class ProfileScreen extends StatelessWidget {
+  final Map<String, dynamic>? currentUser;
+  final VoidCallback onUserChanged;
+  final bool runnerMode;
+  final VoidCallback onToggleRunnerMode;
+
+  const ProfileScreen({
+    super.key,
+    required this.currentUser,
+    required this.onUserChanged,
+    required this.runnerMode,
+    required this.onToggleRunnerMode,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final name = currentUser?['name']?.toString() ?? 'Not signed in';
+    final phone = currentUser?['phone_number']?.toString() ?? '-';
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Profile')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Center(
+            child: CircleAvatar(
+              radius: 40,
+              backgroundColor: const Color(0xFF1B5E20),
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: const TextStyle(fontSize: 30, color: Colors.white),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: Text(name,
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(phone, style: TextStyle(color: Colors.grey.shade700)),
+          ),
+          const SizedBox(height: 28),
+          if (currentUser != null)
+            ElevatedButton.icon(
+              icon: const Icon(Icons.edit),
+              label: const Text('Edit Profile'),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EditProfileScreen(
+                      currentUser: currentUser!,
+                      onUserChanged: onUserChanged,
+                    ),
+                  ),
+                );
+              },
+            ),
+          const SizedBox(height: 12),
+          // Only runners get the toggle. The `|| runnerMode` guard means a
+          // user can always get back out if their runner status is revoked
+          // while the app is still in runner mode.
+          if (isRunner(currentUser) || runnerMode)
+            OutlinedButton.icon(
+              icon: Icon(runnerMode
+                  ? Icons.shopping_bag_outlined
+                  : Icons.directions_run),
+              label: Text(runnerMode
+                  ? 'Switch to Shopping Mode'
+                  : 'Switch to Runner Mode'),
+              onPressed: onToggleRunnerMode,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
 
@@ -3603,20 +3684,46 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   void _refreshUser() => _loadUser();
 
+  bool _runnerMode = false;
+
+  void _toggleRunnerMode() {
+    setState(() {
+      _runnerMode = !_runnerMode;
+      _currentIndex = 0;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loadingUser) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final screens = [
-      MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
-      ShopsBrowseScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
-      MarketplaceLocationsScreen(
-          currentUser: _currentUser, onUserChanged: _refreshUser),
-      RunnerDashboardScreen(
-          currentUser: _currentUser, onUserChanged: _refreshUser),
-    ];
+    final screens = _runnerMode
+        ? [
+            RunnerDashboardScreen(
+                currentUser: _currentUser, onUserChanged: _refreshUser),
+            ProfileScreen(
+              currentUser: _currentUser,
+              onUserChanged: _refreshUser,
+              runnerMode: _runnerMode,
+              onToggleRunnerMode: _toggleRunnerMode,
+            ),
+          ]
+        : [
+            MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
+            ShopsBrowseScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
+            MarketplaceLocationsScreen(
+                currentUser: _currentUser, onUserChanged: _refreshUser),
+            RunnerDashboardScreen(
+                currentUser: _currentUser, onUserChanged: _refreshUser),
+            ProfileScreen(
+              currentUser: _currentUser,
+              onUserChanged: _refreshUser,
+              runnerMode: _runnerMode,
+              onToggleRunnerMode: _toggleRunnerMode,
+            ),
+          ];
 
     return Stack(
       children: [
@@ -3625,15 +3732,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.shopping_bag_outlined), label: 'Shopping'),
-          NavigationDestination(icon: Icon(Icons.store), label: 'Shops'),
-          NavigationDestination(
-              icon: Icon(Icons.location_on_outlined), label: 'Marketplace'),
-          NavigationDestination(
-              icon: Icon(Icons.directions_run), label: 'Runner'),
-        ],
+        destinations: _runnerMode
+            ? const [
+                NavigationDestination(
+                    icon: Icon(Icons.delivery_dining), label: 'My Deliveries'),
+                NavigationDestination(
+                    icon: Icon(Icons.person_outline), label: 'Profile'),
+              ]
+            : const [
+                NavigationDestination(
+                    icon: Icon(Icons.shopping_bag_outlined), label: 'Shopping'),
+                NavigationDestination(icon: Icon(Icons.store), label: 'Shops'),
+                NavigationDestination(
+                    icon: Icon(Icons.location_on_outlined), label: 'Marketplace'),
+                NavigationDestination(
+                    icon: Icon(Icons.directions_run), label: 'Runner'),
+                NavigationDestination(
+                    icon: Icon(Icons.person_outline), label: 'Profile'),
+              ],
       ),
         ),
         Positioned(
