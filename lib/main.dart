@@ -5571,6 +5571,130 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
 // ==========================================
 // PRODUCT DETAIL SCREEN
 // ==========================================
+class _ShopBanner extends StatefulWidget {
+  final Map<String, dynamic> product;
+  const _ShopBanner({required this.product});
+
+  @override
+  State<_ShopBanner> createState() => _ShopBannerState();
+}
+
+class _ShopBannerState extends State<_ShopBanner> {
+  Map<String, dynamic>? _merchant;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final id = widget.product['merchant_id'];
+    if (id == null) return;
+    setState(() => _loading = true);
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/merchants/$id'),
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body);
+        if (mounted) {
+          setState(() => _merchant =
+              Map<String, dynamic>.from(data['merchant'] ?? data));
+        }
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _openShop() async {
+    if (widget.product['merchant_id'] == null) return;
+    if (_merchant == null) {
+      await _load();
+      if (!mounted || _merchant == null) return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShopProfileScreen(merchant: _merchant!),
+      ),
+    );
+    if (mounted) _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shopName =
+        (_merchant?['shop_name'] ?? widget.product['shop_name'] ?? 'Shop')
+            .toString();
+    final city =
+        (_merchant?['city'] ?? widget.product['shop_city'] ?? '').toString();
+    final logo = (_merchant?['logo_url'] ?? '').toString();
+
+    return InkWell(
+      onTap: _openShop,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F7F7),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: const Color(0xFF1B5E20),
+              backgroundImage: logo.isNotEmpty ? NetworkImage(logo) : null,
+              child: logo.isEmpty
+                  ? Text(
+                      shopName.isNotEmpty ? shopName[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    shopName,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (city.isNotEmpty)
+                    Text(
+                      city,
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                ],
+              ),
+            ),
+            if (_loading)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              const Icon(Icons.chevron_right, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class ProductDetailScreen extends StatelessWidget {
   final Map<String, dynamic> product;
   final void Function(Map<String, dynamic> product) onBuy;
@@ -5693,18 +5817,7 @@ class ProductDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const Divider(height: 32),
-                  Row(
-                    children: [
-                      const Icon(Icons.store, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${product['shop_name'] ?? ''} • ${product['shop_city'] ?? ''}',
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ),
-                    ],
-                  ),
+                  _ShopBanner(product: product),
                   const SizedBox(height: 24),
                   const Text(
                     'Description',
@@ -6433,13 +6546,24 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
   List<dynamic> myProducts = [];
   bool isLoading = true;
   late Map<String, dynamic> merchant;
+  Map<String, dynamic>? _currentUser;
 
   @override
   void initState() {
     super.initState();
     merchant = Map<String, dynamic>.from(widget.merchant);
+    _loadCurrentUser();
     fetchShopProducts();
   }
+
+  Future<void> _loadCurrentUser() async {
+    final u = await UserSession.load();
+    if (mounted) setState(() => _currentUser = u);
+  }
+
+  bool get _isOwner =>
+      _currentUser != null &&
+      _currentUser!['phone_number'] == merchant['phone_number'];
 
   Future<void> fetchShopProducts() async {
     setState(() => isLoading = true);
@@ -6939,21 +7063,23 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
       appBar: AppBar(
         title: Text(merchant['shop_name'] ?? 'My Shop'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.receipt_long),
-            tooltip: 'Orders',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => MerchantOrdersScreen(merchant: merchant),
+          if (_isOwner)
+            IconButton(
+              icon: const Icon(Icons.receipt_long),
+              tooltip: 'Orders',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MerchantOrdersScreen(merchant: merchant),
+                ),
               ),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.edit),
-            tooltip: 'Edit shop info',
-            onPressed: _showEditShopDialog,
-          ),
+          if (_isOwner)
+            IconButton(
+              icon: const Icon(Icons.edit),
+              tooltip: 'Edit shop info',
+              onPressed: _showEditShopDialog,
+            ),
         ],
       ),
       body: Column(
@@ -7000,7 +7126,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                 Text('Owner: ${merchant['owner_name']}'),
                 Text('Location: ${merchant['city']}, Sierra Leone'),
                 Text('Category: ${merchant['category'] ?? 'Other'}'),
-                Text('Contact: ${merchant['phone_number']}'),
+                if (_isOwner)
+                  Text('Contact: ${merchant['phone_number']}'),
               ],
             ),
           ),
@@ -7014,11 +7141,12 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                   'My Inventory',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                ElevatedButton.icon(
-                  onPressed: _showAddItemDialog,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Product'),
-                ),
+                if (_isOwner)
+                  ElevatedButton.icon(
+                    onPressed: _showAddItemDialog,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Product'),
+                  ),
               ],
             ),
           ),
@@ -7026,9 +7154,13 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : myProducts.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
-                            'No items in your shop yet.\nTap "Add Product" to list your first item.'),
+                          _isOwner
+                              ? 'No items in your shop yet.\nTap "Add Product" to list your first item.'
+                              : 'No items listed yet.',
+                          textAlign: TextAlign.center,
+                        ),
                       )
                     : ListView.builder(
                         itemCount: myProducts.length,
@@ -7043,24 +7175,29 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                               title: Text(item['title']),
                               subtitle: Text(
                                   'Price: SLE ${item['price_sle']} • ${item['category'] ?? 'Other'}'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, color: Color(0xFF1B5E20)),
-                                    tooltip: 'Edit product',
-                                    onPressed: () => _showEditProductDialog(item),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red),
-                                    tooltip: 'Delete product',
-                                    onPressed: () => _deleteProduct(
-                                      item['id'],
-                                      item['title'] ?? 'this product',
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              trailing: _isOwner
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.edit,
+                                              color: Color(0xFF1B5E20)),
+                                          tooltip: 'Edit product',
+                                          onPressed: () =>
+                                              _showEditProductDialog(item),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete,
+                                              color: Colors.red),
+                                          tooltip: 'Delete product',
+                                          onPressed: () => _deleteProduct(
+                                            item['id'],
+                                            item['title'] ?? 'this product',
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : null,
                             ),
                           );
                         },
