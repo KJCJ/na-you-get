@@ -1455,6 +1455,23 @@ void showAccountSheet(
                     }
                   },
                 ),
+              if (user != null)
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: const Text('View Profile'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProfileScreen(
+                          currentUser: user,
+                          onUserChanged: onUserChanged,
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.receipt_long),
                 title: const Text('My Orders'),
@@ -3502,82 +3519,280 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 }
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic>? currentUser;
   final VoidCallback onUserChanged;
-  final bool runnerMode;
-  final VoidCallback onToggleRunnerMode;
 
   const ProfileScreen({
     super.key,
     required this.currentUser,
     required this.onUserChanged,
-    required this.runnerMode,
-    required this.onToggleRunnerMode,
   });
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  List<dynamic> _products = [];
+  List<dynamic> _deliveries = [];
+  bool _loading = true;
+
+  bool get _isSellerUser => isSeller(widget.currentUser);
+  bool get _isRunnerUser => isRunner(widget.currentUser);
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    await _loadProducts();
+    await _loadDeliveries();
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _loadProducts() async {
+    if (!_isSellerUser) return;
+    try {
+      final shop = await ShopSession.load();
+      if (shop == null) return;
+      final res = await http.get(
+        Uri.parse('$baseUrl/merchants/${shop['id']}/products/'),
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        _products = jsonDecode(res.body) as List;
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadDeliveries() async {
+    if (!_isRunnerUser) return;
+    final user = await UserSession.load();
+    if (user == null) return;
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/deliveries/mine/${user['id']}'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        _deliveries = jsonDecode(res.body) as List;
+      }
+    } catch (_) {}
+  }
+
+  int get _completed {
+    var n = 0;
+    for (final d in _deliveries) {
+      if (d['delivered_by_runner_at'] != null) n++;
+    }
+    return n;
+  }
+
+  String get _earned {
+    var total = 0.0;
+    for (final d in _deliveries) {
+      final v = d['runner_fee_sle'];
+      if (v is num) total += v.toDouble();
+    }
+    return total.toStringAsFixed(0);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final name = currentUser?['name']?.toString() ?? 'Not signed in';
-    final phone = currentUser?['phone_number']?.toString() ?? '-';
+    final user = widget.currentUser;
+    final name = user?['name']?.toString() ?? 'Guest';
+    final phone = user?['phone_number']?.toString() ?? '';
+    final photo = user?['photo_url']?.toString() ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Center(
-            child: CircleAvatar(
-              radius: 40,
-              backgroundColor: const Color(0xFF1B5E20),
-              child: Text(
-                name.isNotEmpty ? name[0].toUpperCase() : '?',
-                style: const TextStyle(fontSize: 30, color: Colors.white),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text('Profile'),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        elevation: 0,
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          children: [
+            const SizedBox(height: 8),
+            Center(
+              child: CircleAvatar(
+                radius: 48,
+                backgroundColor: const Color(0xFF1B5E20),
+                backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
+                child: photo.isEmpty
+                    ? Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: const TextStyle(
+                          fontSize: 36,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      )
+                    : null,
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Center(
-            child: Text(name,
+            const SizedBox(height: 16),
+            Center(
+              child: Text(
+                name,
                 style: const TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(height: 4),
-          Center(
-            child: Text(phone, style: TextStyle(color: Colors.grey.shade700)),
-          ),
-          const SizedBox(height: 28),
-          if (currentUser != null)
-            ElevatedButton.icon(
-              icon: const Icon(Icons.edit),
-              label: const Text('Edit Profile'),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => EditProfileScreen(
-                      currentUser: currentUser!,
-                      onUserChanged: onUserChanged,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            if (phone.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Center(
+                child: Text(
+                  phone,
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            if (user != null)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.black87,
+                    side: BorderSide(color: Colors.grey.shade300),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                );
-              },
-            ),
-          const SizedBox(height: 12),
-          // Only runners get the toggle. The `|| runnerMode` guard means a
-          // user can always get back out if their runner status is revoked
-          // while the app is still in runner mode.
-          if (isRunner(currentUser) || runnerMode)
-            OutlinedButton.icon(
-              icon: Icon(runnerMode
-                  ? Icons.shopping_bag_outlined
-                  : Icons.directions_run),
-              label: Text(runnerMode
-                  ? 'Switch to Shopping Mode'
-                  : 'Switch to Runner Mode'),
-              onPressed: onToggleRunnerMode,
-            ),
-        ],
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => EditProfileScreen(
+                          currentUser: user,
+                          onUserChanged: widget.onUserChanged,
+                        ),
+                      ),
+                    );
+                    widget.onUserChanged();
+                    _load();
+                  },
+                  child: const Text('Edit Profile'),
+                ),
+              ),
+            if (_isRunnerUser) ...[
+              const SizedBox(height: 32),
+              const Text('Delivery stats',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _statBox('${_deliveries.length}', 'Deliveries'),
+                  const SizedBox(width: 10),
+                  _statBox('$_completed', 'Completed'),
+                  const SizedBox(width: 10),
+                  _statBox('SLE $_earned', 'Earned'),
+                ],
+              ),
+            ],
+            if (_isSellerUser) ...[
+              const SizedBox(height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('My Products',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text('${_products.length}',
+                      style: TextStyle(color: Colors.grey.shade600)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (_loading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else if (_products.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text('No products listed yet',
+                        style: TextStyle(color: Colors.grey.shade600)),
+                  ),
+                )
+              else
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _products.length,
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 6,
+                    mainAxisSpacing: 6,
+                    childAspectRatio: 1,
+                  ),
+                  itemBuilder: (ctx, i) {
+                    final photos =
+                        productPhotos(_products[i] as Map<String, dynamic>);
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: photos.isEmpty
+                          ? Container(
+                              color: Colors.grey.shade200,
+                              child: Icon(Icons.image_outlined,
+                                  color: Colors.grey.shade400),
+                            )
+                          : Image.network(
+                              photos.first,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: Colors.grey.shade200,
+                                child: Icon(Icons.broken_image_outlined,
+                                    color: Colors.grey.shade400),
+                              ),
+                            ),
+                    );
+                  },
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statBox(String value, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF2F2F2),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 2),
+            Text(label,
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+          ],
+        ),
       ),
     );
   }
@@ -3684,46 +3899,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   void _refreshUser() => _loadUser();
 
-  bool _runnerMode = false;
-
-  void _toggleRunnerMode() {
-    setState(() {
-      _runnerMode = !_runnerMode;
-      _currentIndex = 0;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loadingUser) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final screens = _runnerMode
-        ? [
-            RunnerDashboardScreen(
-                currentUser: _currentUser, onUserChanged: _refreshUser),
-            ProfileScreen(
-              currentUser: _currentUser,
-              onUserChanged: _refreshUser,
-              runnerMode: _runnerMode,
-              onToggleRunnerMode: _toggleRunnerMode,
-            ),
-          ]
-        : [
-            MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
-            ShopsBrowseScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
-            MarketplaceLocationsScreen(
-                currentUser: _currentUser, onUserChanged: _refreshUser),
-            RunnerDashboardScreen(
-                currentUser: _currentUser, onUserChanged: _refreshUser),
-            ProfileScreen(
-              currentUser: _currentUser,
-              onUserChanged: _refreshUser,
-              runnerMode: _runnerMode,
-              onToggleRunnerMode: _toggleRunnerMode,
-            ),
-          ];
+    final screens = [
+      MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
+      ShopsBrowseScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
+      MarketplaceLocationsScreen(
+          currentUser: _currentUser, onUserChanged: _refreshUser),
+      RunnerDashboardScreen(
+          currentUser: _currentUser, onUserChanged: _refreshUser),
+    ];
 
     return Stack(
       children: [
@@ -3732,24 +3921,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
-        destinations: _runnerMode
-            ? const [
-                NavigationDestination(
-                    icon: Icon(Icons.delivery_dining), label: 'My Deliveries'),
-                NavigationDestination(
-                    icon: Icon(Icons.person_outline), label: 'Profile'),
-              ]
-            : const [
-                NavigationDestination(
-                    icon: Icon(Icons.shopping_bag_outlined), label: 'Shopping'),
-                NavigationDestination(icon: Icon(Icons.store), label: 'Shops'),
-                NavigationDestination(
-                    icon: Icon(Icons.location_on_outlined), label: 'Marketplace'),
-                NavigationDestination(
-                    icon: Icon(Icons.directions_run), label: 'Runner'),
-                NavigationDestination(
-                    icon: Icon(Icons.person_outline), label: 'Profile'),
-              ],
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.shopping_bag_outlined), label: 'Shopping'),
+          NavigationDestination(icon: Icon(Icons.store), label: 'Shops'),
+          NavigationDestination(
+              icon: Icon(Icons.location_on_outlined), label: 'Marketplace'),
+          NavigationDestination(
+              icon: Icon(Icons.directions_run), label: 'Runner'),
+        ],
       ),
         ),
         Positioned(
