@@ -1188,6 +1188,16 @@ bool isRunner(Map<String, dynamic>? u) {
   return v == true || v == 1 || v?.toString() == '1';
 }
 
+Color parseThemeColour(String? hex, {Color fallback = const Color(0xFFE8F5E9)}) {
+  if (hex == null) return fallback;
+  var h = hex.trim().replaceAll('#', '');
+  if (h.length == 6) h = 'FF$h';
+  if (h.length != 8) return fallback;
+  final v = int.tryParse(h, radix: 16);
+  if (v == null) return fallback;
+  return Color(v);
+}
+
 void showAccountSheet(
   BuildContext context,
   Map<String, dynamic>? currentUser,
@@ -4324,10 +4334,6 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
               currentUser: widget.currentUser,
               onUserChanged: widget.onUserChanged,
               ensureLoggedIn: _ensureLoggedIn),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _fetchShops,
-          ),
         ],
       ),
       body: _buildBody(),
@@ -5414,10 +5420,6 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                 _loadMyShop();
               },
               currentShop: myShop),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _fetchShops,
-          ),
         ],
       ),
       body: Column(
@@ -5482,19 +5484,39 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                         itemCount: filteredShops.length,
                         itemBuilder: (ctx, i) {
                           final shop = filteredShops[i];
-                          return Card(
+                          final bg = parseThemeColour(
+                              shop['theme_colour']?.toString());
+                          final isDark =
+                              ThemeData.estimateBrightnessForColor(bg) ==
+                                  Brightness.dark;
+                          final onBg = isDark ? Colors.white : Colors.black87;
+                          final sub = isDark ? Colors.white70 : Colors.black54;
+                          return Container(
                             margin: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 6),
+                                horizontal: 6, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: bg,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black12,
+                                  blurRadius: 10,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
                             child: InkWell(
                               onTap: () => _openShop(shop),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                               child: Padding(
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.all(16),
                                 child: Row(
                                   children: [
                                     CircleAvatar(
-                                      radius: 28,
-                                      backgroundColor: const Color(0xFF1B5E20),
+                                      radius: 32,
+                                      backgroundColor: isDark
+                                          ? Colors.white24
+                                          : const Color(0xFF1B5E20),
                                       backgroundImage: shop['logo_url'] != null &&
                                               shop['logo_url'].toString().isNotEmpty
                                           ? NetworkImage(shop['logo_url'])
@@ -5506,13 +5528,13 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                                               (shop['shop_name'] ?? '?')[0]
                                                   .toUpperCase(),
                                               style: const TextStyle(
-                                                fontSize: 24,
+                                                fontSize: 26,
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
                                     ),
-                                    const SizedBox(width: 14),
+                                    const SizedBox(width: 16),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -5520,9 +5542,10 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                                         children: [
                                           Text(
                                             shop['shop_name'] ?? 'Shop',
-                                            style: const TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold),
+                                            style: TextStyle(
+                                                fontSize: 17,
+                                                fontWeight: FontWeight.bold,
+                                                color: onBg),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -5530,30 +5553,27 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                                           Text(
                                             '${shop['city'] ?? ''} • ${shop['category'] ?? 'Other'}',
                                             style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.grey.shade600),
+                                                fontSize: 13, color: sub),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                           const SizedBox(height: 4),
                                           Row(
                                             children: [
                                               Icon(Icons.inventory_2,
-                                                  size: 14,
-                                                  color: Colors.grey.shade500),
+                                                  size: 14, color: sub),
                                               const SizedBox(width: 4),
                                               Text(
                                                 '${shop['product_count'] ?? 0} products',
                                                 style: TextStyle(
-                                                    fontSize: 12,
-                                                    color:
-                                                        Colors.grey.shade600),
+                                                    fontSize: 12, color: sub),
                                               ),
                                             ],
                                           ),
                                         ],
                                       ),
                                     ),
-                                    Icon(Icons.chevron_right,
-                                        color: Colors.grey.shade400),
+                                    Icon(Icons.chevron_right, color: sub),
                                   ],
                                 ),
                               ),
@@ -6417,10 +6437,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadEverything,
-          ),
           AccountButton(
               currentUser: widget.currentUser,
               onUserChanged: widget.onUserChanged,
@@ -6565,6 +6581,14 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
       _currentUser != null &&
       _currentUser!['phone_number'] == merchant['phone_number'];
 
+  Color get _headerColour =>
+      parseThemeColour(merchant['theme_colour']?.toString());
+
+  Color get _headerTextColour =>
+      ThemeData.estimateBrightnessForColor(_headerColour) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
+
   Future<void> fetchShopProducts() async {
     setState(() => isLoading = true);
     try {
@@ -6595,6 +6619,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
         TextEditingController(text: merchant['city'] ?? 'Freetown');
     String? currentLogo = merchant['logo_url'];
     String selectedCategory = merchant['category'] ?? 'Other';
+    final themeController =
+        TextEditingController(text: merchant['theme_colour'] ?? '');
 
     showDialog(
       context: context,
@@ -6667,6 +6693,24 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                     ),
                   ),
                 const SizedBox(height: 10),
+                TextField(
+                  controller: themeController,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Header Colour (hex)',
+                    hintText: '#1B5E20',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: parseThemeColour(themeController.text),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                ),
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
                   decoration: const InputDecoration(
@@ -6713,6 +6757,9 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                     'city': cityController.text,
                     'category': selectedCategory,
                     'logo_url': currentLogo,
+                    'theme_colour': themeController.text.trim().isEmpty
+                        ? null
+                        : themeController.text.trim(),
                   }),
                 );
 
@@ -7086,11 +7133,13 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(16),
-            color: Colors.green.shade50,
+            color: _headerColour,
             width: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            child: DefaultTextStyle.merge(
+              style: TextStyle(color: _headerTextColour),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 Row(
                   children: [
                     CircleAvatar(
@@ -7128,7 +7177,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                 Text('Category: ${merchant['category'] ?? 'Other'}'),
                 if (_isOwner)
                   Text('Contact: ${merchant['phone_number']}'),
-              ],
+                ],
+              ),
             ),
           ),
           const Divider(height: 1),
@@ -7298,7 +7348,6 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
               currentUser: widget.currentUser,
               onUserChanged: widget.onUserChanged,
               ensureLoggedIn: _ensureLoggedIn),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: fetchJobs),
         ],
       ),
       body: Column(
