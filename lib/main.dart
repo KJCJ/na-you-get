@@ -6589,6 +6589,15 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
           ? Colors.white
           : Colors.black87;
 
+  Color get _pageBackground => parseThemeColour(
+      merchant['background_colour']?.toString(),
+      fallback: Colors.white);
+
+  Color get _pageTextColour =>
+      ThemeData.estimateBrightnessForColor(_pageBackground) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
+
   Future<void> fetchShopProducts() async {
     setState(() => isLoading = true);
     try {
@@ -6621,6 +6630,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
     String selectedCategory = merchant['category'] ?? 'Other';
     final themeController =
         TextEditingController(text: merchant['theme_colour'] ?? '');
+    final bgController =
+        TextEditingController(text: merchant['background_colour'] ?? '');
 
     showDialog(
       context: context,
@@ -6711,6 +6722,26 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                     border: Border.all(color: Colors.grey.shade300),
                   ),
                 ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: bgController,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Background Colour (hex)',
+                    hintText: '#FFFFFF',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: parseThemeColour(bgController.text,
+                        fallback: Colors.white),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                ),
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
                   decoration: const InputDecoration(
@@ -6760,6 +6791,9 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                     'theme_colour': themeController.text.trim().isEmpty
                         ? null
                         : themeController.text.trim(),
+                    'background_colour': bgController.text.trim().isEmpty
+                        ? null
+                        : bgController.text.trim(),
                   }),
                 );
 
@@ -7107,7 +7141,12 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _pageBackground,
       appBar: AppBar(
+        backgroundColor: _pageBackground,
+        surfaceTintColor: _pageBackground,
+        foregroundColor: _pageTextColour,
+        elevation: 0,
         title: Text(merchant['shop_name'] ?? 'My Shop'),
         actions: [
           if (_isOwner)
@@ -7187,9 +7226,12 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'My Inventory',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: _pageTextColour),
                 ),
                 if (_isOwner)
                   ElevatedButton.icon(
