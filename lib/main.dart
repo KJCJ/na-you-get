@@ -836,6 +836,8 @@ class ShopSession {
   static const _cityKey = 'city';
   static const _categoryKey = 'category';
   static const _logoKey = 'logo_url';
+  static const _themeKey = 'theme_colour';
+  static const _bgKey = 'background_colour';
 
   static Future<void> save(Map<String, dynamic> merchant) async {
     final prefs = await SharedPreferences.getInstance();
@@ -847,6 +849,12 @@ class ShopSession {
     await prefs.setString(_categoryKey, merchant['category'] ?? 'Other');
     if (merchant['logo_url'] != null) {
       await prefs.setString(_logoKey, merchant['logo_url']);
+    }
+    if (merchant['theme_colour'] != null) {
+      await prefs.setString(_themeKey, merchant['theme_colour']);
+    }
+    if (merchant['background_colour'] != null) {
+      await prefs.setString(_bgKey, merchant['background_colour']);
     }
   }
 
@@ -862,6 +870,8 @@ class ShopSession {
       'city': prefs.getString(_cityKey) ?? 'Freetown',
       'category': prefs.getString(_categoryKey) ?? 'Other',
       'logo_url': prefs.getString(_logoKey),
+      'theme_colour': prefs.getString(_themeKey),
+      'background_colour': prefs.getString(_bgKey),
     };
   }
 
@@ -4390,11 +4400,25 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     _currentUser = widget.currentUser;
     if (_currentUser == null) _loadUser();
     _fetchProducts();
+    _refreshShop();
   }
 
   Future<void> _loadUser() async {
     final u = await UserSession.load();
     if (mounted) setState(() => _currentUser = u);
+  }
+
+  Future<void> _refreshShop() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/merchants/${shop['id']}'),
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body);
+        final fresh = Map<String, dynamic>.from(data['merchant'] ?? data);
+        if (mounted) setState(() => shop = fresh);
+      }
+    } catch (_) {}
   }
 
   Color get _headerColour =>
