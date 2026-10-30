@@ -1352,26 +1352,34 @@ void showAccountSheet(
                 ),
               ),
               const Divider(height: 24),
-              if (user != null)
+              if (user != null && (isSeller(currentUser) || isAdmin))
                 ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: const Text('My Profile'),
+                  leading: Icon(
+                      shop != null ? Icons.storefront : Icons.person_outline),
+                  title: const Text('My Storefront'),
+                  subtitle: shop != null ? Text(shop['shop_name'] ?? '') : null,
                   onTap: () {
                     Navigator.pop(ctx);
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ProfileScreen(
-                          currentUser: user,
-                          onUserChanged: onUserChanged,
-                        ),
+                        builder: (_) => shop != null
+                            ? ShopPageScreen(
+                                shop: shop,
+                                currentUser: currentUser,
+                                onUserChanged: onUserChanged,
+                              )
+                            : ProfileScreen(
+                                currentUser: user,
+                                onUserChanged: onUserChanged,
+                              ),
                       ),
                     );
                   },
                 ),
               const Divider(height: 8),
               sectionHeader('ACTIVITY'),
-ListTile(
+              ListTile(
                 leading: const Icon(Icons.receipt_long),
                 title: const Text('My Orders'),
                 onTap: () {
@@ -1384,7 +1392,7 @@ ListTile(
                   );
                 },
               ),
-ListTile(
+              ListTile(
                 leading: const Icon(Icons.chat_bubble_outline),
                 title: const Text('Messages'),
                 onTap: () {
@@ -1398,7 +1406,7 @@ ListTile(
                 },
               ),
               if (isSeller(currentUser) || isAdmin)
-ListTile(
+              ListTile(
                 leading: const Icon(Icons.description_outlined),
                 title: const Text('My Invoices'),
                 onTap: () {
@@ -1436,25 +1444,6 @@ ListTile(
                   },
                 ),
               sectionHeader('SELLER TOOLS'),
-              if (shop != null)
-                ListTile(
-                  leading: const Icon(Icons.storefront),
-                  title: const Text('My Shop'),
-                  subtitle: Text(shop['shop_name'] ?? ''),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ShopPageScreen(
-                          shop: shop,
-                          currentUser: currentUser,
-                          onUserChanged: onUserChanged,
-                        ),
-                      ),
-                    );
-                  },
-                ),
               if (isSeller(currentUser) && shop != null)
                 ListTile(
                   leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
@@ -1595,7 +1584,7 @@ ListTile(
                   },
                 ),
               sectionHeader('SETTINGS'),
-ListTile(
+              ListTile(
                 leading: const Icon(Icons.edit),
                 title: const Text('Edit Profile'),
                 onTap: () {
@@ -1611,7 +1600,7 @@ ListTile(
                   );
                 },
               ),
-ListTile(
+              ListTile(
                 leading: const Icon(Icons.lock_outline),
                 title: const Text('Change Password'),
                 onTap: () {
@@ -1620,7 +1609,7 @@ ListTile(
                 },
               ),
               const Divider(height: 8),
-ListTile(
+              ListTile(
                 leading: const Icon(Icons.logout, color: Colors.red),
                 title:
                     const Text('Sign Out', style: TextStyle(color: Colors.red)),
@@ -4013,6 +4002,7 @@ class ProductFeedCard extends StatefulWidget {
   final void Function(Map<String, dynamic> product)? onOpen;
   final Color? cardColour;
   final Color? accentColour;
+  final void Function(Map<String, dynamic> product)? onEdit;
 
   const ProductFeedCard({
     super.key,
@@ -4022,6 +4012,7 @@ class ProductFeedCard extends StatefulWidget {
     this.onOpen,
     this.cardColour,
     this.accentColour,
+    this.onEdit,
   });
 
   @override
@@ -4186,6 +4177,14 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                           onPressed: () => widget.onBuy(item),
                         ),
                       ),
+                      if (widget.onEdit != null) ...[
+                        const SizedBox(width: 6),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          tooltip: 'Edit product',
+                          onPressed: () => widget.onEdit!(widget.product),
+                        ),
+                      ],
                       if (widget.onDelete != null) ...[
                         const SizedBox(width: 6),
                         IconButton(
@@ -4215,6 +4214,7 @@ class ShopProductGrid extends StatelessWidget {
   final void Function(Map<String, dynamic> product)? onOpen;
   final Color? cardColour;
   final Color? accentColour;
+  final void Function(Map<String, dynamic> product)? onEdit;
 
   const ShopProductGrid({
     super.key,
@@ -4225,6 +4225,7 @@ class ShopProductGrid extends StatelessWidget {
     this.onOpen,
     this.cardColour,
     this.accentColour,
+    this.onEdit,
   });
 
   @override
@@ -4258,6 +4259,7 @@ class ShopProductGrid extends StatelessWidget {
         onBuy: onBuy,
         onDelete: onDelete,
         onOpen: onOpen,
+        onEdit: onEdit,
         cardColour: cardColour,
         accentColour: accentColour,
       ),
@@ -4678,6 +4680,269 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     }
   }
 
+  void _showAddItemDialog() {
+    final titleController = TextEditingController();
+    final descController = TextEditingController();
+    final priceController = TextEditingController();
+    String selectedCategory = 'Other';
+    List<String> uploadedPhotos = [];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Add Item to ${shop['shop_name']}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Item Title',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: priceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Price in Leones (SLE)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: const InputDecoration(
+                    labelText: 'Product Category',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
+                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
+                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
+                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
+                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
+                    DropdownMenuItem(value: 'Services', child: Text('Services')),
+                    DropdownMenuItem(value: 'Other', child: Text('Other')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => selectedCategory = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await showMultiPhotoPicker(context, uploadedPhotos, (newPhotos) {
+                        setDialogState(() => uploadedPhotos = newPhotos);
+                      });
+                    },
+                    icon: const Icon(Icons.photo_library),
+                    label: Text(uploadedPhotos.isEmpty ? 'Add Photos (up to 4)' : '${uploadedPhotos.length} photo(s) added'),
+                  ),
+                ),
+                if (uploadedPhotos.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: uploadedPhotos.map((url) => ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      )).toList(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.isEmpty ||
+                    priceController.text.isEmpty) return;
+
+                final price = double.tryParse(priceController.text) ?? 0.0;
+
+                final user = await UserSession.load();
+                final response = await http.post(
+                  Uri.parse('$baseUrl/products/'),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
+                  },
+                  body: jsonEncode({
+                    'merchant_id': shop['id'],
+                    'title': titleController.text,
+                    'description': descController.text,
+                    'category': selectedCategory,
+                    'price_sle': price,
+                    'image_url': uploadedPhotos.isNotEmpty ? uploadedPhotos[0] : null,
+                    'image_urls': uploadedPhotos,
+                  }),
+                );
+
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  if (response.statusCode >= 200 &&
+                      response.statusCode < 300) {
+                    _fetchProducts();
+                  } else {
+                    showApiError(context, response.statusCode, response.body,
+                        fallback: 'Failed to add product.');
+                  }
+                }
+              },
+              child: const Text('Add to Shop'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditProductDialog(Map<String, dynamic> product) {
+    final titleController = TextEditingController(text: product['title'] ?? '');
+    final descController = TextEditingController(text: product['description'] ?? '');
+    final priceController = TextEditingController(text: (product['price_sle'] ?? '').toString());
+    List<String> uploadedPhotos = productPhotos(product);
+    String selectedCategory = product['category'] ?? 'Other';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Edit ${product['title']}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(labelText: 'Item Title', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: priceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Price in Leones (SLE)', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: const InputDecoration(labelText: 'Product Category', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
+                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
+                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
+                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
+                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
+                    DropdownMenuItem(value: 'Services', child: Text('Services')),
+                    DropdownMenuItem(value: 'Other', child: Text('Other')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => selectedCategory = value);
+                  },
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await showMultiPhotoPicker(context, uploadedPhotos, (newPhotos) {
+                        setDialogState(() => uploadedPhotos = newPhotos);
+                      });
+                    },
+                    icon: const Icon(Icons.photo_library),
+                    label: Text(uploadedPhotos.isEmpty ? 'Add Photos (up to 4)' : '${uploadedPhotos.length} photo(s)'),
+                  ),
+                ),
+                if (uploadedPhotos.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: uploadedPhotos.map((url) => ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      )).toList(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.isEmpty || priceController.text.isEmpty) return;
+                final price = double.tryParse(priceController.text) ?? 0.0;
+                final err = await UserSession.updateProduct(
+                  (product['id'] as num).toInt(),
+                  {
+                    'title': titleController.text,
+                    'description': descController.text,
+                    'category': selectedCategory,
+                    'price_sle': price,
+                    'image_url': uploadedPhotos.isNotEmpty ? uploadedPhotos[0] : null,
+                    'image_urls': uploadedPhotos,
+                  },
+                );
+                if (!context.mounted) return;
+                if (err == 'SESSION_EXPIRED') {
+                  handleSessionExpired(context);
+                  return;
+                }
+                if (err == null) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Product updated')),
+                  );
+                  _fetchProducts();
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(err)),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _deleteProduct(int productId, String productTitle) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -4734,6 +4999,24 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         );
       }
     }
+  }
+
+  Future<void> _openEditProfile() async {
+    final u = _currentUser;
+    if (u == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditProfileScreen(
+          currentUser: u,
+          onUserChanged: () {
+            widget.onUserChanged?.call();
+            _loadUser();
+          },
+        ),
+      ),
+    );
+    await _loadUser();
   }
 
   Future<void> _deleteShop() async {
@@ -5156,8 +5439,19 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
             PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'delete') _deleteShop();
+                if (value == 'profile') _openEditProfile();
               },
               itemBuilder: (ctx) => const [
+                PopupMenuItem<String>(
+                  value: 'profile',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_outline),
+                      SizedBox(width: 8),
+                      Text('Edit Profile'),
+                    ],
+                  ),
+                ),
                 PopupMenuItem<String>(
                   value: 'delete',
                   child: Row(
@@ -5274,6 +5568,13 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                       fontWeight: FontWeight.bold,
                       color: _pageTextColour),
                 ),
+                const Spacer(),
+                if (_isOwner)
+                  ElevatedButton.icon(
+                    onPressed: _showAddItemDialog,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Product'),
+                  ),
               ],
             ),
           ),
@@ -5284,6 +5585,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     products: products,
                     cardColour: Colors.white.withAlpha(230),
                     accentColour: _headerColour,
+                    onEdit: _isOwner ? _showEditProductDialog : null,
                     onBuy: _showCheckout,
                     onDelete: _isOwner
                         ? (product) => _deleteProduct(
