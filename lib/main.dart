@@ -1333,7 +1333,11 @@ void showAccountSheet(
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ShopProfileScreen(merchant: shop),
+                        builder: (_) => ShopPageScreen(
+                          shop: shop,
+                          currentUser: currentUser,
+                          onUserChanged: onUserChanged,
+                        ),
                       ),
                     );
                   },
@@ -4360,13 +4364,13 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
 class ShopPageScreen extends StatefulWidget {
   final Map<String, dynamic> shop;
   final Map<String, dynamic>? currentUser;
-  final VoidCallback onUserChanged;
+  final VoidCallback? onUserChanged;
 
   const ShopPageScreen({
     super.key,
     required this.shop,
-    required this.currentUser,
-    required this.onUserChanged,
+    this.currentUser,
+    this.onUserChanged,
   });
 
   @override
@@ -4377,12 +4381,86 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
   List<dynamic> products = [];
   bool isLoading = true;
   late Map<String, dynamic> shop;
+  Map<String, dynamic>? _currentUser;
 
   @override
   void initState() {
     super.initState();
     shop = Map<String, dynamic>.from(widget.shop);
+    _currentUser = widget.currentUser;
+    if (_currentUser == null) _loadUser();
     _fetchProducts();
+  }
+
+  Future<void> _loadUser() async {
+    final u = await UserSession.load();
+    if (mounted) setState(() => _currentUser = u);
+  }
+
+  Color get _headerColour =>
+      parseThemeColour(shop['theme_colour']?.toString());
+
+  Color get _headerTextColour =>
+      ThemeData.estimateBrightnessForColor(_headerColour) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
+
+  Color get _pageBackground => parseThemeColour(
+      shop['background_colour']?.toString(),
+      fallback: Colors.white);
+
+  Color get _pageTextColour =>
+      ThemeData.estimateBrightnessForColor(_pageBackground) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
+
+  Widget _buildColourPicker({
+    required String label,
+    required String selectedHex,
+    required ValueChanged<String> onPick,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: kShopPalette.keys.map((hex) {
+            final colour = parseThemeColour(hex, fallback: Colors.white);
+            final isSelected = selectedHex.toUpperCase() == hex.toUpperCase();
+            final isDark =
+                ThemeData.estimateBrightnessForColor(colour) == Brightness.dark;
+            return GestureDetector(
+              onTap: () => onPick(hex),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: colour,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFF1B5E20)
+                        : Colors.grey.shade300,
+                    width: isSelected ? 3 : 1,
+                  ),
+                ),
+                child: isSelected
+                    ? Icon(Icons.check,
+                        size: 18, color: isDark ? Colors.white : Colors.black87)
+                    : null,
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
   }
 
   Future<void> _fetchProducts() async {
@@ -4531,7 +4609,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         // Revoke seller status so the user can become a seller again
         await UserSession.revokeSeller();
-        widget.onUserChanged();
+        widget.onUserChanged?.call();
         await ShopSession.clear();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -4556,13 +4634,16 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
   }
 
   Future<void> _showCheckout(dynamic product) async {
-    if (widget.currentUser == null) {
+    if (_currentUser == null) {
       final ok = await Navigator.push<bool>(
         context,
         MaterialPageRoute(builder: (_) => const AuthScreen()),
       );
-      if (ok == true) widget.onUserChanged();
-      if (ok != true) return;
+      if (ok == true) {
+        widget.onUserChanged?.call();
+        await _loadUser();
+      }
+      if (ok != true || !mounted) return;
     }
 
     if (!mounted) return;
@@ -4623,7 +4704,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'x-api-key': apiKey,
                   },
                   body: jsonEncode({
-                    'customer_id': widget.currentUser!['id'],
+                    'customer_id': _currentUser!['id'],
                     'merchant_id': product['merchant_id'],
                     'product_id': product['id'],
                     'pickup_address': 'Freetown Central Market',
@@ -4675,8 +4756,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
   }
 
   bool get _isOwner {
-    if (widget.currentUser == null) return false;
-    return widget.currentUser!['phone_number'] == shop['phone_number'];
+    if (_currentUser == null) return false;
+    return _currentUser!['phone_number'] == shop['phone_number'];
   }
 
   Future<void> _showEditShopDialog() async {
@@ -4690,6 +4771,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         TextEditingController(text: shop['city'] ?? 'Freetown');
     String? currentLogo = shop['logo_url'];
     String selectedCategory = shop['category'] ?? 'Other';
+    String selectedTheme = shop['theme_colour'] ?? '#1B5E20';
+    String selectedBg = shop['background_colour'] ?? '#FFFFFF';
 
     showDialog(
       context: context,
@@ -4762,6 +4845,18 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     ),
                   ),
                 const SizedBox(height: 10),
+                _buildColourPicker(
+                  label: 'Header Colour',
+                  selectedHex: selectedTheme,
+                  onPick: (hex) => setDialogState(() => selectedTheme = hex),
+                ),
+                const SizedBox(height: 14),
+                _buildColourPicker(
+                  label: 'Background Colour',
+                  selectedHex: selectedBg,
+                  onPick: (hex) => setDialogState(() => selectedBg = hex),
+                ),
+                const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
                   decoration: const InputDecoration(
@@ -4808,6 +4903,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'city': cityController.text,
                     'category': selectedCategory,
                     'logo_url': currentLogo,
+                    'theme_colour': selectedTheme,
+                    'background_colour': selectedBg,
                   }),
                 );
 
@@ -4840,7 +4937,12 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _pageBackground,
       appBar: AppBar(
+        backgroundColor: _pageBackground,
+        surfaceTintColor: _pageBackground,
+        foregroundColor: _pageTextColour,
+        elevation: 0,
         title: Text(shop['shop_name'] ?? 'Shop'),
         actions: [
           if (_isOwner)
@@ -4873,16 +4975,20 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(16),
-            color: Colors.green.shade50,
+            color: _headerColour,
             width: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            child: DefaultTextStyle.merge(
+              style: TextStyle(color: _headerTextColour),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 Row(
                   children: [
                     CircleAvatar(
                       radius: 24,
-                      backgroundColor: const Color(0xFF1B5E20),
+                      backgroundColor: _headerTextColour == Colors.white
+                          ? Colors.white24
+                          : const Color(0xFF1B5E20),
                       backgroundImage: shop['logo_url'] != null &&
                               shop['logo_url'].toString().isNotEmpty
                           ? NetworkImage(shop['logo_url'])
@@ -4940,7 +5046,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                       Text(shop['category'] ?? '',
                           style: TextStyle(color: Colors.grey.shade700)),
                     ],
-                    if (shop['phone_number'] != null) ...[
+                    if (_isOwner && shop['phone_number'] != null) ...[
                       const SizedBox(width: 16),
                       Icon(Icons.phone, size: 16, color: Colors.grey.shade600),
                       const SizedBox(width: 4),
@@ -4949,7 +5055,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     ],
                   ],
                 ),
-              ],
+                ],
+              ),
             ),
           ),
           const Divider(height: 1),
@@ -4957,12 +5064,14 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
             padding: const EdgeInsets.all(12.0),
             child: Row(
               children: [
-                const Icon(Icons.inventory_2, size: 18),
+                Icon(Icons.inventory_2, size: 18, color: _pageTextColour),
                 const SizedBox(width: 8),
                 Text(
                   '${products.length} product${products.length == 1 ? '' : 's'}',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: _pageTextColour),
                 ),
               ],
             ),
@@ -5294,7 +5403,11 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (pageContext) => ShopProfileScreen(merchant: merchantData),
+        builder: (pageContext) => ShopPageScreen(
+          shop: merchantData,
+          currentUser: widget.currentUser,
+          onUserChanged: widget.onUserChanged,
+        ),
       ),
     ).then((_) {
       _fetchShops();
@@ -5648,7 +5761,7 @@ class _ShopBannerState extends State<_ShopBanner> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ShopProfileScreen(merchant: _merchant!),
+        builder: (_) => ShopPageScreen(shop: _merchant!),
       ),
     );
     if (mounted) _load();
@@ -6204,7 +6317,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ShopProfileScreen(merchant: merchantData),
+        builder: (context) => ShopPageScreen(
+          shop: merchantData,
+          currentUser: widget.currentUser,
+          onUserChanged: widget.onUserChanged,
+        ),
       ),
     ).then((_) {
       fetchProducts();
@@ -6561,772 +6678,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 // ==========================================
 // SHOP PROFILE — SELLER'S OWN VIEW
 // ==========================================
-class ShopProfileScreen extends StatefulWidget {
-  final Map<String, dynamic> merchant;
-  const ShopProfileScreen({super.key, required this.merchant});
-
-  @override
-  State<ShopProfileScreen> createState() => _ShopProfileScreenState();
-}
-
-class _ShopProfileScreenState extends State<ShopProfileScreen> {
-  List<dynamic> myProducts = [];
-  bool isLoading = true;
-  late Map<String, dynamic> merchant;
-  Map<String, dynamic>? _currentUser;
-
-  @override
-  void initState() {
-    super.initState();
-    merchant = Map<String, dynamic>.from(widget.merchant);
-    _loadCurrentUser();
-    fetchShopProducts();
-  }
-
-  Future<void> _loadCurrentUser() async {
-    final u = await UserSession.load();
-    if (mounted) setState(() => _currentUser = u);
-  }
-
-  bool get _isOwner =>
-      _currentUser != null &&
-      _currentUser!['phone_number'] == merchant['phone_number'];
-
-  Color get _headerColour =>
-      parseThemeColour(merchant['theme_colour']?.toString());
-
-  Color get _headerTextColour =>
-      ThemeData.estimateBrightnessForColor(_headerColour) == Brightness.dark
-          ? Colors.white
-          : Colors.black87;
-
-  Color get _pageBackground => parseThemeColour(
-      merchant['background_colour']?.toString(),
-      fallback: Colors.white);
-
-  Color get _pageTextColour =>
-      ThemeData.estimateBrightnessForColor(_pageBackground) == Brightness.dark
-          ? Colors.white
-          : Colors.black87;
-
-  Widget _buildColourPicker({
-    required String label,
-    required String selectedHex,
-    required ValueChanged<String> onPick,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700)),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: kShopPalette.keys.map((hex) {
-            final colour = parseThemeColour(hex, fallback: Colors.white);
-            final isSelected = selectedHex.toUpperCase() == hex.toUpperCase();
-            final isDark =
-                ThemeData.estimateBrightnessForColor(colour) == Brightness.dark;
-            return GestureDetector(
-              onTap: () => onPick(hex),
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: colour,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isSelected
-                        ? const Color(0xFF1B5E20)
-                        : Colors.grey.shade300,
-                    width: isSelected ? 3 : 1,
-                  ),
-                ),
-                child: isSelected
-                    ? Icon(Icons.check,
-                        size: 18, color: isDark ? Colors.white : Colors.black87)
-                    : null,
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  Future<void> fetchShopProducts() async {
-    setState(() => isLoading = true);
-    try {
-      final res = await http.get(
-        Uri.parse('$baseUrl/merchants/${merchant['id']}/products/'),
-      );
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        setState(() {
-          myProducts = jsonDecode(res.body);
-          isLoading = false;
-        });
-      } else {
-        setState(() => isLoading = false);
-      }
-    } catch (_) {
-      setState(() => isLoading = false);
-    }
-  }
-
-  Future<void> _showEditShopDialog() async {
-    final shopNameController =
-        TextEditingController(text: merchant['shop_name'] ?? '');
-    final ownerNameController =
-        TextEditingController(text: merchant['owner_name'] ?? '');
-    final phoneController =
-        TextEditingController(text: merchant['phone_number'] ?? '');
-    final cityController =
-        TextEditingController(text: merchant['city'] ?? 'Freetown');
-    String? currentLogo = merchant['logo_url'];
-    String selectedCategory = merchant['category'] ?? 'Other';
-    String selectedTheme = merchant['theme_colour'] ?? '#1B5E20';
-    String selectedBg = merchant['background_colour'] ?? '#FFFFFF';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Edit Shop Info'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: shopNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Shop Name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: ownerNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Owner Name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: phoneController,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: cityController,
-                  decoration: const InputDecoration(
-                    labelText: 'City',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final url = await pickAndUploadImage(context);
-                      if (url != null) {
-                        setDialogState(() => currentLogo = url);
-                      }
-                    },
-                    icon: const Icon(Icons.photo_camera),
-                    label: Text((currentLogo ?? '').isEmpty
-                        ? 'Pick Shop Logo'
-                        : 'Change Logo'),
-                  ),
-                ),
-                if ((currentLogo ?? '').isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        currentLogo ?? '',
-                        height: 100,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 10),
-                _buildColourPicker(
-                  label: 'Header Colour',
-                  selectedHex: selectedTheme,
-                  onPick: (hex) => setDialogState(() => selectedTheme = hex),
-                ),
-                const SizedBox(height: 14),
-                _buildColourPicker(
-                  label: 'Background Colour',
-                  selectedHex: selectedBg,
-                  onPick: (hex) => setDialogState(() => selectedBg = hex),
-                ),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Category',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
-                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
-                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
-                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
-                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
-                    DropdownMenuItem(value: 'Services', child: Text('Services')),
-                    DropdownMenuItem(value: 'Other', child: Text('Other')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() => selectedCategory = value);
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final user = await UserSession.load();
-                final response = await http.put(
-                  Uri.parse('$baseUrl/merchants/${merchant['id']}'),
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
-                  },
-                  body: jsonEncode({
-                    'shop_name': shopNameController.text,
-                    'owner_name': ownerNameController.text,
-                    'phone_number': phoneController.text,
-                    'city': cityController.text,
-                    'category': selectedCategory,
-                    'logo_url': currentLogo,
-                    'theme_colour': selectedTheme,
-                    'background_colour': selectedBg,
-                  }),
-                );
-
-                if (response.statusCode >= 200 && response.statusCode < 300) {
-                  final updated = jsonDecode(response.body)['merchant'];
-                  await ShopSession.save(updated);
-                  if (mounted) {
-                    Navigator.pop(ctx);
-                    setState(() => merchant = Map<String, dynamic>.from(updated));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Shop updated')),
-                    );
-                  }
-                } else {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Failed to update shop')),
-                    );
-                  }
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _deleteProduct(int productId, String productTitle) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete product?'),
-        content: Text('Delete "$productTitle"? This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    final user = await UserSession.load();
-    try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/products/$productId'),
-        headers: {
-          'x-api-key': apiKey,
-          'Authorization': 'Bearer ${user?['token'] ?? ''}',
-        },
-      );
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Product deleted')),
-          );
-          fetchShopProducts();
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('You cannot delete this product')),
-          );
-        }
-      }
-    } catch (_) {}
-  }
-
-  void _showAddItemDialog() {
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
-    final priceController = TextEditingController();
-    String selectedCategory = 'Other';
-    List<String> uploadedPhotos = [];
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Add Item to ${merchant['shop_name']}'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Item Title',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: descController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: priceController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Price in Leones (SLE)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Product Category',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
-                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
-                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
-                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
-                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
-                    DropdownMenuItem(value: 'Services', child: Text('Services')),
-                    DropdownMenuItem(value: 'Other', child: Text('Other')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() => selectedCategory = value);
-                    }
-                  },
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await showMultiPhotoPicker(context, uploadedPhotos, (newPhotos) {
-                        setDialogState(() => uploadedPhotos = newPhotos);
-                      });
-                    },
-                    icon: const Icon(Icons.photo_library),
-                    label: Text(uploadedPhotos.isEmpty ? 'Add Photos (up to 4)' : '${uploadedPhotos.length} photo(s) added'),
-                  ),
-                ),
-                if (uploadedPhotos.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: uploadedPhotos.map((url) => ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const SizedBox.shrink()),
-                      )).toList(),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (titleController.text.isEmpty ||
-                    priceController.text.isEmpty) return;
-
-                final price = double.tryParse(priceController.text) ?? 0.0;
-
-                final user = await UserSession.load();
-                final response = await http.post(
-                  Uri.parse('$baseUrl/products/'),
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
-                  },
-                  body: jsonEncode({
-                    'merchant_id': merchant['id'],
-                    'title': titleController.text,
-                    'description': descController.text,
-                    'category': selectedCategory,
-                    'price_sle': price,
-                    'image_url': uploadedPhotos.isNotEmpty ? uploadedPhotos[0] : null,
-                    'image_urls': uploadedPhotos,
-                  }),
-                );
-
-                if (mounted) {
-                  Navigator.pop(ctx);
-                  if (response.statusCode >= 200 &&
-                      response.statusCode < 300) {
-                    fetchShopProducts();
-                  } else {
-                    showApiError(context, response.statusCode, response.body,
-                        fallback: 'Failed to add product.');
-                  }
-                }
-              },
-              child: const Text('Add to Shop'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showEditProductDialog(Map<String, dynamic> product) {
-    final titleController = TextEditingController(text: product['title'] ?? '');
-    final descController = TextEditingController(text: product['description'] ?? '');
-    final priceController = TextEditingController(text: (product['price_sle'] ?? '').toString());
-    List<String> uploadedPhotos = productPhotos(product);
-    String selectedCategory = product['category'] ?? 'Other';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Edit ${product['title']}'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Item Title', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: descController,
-                  decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: priceController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Price in Leones (SLE)', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(labelText: 'Product Category', border: OutlineInputBorder()),
-                  items: const [
-                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
-                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
-                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
-                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
-                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
-                    DropdownMenuItem(value: 'Services', child: Text('Services')),
-                    DropdownMenuItem(value: 'Other', child: Text('Other')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setDialogState(() => selectedCategory = value);
-                  },
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await showMultiPhotoPicker(context, uploadedPhotos, (newPhotos) {
-                        setDialogState(() => uploadedPhotos = newPhotos);
-                      });
-                    },
-                    icon: const Icon(Icons.photo_library),
-                    label: Text(uploadedPhotos.isEmpty ? 'Add Photos (up to 4)' : '${uploadedPhotos.length} photo(s)'),
-                  ),
-                ),
-                if (uploadedPhotos.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: uploadedPhotos.map((url) => ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const SizedBox.shrink()),
-                      )).toList(),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (titleController.text.isEmpty || priceController.text.isEmpty) return;
-                final price = double.tryParse(priceController.text) ?? 0.0;
-                final err = await UserSession.updateProduct(
-                  (product['id'] as num).toInt(),
-                  {
-                    'title': titleController.text,
-                    'description': descController.text,
-                    'category': selectedCategory,
-                    'price_sle': price,
-                    'image_url': uploadedPhotos.isNotEmpty ? uploadedPhotos[0] : null,
-                    'image_urls': uploadedPhotos,
-                  },
-                );
-                if (!context.mounted) return;
-                if (err == 'SESSION_EXPIRED') {
-                  handleSessionExpired(context);
-                  return;
-                }
-                if (err == null) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Product updated')),
-                  );
-                  fetchShopProducts();
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(err)),
-                  );
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _pageBackground,
-      appBar: AppBar(
-        backgroundColor: _pageBackground,
-        surfaceTintColor: _pageBackground,
-        foregroundColor: _pageTextColour,
-        elevation: 0,
-        title: Text(merchant['shop_name'] ?? 'My Shop'),
-        actions: [
-          if (_isOwner)
-            IconButton(
-              icon: const Icon(Icons.receipt_long),
-              tooltip: 'Orders',
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => MerchantOrdersScreen(merchant: merchant),
-                ),
-              ),
-            ),
-          if (_isOwner)
-            IconButton(
-              icon: const Icon(Icons.edit),
-              tooltip: 'Edit shop info',
-              onPressed: _showEditShopDialog,
-            ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: _headerColour,
-            width: double.infinity,
-            child: DefaultTextStyle.merge(
-              style: TextStyle(color: _headerTextColour),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: const Color(0xFF1B5E20),
-                      backgroundImage: merchant['logo_url'] != null &&
-                              merchant['logo_url'].toString().isNotEmpty
-                          ? NetworkImage(merchant['logo_url'])
-                          : null,
-                      child: merchant['logo_url'] != null &&
-                              merchant['logo_url'].toString().isNotEmpty
-                          ? null
-                          : Text(
-                              (merchant['shop_name'] ?? '?')[0].toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 24,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        merchant['shop_name'] ?? '',
-                        style: const TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text('Owner: ${merchant['owner_name']}'),
-                Text('Location: ${merchant['city']}, Sierra Leone'),
-                Text('Category: ${merchant['category'] ?? 'Other'}'),
-                if (_isOwner)
-                  Text('Contact: ${merchant['phone_number']}'),
-                ],
-              ),
-            ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'My Inventory',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: _pageTextColour),
-                ),
-                if (_isOwner)
-                  ElevatedButton.icon(
-                    onPressed: _showAddItemDialog,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Product'),
-                  ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : myProducts.isEmpty
-                    ? Center(
-                        child: Text(
-                          _isOwner
-                              ? 'No items in your shop yet.\nTap "Add Product" to list your first item.'
-                              : 'No items listed yet.',
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: myProducts.length,
-                        itemBuilder: (ctx, i) {
-                          final item = myProducts[i];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
-                            child: ListTile(
-                              leading: const Icon(Icons.shopping_bag,
-                                  size: 36, color: Colors.green),
-                              title: Text(item['title']),
-                              subtitle: Text(
-                                  'Price: SLE ${item['price_sle']} • ${item['category'] ?? 'Other'}'),
-                              trailing: _isOwner
-                                  ? Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit,
-                                              color: Color(0xFF1B5E20)),
-                                          tooltip: 'Edit product',
-                                          onPressed: () =>
-                                              _showEditProductDialog(item),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete,
-                                              color: Colors.red),
-                                          tooltip: 'Delete product',
-                                          onPressed: () => _deleteProduct(
-                                            item['id'],
-                                            item['title'] ?? 'this product',
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : null,
-                            ),
-                          );
-                        },
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ==========================================
 // RUNNER DASHBOARD
