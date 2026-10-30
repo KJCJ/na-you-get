@@ -3986,6 +3986,7 @@ class ShopProductGrid extends StatelessWidget {
   final void Function(dynamic product)? onDelete;
   final VoidCallback? onRefresh;
   final void Function(Map<String, dynamic> product)? onOpen;
+  final Color? cardColour;
 
   const ShopProductGrid({
     super.key,
@@ -3994,7 +3995,126 @@ class ShopProductGrid extends StatelessWidget {
     this.onDelete,
     this.onRefresh,
     this.onOpen,
+    this.cardColour,
   });
+
+  static const List<double> _imageHeights = [200, 250, 225];
+
+  double _cardHeight(int i) => _imageHeights[i % _imageHeights.length] + 118;
+
+  Widget _buildCard(BuildContext context, dynamic item, int i) {
+    final height = _imageHeights[i % _imageHeights.length];
+    return InkWell(
+      onTap: onOpen == null ? null : () => onOpen!(item),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: cardColour ?? Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 12,
+              offset: Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: height,
+              width: double.infinity,
+              child: Builder(builder: (context) {
+                final photos = productPhotos(item);
+                final url = photos.isNotEmpty ? photos[0] : null;
+                if (url == null) {
+                  return Container(
+                    color: Colors.grey.shade100,
+                    child: const Center(
+                        child: Icon(Icons.shopping_bag, size: 40)),
+                  );
+                }
+                return Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: Colors.grey.shade100,
+                    child: const Center(
+                        child: Icon(Icons.shopping_bag, size: 40)),
+                  ),
+                );
+              }),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item['title'] ?? '',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 14),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'SLE ${item['price_sle']}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1B5E20)),
+                  ),
+                  if (item['shop_name'] != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      '${item['shop_name']}',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1B5E20),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          onPressed: () => onBuy(item),
+                          child:
+                              const Text('Buy', style: TextStyle(fontSize: 13)),
+                        ),
+                      ),
+                      if (onDelete != null) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.delete_outline,
+                              color: Colors.red, size: 20),
+                          tooltip: 'Delete product',
+                          onPressed: () => onDelete!(item),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4019,84 +4139,44 @@ class ShopProductGrid extends StatelessWidget {
       );
     }
 
-    return GridView.builder(
+    // Masonry: place each card in whichever column is currently shorter.
+    final left = <int>[];
+    final right = <int>[];
+    var lh = 0.0;
+    var rh = 0.0;
+    for (var i = 0; i < products.length; i++) {
+      final h = _cardHeight(i);
+      if (lh <= rh) {
+        left.add(i);
+        lh += h;
+      } else {
+        right.add(i);
+        rh += h;
+      }
+    }
+
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(10),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.72,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-      ),
-      itemCount: products.length,
-      itemBuilder: (ctx, i) {
-        final item = products[i];
-        return InkWell(
-          onTap: onOpen == null ? null : () => onOpen!(item),
-          borderRadius: BorderRadius.circular(12),
-          child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Container(
-                    color: Colors.white,
-                    width: double.infinity,
-                    child: Builder(builder: (context) {
-                      final photos = productPhotos(item);
-                      final url = photos.isNotEmpty ? photos[0] : null;
-                      if (url == null) {
-                        return const Center(child: Icon(Icons.shopping_bag, size: 40));
-                      }
-                      return Image.network(
-                        url,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.shopping_bag, size: 40)),
-                      );
-                    }),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  item['title'] ?? '',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text('SLE ${item['price_sle']}'),
-                if (item['shop_name'] != null)
-                  Text(
-                    '🏪 ${item['shop_name']} • ${item['shop_city'] ?? ''}',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => onBuy(item),
-                        child: const Text('Buy'),
-                      ),
-                    ),
-                    if (onDelete != null) ...[
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        tooltip: 'Delete product',
-                        onPressed: () => onDelete!(item),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
+              children: left
+                  .map((i) => _buildCard(context, products[i], i))
+                  .toList(),
             ),
           ),
-        ),
-        );
-      },
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              children: right
+                  .map((i) => _buildCard(context, products[i], i))
+                  .toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -5105,6 +5185,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : ShopProductGrid(
                     products: products,
+                    cardColour: Colors.white.withAlpha(230),
                     onBuy: _showCheckout,
                     onDelete: _isOwner
                         ? (product) => _deleteProduct(
