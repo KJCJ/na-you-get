@@ -5555,120 +5555,6 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
     });
   }
 
-  Widget _buildTopCard() {
-    final hasShop = myShop != null;
-    final seller = isSeller(widget.currentUser);
-    final needsSeller = !seller;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: hasShop
-              ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
-              : [const Color(0xFF0D47A1), const Color(0xFF1565C0)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                hasShop
-                    ? Icons.store
-                    : (needsSeller ? Icons.person_add : Icons.store),
-                color: Colors.white,
-                size: 28,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  hasShop
-                      ? myShop!['shop_name']
-                      : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            hasShop
-                ? 'Owner: ${myShop!['owner_name']} • ${myShop!['city']}'
-                : (needsSeller
-                    ? 'Turn on selling to create your shop.'
-                    : 'Create your shop to start selling.'),
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: hasShop
-                    ? const Color(0xFF1B5E20)
-                    : const Color(0xFF0D47A1),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              icon: Icon(hasShop
-                  ? Icons.open_in_new
-                  : (needsSeller ? Icons.storefront : Icons.store)),
-              label: Text(
-                hasShop
-                    ? 'Open My Shop'
-                    : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onPressed: () async {
-                if (hasShop) {
-                  _openShopProfilePage(myShop!);
-                } else if (needsSeller) {
-                  final err = await UserSession.becomeSeller();
-                  if (!mounted) return;
-                  if (err == 'SESSION_EXPIRED') {
-                    handleSessionExpired(context);
-                    return;
-                  }
-                  if (err == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('You can now sell on NYG')),
-                    );
-                    widget.onUserChanged();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(err)),
-                    );
-                  }
-                } else {
-                  _showCreateShopDialog();
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -5688,7 +5574,6 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
       ),
       body: Column(
         children: [
-          _buildTopCard(),
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
@@ -6596,122 +6481,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
-  Widget _buildTopCard() {
-    final hasShop = myShop != null;
-    final user = widget.currentUser;
-    final userName = user?['name'] ?? 'there';
-    final seller = isSeller(user);
-    final needsSeller = !seller;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: hasShop
-              ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
-              : [const Color(0xFF0D47A1), const Color(0xFF1565C0)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                hasShop
-                    ? Icons.storefront
-                    : (needsSeller ? Icons.person_add : Icons.add_business),
-                color: Colors.white,
-                size: 28,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  hasShop
-                      ? myShop!['shop_name']
-                      : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            hasShop
-                ? 'Owner: ${myShop!['owner_name']} • ${myShop!['city']}'
-                : (needsSeller
-                    ? 'Turn on selling to create your shop.'
-                    : 'Hi $userName! Create your shop to start selling.'),
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: hasShop
-                    ? const Color(0xFF1B5E20)
-                    : const Color(0xFF0D47A1),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              icon: Icon(hasShop
-                  ? Icons.open_in_new
-                  : (needsSeller ? Icons.storefront : Icons.store)),
-              label: Text(
-                hasShop
-                    ? 'Upload Your Goods Items You Are Selling'
-                    : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onPressed: () async {
-                if (hasShop) {
-                  _openShopProfilePage(myShop!);
-                } else if (needsSeller) {
-                  final err = await UserSession.becomeSeller();
-                  if (!mounted) return;
-                  if (err == 'SESSION_EXPIRED') {
-                    handleSessionExpired(context);
-                    return;
-                  }
-                  if (err == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('You can now sell on NYG')),
-                    );
-                    widget.onUserChanged();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(err)),
-                    );
-                  }
-                } else {
-                  _showCreateShopDialog();
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final visible = filteredProducts;
@@ -6737,8 +6506,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                _buildTopCard(),
-                const SizedBox(height: 8),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: TextField(
