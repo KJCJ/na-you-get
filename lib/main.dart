@@ -4787,6 +4787,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     if (!mounted) return;
 
     String paymentMethod = 'cash_on_delivery';
+    bool collectInStore = false;
     final deliveryController = TextEditingController();
 
     showDialog(
@@ -4798,14 +4799,22 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('Price: SLE ${product['price_sle']}'),
-              const SizedBox(height: 10),
-              TextField(
-                controller: deliveryController,
-                decoration: const InputDecoration(
-                  labelText: 'Delivery Address',
-                  border: OutlineInputBorder(),
-                ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Collect from Shop'),
+                subtitle: const Text('No delivery fee'),
+                value: collectInStore,
+                onChanged: (v) => setDialogState(() => collectInStore = v),
               ),
+              const SizedBox(height: 6),
+              if (!collectInStore)
+                TextField(
+                  controller: deliveryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Delivery Address',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
               const SizedBox(height: 10),
               RadioListTile(
                 title: const Text('Cash on Delivery'),
@@ -4834,7 +4843,9 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (deliveryController.text.isEmpty) return;
+                if (!collectInStore && deliveryController.text.isEmpty) {
+                  return;
+                }
                 final response = await http.post(
                   Uri.parse('$baseUrl/orders/'),
                   headers: {
@@ -4846,8 +4857,11 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'merchant_id': product['merchant_id'],
                     'product_id': product['id'],
                     'pickup_address': 'Freetown Central Market',
-                    'delivery_address': deliveryController.text,
-                    'delivery_fee_sle': 25.0,
+                    'delivery_address': collectInStore
+                        ? 'Collect from shop'
+                        : deliveryController.text,
+                    'delivery_fee_sle': collectInStore ? 0.0 : 25.0,
+                    'requires_delivery': !collectInStore,
                     'payment_method': paymentMethod,
                   }),
                 );
@@ -4873,7 +4887,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                       context,
                       method: paymentMethod,
                       shopPhone: shopPhone,
-                      total: '${(product['price_sle'] ?? 0) + 25.0}',
+                      total:
+                          '${(product['price_sle'] ?? 0) + (collectInStore ? 0.0 : 25.0)}',
                       orderRef: 'NYG-$newOrderId',
                     );
                   } else {
@@ -6375,6 +6390,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     if (!mounted) return;
 
     String paymentMethod = 'cash_on_delivery';
+    bool collectInStore = false;
     final deliveryController = TextEditingController();
 
     showDialog(
@@ -6386,14 +6402,22 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('Price: SLE ${product['price_sle']}'),
-              const SizedBox(height: 10),
-              TextField(
-                controller: deliveryController,
-                decoration: const InputDecoration(
-                  labelText: 'Delivery Address',
-                  border: OutlineInputBorder(),
-                ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Collect from Shop'),
+                subtitle: const Text('No delivery fee'),
+                value: collectInStore,
+                onChanged: (v) => setDialogState(() => collectInStore = v),
               ),
+              const SizedBox(height: 6),
+              if (!collectInStore)
+                TextField(
+                  controller: deliveryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Delivery Address',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
               const SizedBox(height: 10),
               RadioListTile(
                 title: const Text('Cash on Delivery'),
@@ -6422,7 +6446,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (deliveryController.text.isEmpty) return;
+                if (!collectInStore && deliveryController.text.isEmpty) {
+                  return;
+                }
                 final response = await http.post(
                   Uri.parse('$baseUrl/orders/'),
                   headers: {
@@ -6434,8 +6460,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     'merchant_id': product['merchant_id'],
                     'product_id': product['id'],
                     'pickup_address': 'Freetown Central Market',
-                    'delivery_address': deliveryController.text,
-                    'delivery_fee_sle': 25.0,
+                    'delivery_address': collectInStore
+                        ? 'Collect from shop'
+                        : deliveryController.text,
+                    'delivery_fee_sle': collectInStore ? 0.0 : 25.0,
+                    'requires_delivery': !collectInStore,
                     'payment_method': paymentMethod,
                   }),
                 );
@@ -6461,7 +6490,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       context,
                       method: paymentMethod,
                       shopPhone: shopPhone,
-                      total: '${(product['price_sle'] ?? 0) + 25.0}',
+                      total:
+                          '${(product['price_sle'] ?? 0) + (collectInStore ? 0.0 : 25.0)}',
                       orderRef: 'NYG-$newOrderId',
                     );
                   } else {
@@ -6694,7 +6724,6 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
       ),
       body: Column(
         children: [
-          _buildTopCard(),
           Expanded(
             child: _loadingJobs
                 ? const Center(child: CircularProgressIndicator())
@@ -6763,107 +6792,6 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
     );
   }
 
-  Widget _buildTopCard() {
-    final user = widget.currentUser;
-    final isUserRunner = isRunner(user);
-
-    final String subtitle;
-    if (isUserRunner) {
-      subtitle = 'You are registered as a Runner';
-    } else if (user == null) {
-      subtitle = 'Sign up to deliver items and earn';
-    } else {
-      subtitle = 'Sign out and create a Runner account to earn';
-    }
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isUserRunner
-              ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
-              : [const Color(0xFF0D47A1), const Color(0xFF1565C0)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.directions_run,
-                color: Colors.white,
-                size: 28,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Become a Runner',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: isUserRunner
-                    ? const Color(0xFF1B5E20)
-                    : const Color(0xFF0D47A1),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              icon: Icon(isUserRunner ? Icons.list_alt : Icons.directions_run),
-              label: Text(
-                isUserRunner ? 'View Available Jobs' : 'How to become a Runner',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onPressed: () {
-                if (isUserRunner) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => RunnerDeliveriesScreen(currentUser: user!),
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                          'Sign out from the profile menu, then create a new account and choose Runner.'),
-                    ),
-                  );
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ==========================================
