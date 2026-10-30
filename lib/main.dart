@@ -3980,129 +3980,169 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 // ==========================================
 // REUSABLE: SHOP PRODUCT GRID
 // ==========================================
-class ShopProductGrid extends StatelessWidget {
-  final List<dynamic> products;
+class ProductFeedCard extends StatefulWidget {
+  final Map<String, dynamic> product;
   final void Function(dynamic product) onBuy;
   final void Function(dynamic product)? onDelete;
-  final VoidCallback? onRefresh;
   final void Function(Map<String, dynamic> product)? onOpen;
   final Color? cardColour;
+  final Color? accentColour;
 
-  const ShopProductGrid({
+  const ProductFeedCard({
     super.key,
-    required this.products,
+    required this.product,
     required this.onBuy,
     this.onDelete,
-    this.onRefresh,
     this.onOpen,
     this.cardColour,
+    this.accentColour,
   });
 
-  static const List<double> _imageHeights = [200, 250, 225];
+  @override
+  State<ProductFeedCard> createState() => _ProductFeedCardState();
+}
 
-  double _cardHeight(int i) => _imageHeights[i % _imageHeights.length] + 118;
+class _ProductFeedCardState extends State<ProductFeedCard> {
+  int _page = 0;
 
-  Widget _buildCard(BuildContext context, dynamic item, int i) {
-    final height = _imageHeights[i % _imageHeights.length];
-    return InkWell(
-      onTap: onOpen == null ? null : () => onOpen!(item),
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: cardColour ?? Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 12,
-              offset: Offset(0, 5),
-            ),
-          ],
-        ),
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.product;
+    final photos = productPhotos(item);
+    final accent = widget.accentColour ?? const Color(0xFF1B5E20);
+    final onAccent =
+        ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+            ? Colors.white
+            : Colors.black87;
+    final description = (item['description'] ?? '').toString().trim();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: widget.cardColour ?? Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: InkWell(
+        onTap: widget.onOpen == null ? null : () => widget.onOpen!(item),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              height: height,
+              height: 260,
               width: double.infinity,
-              child: Builder(builder: (context) {
-                final photos = productPhotos(item);
-                final url = photos.isNotEmpty ? photos[0] : null;
-                if (url == null) {
-                  return Container(
-                    color: Colors.grey.shade100,
-                    child: const Center(
-                        child: Icon(Icons.shopping_bag, size: 40)),
-                  );
-                }
-                return Image.network(
-                  url,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: Colors.grey.shade100,
-                    child: const Center(
-                        child: Icon(Icons.shopping_bag, size: 40)),
-                  ),
-                );
-              }),
+              child: Stack(
+                children: [
+                  if (photos.isEmpty)
+                    Container(
+                      color: Colors.grey.shade100,
+                      child: const Center(
+                          child: Icon(Icons.shopping_bag, size: 48)),
+                    )
+                  else
+                    PageView.builder(
+                      itemCount: photos.length,
+                      onPageChanged: (i) => setState(() => _page = i),
+                      itemBuilder: (ctx, i) => Image.network(
+                        photos[i],
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: Colors.grey.shade100,
+                          child: const Center(
+                              child: Icon(Icons.shopping_bag, size: 48)),
+                        ),
+                      ),
+                    ),
+                  if (photos.length > 1)
+                    Positioned(
+                      bottom: 10,
+                      left: 0,
+                      right: 0,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(photos.length, (i) {
+                          final active = i == _page;
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: active ? 16 : 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: active ? Colors.white : Colors.white54,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                ],
+              ),
             ),
             Padding(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     item['title'] ?? '',
                     style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 14),
+                        fontSize: 17, fontWeight: FontWeight.bold),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
                     'SLE ${item['price_sle']}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1B5E20)),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: accent,
+                    ),
                   ),
-                  if (item['shop_name'] != null) ...[
-                    const SizedBox(height: 2),
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 6),
                     Text(
-                      '${item['shop_name']}',
+                      description,
                       style: TextStyle(
-                          fontSize: 11, color: Colors.grey.shade600),
-                      maxLines: 1,
+                          fontSize: 13,
+                          height: 1.35,
+                          color: Colors.grey.shade700),
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
-                        child: ElevatedButton(
+                        child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1B5E20),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            backgroundColor: accent,
+                            foregroundColor: onAccent,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          onPressed: () => onBuy(item),
-                          child:
-                              const Text('Buy', style: TextStyle(fontSize: 13)),
+                          icon: const Icon(Icons.shopping_cart, size: 18),
+                          label: const Text('Buy Now'),
+                          onPressed: () => widget.onBuy(item),
                         ),
                       ),
-                      if (onDelete != null) ...[
-                        const SizedBox(width: 4),
+                      if (widget.onDelete != null) ...[
+                        const SizedBox(width: 6),
                         IconButton(
-                          visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.delete_outline,
-                              color: Colors.red, size: 20),
+                              color: Colors.red),
                           tooltip: 'Delete product',
-                          onPressed: () => onDelete!(item),
+                          onPressed: () => widget.onDelete!(item),
                         ),
                       ],
                     ],
@@ -4115,6 +4155,27 @@ class ShopProductGrid extends StatelessWidget {
       ),
     );
   }
+}
+
+class ShopProductGrid extends StatelessWidget {
+  final List<dynamic> products;
+  final void Function(dynamic product) onBuy;
+  final void Function(dynamic product)? onDelete;
+  final VoidCallback? onRefresh;
+  final void Function(Map<String, dynamic> product)? onOpen;
+  final Color? cardColour;
+  final Color? accentColour;
+
+  const ShopProductGrid({
+    super.key,
+    required this.products,
+    required this.onBuy,
+    this.onDelete,
+    this.onRefresh,
+    this.onOpen,
+    this.cardColour,
+    this.accentColour,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -4139,43 +4200,16 @@ class ShopProductGrid extends StatelessWidget {
       );
     }
 
-    // Masonry: place each card in whichever column is currently shorter.
-    final left = <int>[];
-    final right = <int>[];
-    var lh = 0.0;
-    var rh = 0.0;
-    for (var i = 0; i < products.length; i++) {
-      final h = _cardHeight(i);
-      if (lh <= rh) {
-        left.add(i);
-        lh += h;
-      } else {
-        right.add(i);
-        rh += h;
-      }
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              children: left
-                  .map((i) => _buildCard(context, products[i], i))
-                  .toList(),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              children: right
-                  .map((i) => _buildCard(context, products[i], i))
-                  .toList(),
-            ),
-          ),
-        ],
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      itemCount: products.length,
+      itemBuilder: (ctx, i) => ProductFeedCard(
+        product: products[i] as Map<String, dynamic>,
+        onBuy: onBuy,
+        onDelete: onDelete,
+        onOpen: onOpen,
+        cardColour: cardColour,
+        accentColour: accentColour,
       ),
     );
   }
@@ -5185,6 +5219,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 : ShopProductGrid(
                     products: products,
                     cardColour: Colors.white.withAlpha(230),
+                    accentColour: _headerColour,
                     onBuy: _showCheckout,
                     onDelete: _isOwner
                         ? (product) => _deleteProduct(
