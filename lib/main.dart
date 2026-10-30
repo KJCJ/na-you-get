@@ -4005,6 +4005,24 @@ class ProductFeedCard extends StatefulWidget {
 class _ProductFeedCardState extends State<ProductFeedCard> {
   int _page = 0;
 
+  Widget _photoPlaceholder() {
+    return Container(
+      color: Colors.grey.shade100,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.image_not_supported_outlined,
+                size: 44, color: Colors.grey.shade400),
+            const SizedBox(height: 6),
+            Text('No photo',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.product;
@@ -4041,11 +4059,7 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
               child: Stack(
                 children: [
                   if (photos.isEmpty)
-                    Container(
-                      color: Colors.grey.shade100,
-                      child: const Center(
-                          child: Icon(Icons.shopping_bag, size: 48)),
-                    )
+                    _photoPlaceholder()
                   else
                     PageView.builder(
                       itemCount: photos.length,
@@ -4054,11 +4068,21 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                         photos[i],
                         fit: BoxFit.cover,
                         width: double.infinity,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: Colors.grey.shade100,
-                          child: const Center(
-                              child: Icon(Icons.shopping_bag, size: 48)),
-                        ),
+                        errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                        loadingBuilder: (ctx, child, progress) {
+                          if (progress == null) return child;
+                          return Container(
+                            color: Colors.grey.shade100,
+                            child: const Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   if (photos.length > 1)
@@ -4204,7 +4228,7 @@ class ShopProductGrid extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       itemCount: products.length,
       itemBuilder: (ctx, i) => ProductFeedCard(
-        product: products[i] as Map<String, dynamic>,
+        product: Map<String, dynamic>.from(products[i] as Map),
         onBuy: onBuy,
         onDelete: onDelete,
         onOpen: onOpen,
@@ -4610,12 +4634,11 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final data = jsonDecode(res.body) as List;
         final enriched = data.map((p) {
-          return {
-            ...p,
-            'shop_name': shop['shop_name'],
-            'shop_city': shop['city'],
-            'shop_category': shop['category'],
-          };
+          final m = Map<String, dynamic>.from(p as Map);
+          m['shop_name'] = shop['shop_name'];
+          m['shop_city'] = shop['city'];
+          m['shop_category'] = shop['category'];
+          return m;
         }).toList();
         setState(() {
           products = enriched;
