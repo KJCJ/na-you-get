@@ -1239,6 +1239,25 @@ void showAccountSheet(
     onRefreshUser?.call();
   }
 
+  final isAdmin = currentUser != null &&
+      (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true);
+
+  Widget sectionHeader(String label) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ),
+      );
+
   showModalBottomSheet(
     context: context,
     builder: (ctx) => SafeArea(
@@ -1333,6 +1352,90 @@ void showAccountSheet(
                 ),
               ),
               const Divider(height: 24),
+              if (user != null)
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: const Text('My Profile'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProfileScreen(
+                          currentUser: user,
+                          onUserChanged: onUserChanged,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              const Divider(height: 8),
+              sectionHeader('ACTIVITY'),
+ListTile(
+                leading: const Icon(Icons.receipt_long),
+                title: const Text('My Orders'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MyOrdersScreen(currentUser: user),
+                    ),
+                  );
+                },
+              ),
+ListTile(
+                leading: const Icon(Icons.chat_bubble_outline),
+                title: const Text('Messages'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MessagesScreen(currentUser: currentUser!),
+                    ),
+                  );
+                },
+              ),
+              if (isSeller(currentUser) || isAdmin)
+ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: const Text('My Invoices'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: false)),
+                  );
+                },
+              ),
+              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
+                ListTile(
+                  leading: const Icon(Icons.attach_money, color: Color(0xFF1B5E20)),
+                  title: const Text('My Earnings'),
+                  subtitle: const Text('Admin only'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AdminEarningsScreen()),
+                    );
+                  },
+                ),
+              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
+                ListTile(
+                  leading: const Icon(Icons.receipt, color: Color(0xFF1B5E20)),
+                  title: const Text('All Invoices'),
+                  subtitle: const Text('Admin - generate and confirm'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: true)),
+                    );
+                  },
+                ),
+              sectionHeader('SELLER TOOLS'),
               if (shop != null)
                 ListTile(
                   leading: const Icon(Icons.storefront),
@@ -1399,6 +1502,51 @@ void showAccountSheet(
                     }
                   },
                 ),
+              if (shop == null)
+                ListTile(
+                  leading: const Icon(Icons.storefront, color: Color(0xFF1B5E20)),
+                  title: const Text('Start Selling'),
+                  subtitle: const Text('Create your own shop'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final err = await UserSession.becomeSeller();
+                    if (!context.mounted) return;
+                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
+                    if (err == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('You can now sell on NYG')),
+                      );
+                      onUserChanged();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(err)),
+                      );
+                    }
+                  },
+                ),
+              sectionHeader('DELIVERIES'),
+              if (!isRunner(currentUser))
+                ListTile(
+                  leading: const Icon(Icons.directions_run, color: Color(0xFF0D47A1)),
+                  title: const Text('Become a Runner'),
+                  subtitle: const Text('Deliver items and earn'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final err = await UserSession.becomeRunner();
+                    if (!context.mounted) return;
+                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
+                    if (err == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('You can now deliver on NYG')),
+                      );
+                      onUserChanged();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(err)),
+                      );
+                    }
+                  },
+                ),
               if (isRunner(currentUser))
                 ListTile(
                   leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
@@ -1446,131 +1594,8 @@ void showAccountSheet(
                     }
                   },
                 ),
-              if (shop == null)
-                ListTile(
-                  leading: const Icon(Icons.storefront, color: Color(0xFF1B5E20)),
-                  title: const Text('Become a Seller'),
-                  subtitle: const Text('Create your own shop'),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    final err = await UserSession.becomeSeller();
-                    if (!context.mounted) return;
-                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
-                    if (err == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('You can now sell on NYG')),
-                      );
-                      onUserChanged();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(err)),
-                      );
-                    }
-                  },
-                ),
-              if (!isRunner(currentUser))
-                ListTile(
-                  leading: const Icon(Icons.directions_run, color: Color(0xFF0D47A1)),
-                  title: const Text('Become a Runner'),
-                  subtitle: const Text('Deliver items and earn'),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    final err = await UserSession.becomeRunner();
-                    if (!context.mounted) return;
-                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
-                    if (err == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('You can now deliver on NYG')),
-                      );
-                      onUserChanged();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(err)),
-                      );
-                    }
-                  },
-                ),
-              if (user != null)
-                ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: const Text('View Profile'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProfileScreen(
-                          currentUser: user,
-                          onUserChanged: onUserChanged,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.receipt_long),
-                title: const Text('My Orders'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => MyOrdersScreen(currentUser: user),
-                    ),
-                  );
-                },
-              ),
-              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
-                ListTile(
-                  leading: const Icon(Icons.attach_money, color: Color(0xFF1B5E20)),
-                  title: const Text('My Earnings'),
-                  subtitle: const Text('Admin only'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AdminEarningsScreen()),
-                    );
-                  },
-                ),
-              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
-                ListTile(
-                  leading: const Icon(Icons.receipt, color: Color(0xFF1B5E20)),
-                  title: const Text('All Invoices'),
-                  subtitle: const Text('Admin - generate and confirm'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: true)),
-                    );
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.description_outlined),
-                title: const Text('My Invoices'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: false)),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.chat_bubble_outline),
-                title: const Text('Messages'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => MessagesScreen(currentUser: currentUser!),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
+              sectionHeader('SETTINGS'),
+ListTile(
                 leading: const Icon(Icons.edit),
                 title: const Text('Edit Profile'),
                 onTap: () {
@@ -1586,7 +1611,7 @@ void showAccountSheet(
                   );
                 },
               ),
-              ListTile(
+ListTile(
                 leading: const Icon(Icons.lock_outline),
                 title: const Text('Change Password'),
                 onTap: () {
@@ -1594,7 +1619,8 @@ void showAccountSheet(
                   showChangePasswordDialog(context);
                 },
               ),
-              ListTile(
+              const Divider(height: 8),
+ListTile(
                 leading: const Icon(Icons.logout, color: Colors.red),
                 title:
                     const Text('Sign Out', style: TextStyle(color: Colors.red)),
