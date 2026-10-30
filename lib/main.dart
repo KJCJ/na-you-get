@@ -5047,7 +5047,6 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         surfaceTintColor: _pageBackground,
         foregroundColor: _pageTextColour,
         elevation: 0,
-        title: Text(shop['shop_name'] ?? 'Shop'),
         actions: [
           if (_isOwner)
             IconButton(
@@ -5204,6 +5203,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                                   p['id'], p['title'] ?? 'this product')
                               : null,
                           isOwner: _isOwner,
+                          themeColour: _headerColour,
                           sellerUserId: product['seller_user_id'],
                         ),
                       ),
@@ -5950,6 +5950,7 @@ class ProductDetailScreen extends StatelessWidget {
   final void Function(Map<String, dynamic> product)? onDelete;
   final bool isOwner;
   final int? sellerUserId;
+  final Color? themeColour;
 
   const ProductDetailScreen({
     super.key,
@@ -5958,12 +5959,26 @@ class ProductDetailScreen extends StatelessWidget {
     this.onDelete,
     this.isOwner = false,
     this.sellerUserId,
+    this.themeColour,
   });
+
+  Color get _accent => themeColour ?? const Color(0xFF1B5E20);
+
+  Color get _onAccent =>
+      ThemeData.estimateBrightnessForColor(_accent) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(product['title'] ?? 'Product')),
+      appBar: AppBar(
+        backgroundColor: _accent,
+        foregroundColor: _onAccent,
+        surfaceTintColor: _accent,
+        elevation: 0,
+        title: Text(product['title'] ?? 'Product'),
+      ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -6124,8 +6139,8 @@ class ProductDetailScreen extends StatelessWidget {
               Expanded(
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B5E20),
-                    foregroundColor: Colors.white,
+                    backgroundColor: _accent,
+                    foregroundColor: _onAccent,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   icon: const Icon(Icons.shopping_cart),
