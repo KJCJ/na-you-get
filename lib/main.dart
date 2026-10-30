@@ -1198,6 +1198,17 @@ Color parseThemeColour(String? hex, {Color fallback = const Color(0xFFE8F5E9)}) 
   return Color(v);
 }
 
+const Map<String, String> kShopPalette = {
+  '#000000': 'Black',
+  '#FFFFFF': 'White',
+  '#1B5E20': 'NYG Green',
+  '#03A9F4': 'Blue',
+  '#F44336': 'Red',
+  '#FF9800': 'Orange',
+  '#9C27B0': 'Purple',
+  '#F5F5F5': 'Light Grey',
+};
+
 void showAccountSheet(
   BuildContext context,
   Map<String, dynamic>? currentUser,
@@ -6598,6 +6609,55 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
           ? Colors.white
           : Colors.black87;
 
+  Widget _buildColourPicker({
+    required String label,
+    required String selectedHex,
+    required ValueChanged<String> onPick,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: kShopPalette.keys.map((hex) {
+            final colour = parseThemeColour(hex, fallback: Colors.white);
+            final isSelected = selectedHex.toUpperCase() == hex.toUpperCase();
+            final isDark =
+                ThemeData.estimateBrightnessForColor(colour) == Brightness.dark;
+            return GestureDetector(
+              onTap: () => onPick(hex),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: colour,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFF1B5E20)
+                        : Colors.grey.shade300,
+                    width: isSelected ? 3 : 1,
+                  ),
+                ),
+                child: isSelected
+                    ? Icon(Icons.check,
+                        size: 18, color: isDark ? Colors.white : Colors.black87)
+                    : null,
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
   Future<void> fetchShopProducts() async {
     setState(() => isLoading = true);
     try {
@@ -6628,10 +6688,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
         TextEditingController(text: merchant['city'] ?? 'Freetown');
     String? currentLogo = merchant['logo_url'];
     String selectedCategory = merchant['category'] ?? 'Other';
-    final themeController =
-        TextEditingController(text: merchant['theme_colour'] ?? '');
-    final bgController =
-        TextEditingController(text: merchant['background_colour'] ?? '');
+    String selectedTheme = merchant['theme_colour'] ?? '#1B5E20';
+    String selectedBg = merchant['background_colour'] ?? '#FFFFFF';
 
     showDialog(
       context: context,
@@ -6704,43 +6762,16 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                     ),
                   ),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: themeController,
-                  onChanged: (_) => setDialogState(() {}),
-                  decoration: const InputDecoration(
-                    labelText: 'Header Colour (hex)',
-                    hintText: '#1B5E20',
-                    border: OutlineInputBorder(),
-                  ),
+                _buildColourPicker(
+                  label: 'Header Colour',
+                  selectedHex: selectedTheme,
+                  onPick: (hex) => setDialogState(() => selectedTheme = hex),
                 ),
-                const SizedBox(height: 8),
-                Container(
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: parseThemeColour(themeController.text),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: bgController,
-                  onChanged: (_) => setDialogState(() {}),
-                  decoration: const InputDecoration(
-                    labelText: 'Background Colour (hex)',
-                    hintText: '#FFFFFF',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: parseThemeColour(bgController.text,
-                        fallback: Colors.white),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
+                const SizedBox(height: 14),
+                _buildColourPicker(
+                  label: 'Background Colour',
+                  selectedHex: selectedBg,
+                  onPick: (hex) => setDialogState(() => selectedBg = hex),
                 ),
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
@@ -6788,12 +6819,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
                     'city': cityController.text,
                     'category': selectedCategory,
                     'logo_url': currentLogo,
-                    'theme_colour': themeController.text.trim().isEmpty
-                        ? null
-                        : themeController.text.trim(),
-                    'background_colour': bgController.text.trim().isEmpty
-                        ? null
-                        : bgController.text.trim(),
+                    'theme_colour': selectedTheme,
+                    'background_colour': selectedBg,
                   }),
                 );
 
