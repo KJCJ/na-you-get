@@ -495,35 +495,44 @@ class UserSession {
     final token = prefs.getString('user_token');
     if (token == null) return false;
 
-    final res = await http.put(
-      Uri.parse('$baseUrl/auth/me'),
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(updates),
-    );
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/auth/me'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(updates),
+      ).timeout(const Duration(seconds: 10));
 
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = jsonDecode(res.body);
-      final user = data['user'];
-      await prefs.setString('user_name', user['name']);
-      await prefs.setString('user_phone', user['phone_number']);
-      if (user['is_seller'] != null) {
-        await prefs.setBool(_isSellerKey, user['is_seller'] == 1 || user['is_seller'] == true);
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body);
+        final user = data['user'];
+        await prefs.setString('user_name', user['name']);
+        await prefs.setString('user_phone', user['phone_number']);
+        if (user['is_seller'] != null) {
+          await prefs.setBool(_isSellerKey, user['is_seller'] == 1 || user['is_seller'] == true);
+        }
+        if (user['is_runner'] != null) {
+          await prefs.setBool(_isRunnerKey, user['is_runner'] == 1 || user['is_runner'] == true);
+        }
+        if (user['is_admin'] != null) {
+          await prefs.setBool('user_is_admin', user['is_admin'] == 1 || user['is_admin'] == true);
+        }
+        if (user['vehicle_type'] != null) {
+          await prefs.setString('user_vehicle_type', user['vehicle_type']);
+        }
+        if (user['is_online'] != null) {
+          await prefs.setBool('user_is_online',
+              user['is_online'] == 1 || user['is_online'] == true);
+        }
+        if (user['photo_url'] != null) {
+          await prefs.setString('user_photo', user['photo_url']);
+        }
+        return true;
       }
-      if (user['is_runner'] != null) {
-        await prefs.setBool(_isRunnerKey, user['is_runner'] == 1 || user['is_runner'] == true);
-      }
-      if (user['is_admin'] != null) {
-        await prefs.setBool('user_is_admin', user['is_admin'] == 1 || user['is_admin'] == true);
-      }
-      if (user['photo_url'] != null) {
-        await prefs.setString('user_photo', user['photo_url']);
-      }
-      return true;
-    }
+    } catch (_) {}
     return false;
   }
 
@@ -3653,17 +3662,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _load();
   }
 
-  Future<void> _saveRunnerSetting(Map<String, dynamic> patch) async {
+  Future<void> _saveRunnerSetting(
+      Map<String, dynamic> patch, String successMessage) async {
     final ok = await UserSession.update(patch);
     if (!mounted) return;
-    if (!ok) {
+    if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Could not save - check your connection')),
+        SnackBar(
+          content: Text(successMessage),
+          backgroundColor: const Color(0xFF1B5E20),
+          duration: const Duration(seconds: 2),
+        ),
       );
+      widget.onUserChanged();
       return;
     }
-    widget.onUserChanged();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Could not save your settings'),
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () => _saveRunnerSetting(patch, successMessage),
+        ),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -3862,7 +3884,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           onChanged: (v) {
                             if (v == null) return;
                             setState(() => _vehicleType = v);
-                            _saveRunnerSetting({'vehicle_type': v});
+                            _saveRunnerSetting(
+                                {'vehicle_type': v}, 'Vehicle: $v');
                           },
                         ),
                       ],
@@ -3882,7 +3905,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       value: _isOnline,
                       onChanged: (v) {
                         setState(() => _isOnline = v);
-                        _saveRunnerSetting({'is_online': v ? 1 : 0});
+                        _saveRunnerSetting(
+                            {'is_online': v ? 1 : 0},
+                            v ? 'You are now Online' : 'You are now Offline');
                       },
                     ),
                   ],
