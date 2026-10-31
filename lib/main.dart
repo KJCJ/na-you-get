@@ -329,6 +329,12 @@ class UserSession {
     if (user['is_admin'] != null) {
       await prefs.setBool('user_is_admin', user['is_admin'] == 1 || user['is_admin'] == true);
     }
+    if (user['vehicle_type'] != null) {
+      await prefs.setString('user_vehicle_type', user['vehicle_type']);
+    }
+    if (user['is_online'] != null) {
+      await prefs.setBool('user_is_online', user['is_online'] == 1 || user['is_online'] == true);
+    }
     if (user['photo_url'] != null) {
       await prefs.setString(_photoKey, user['photo_url']);
     }
@@ -348,6 +354,8 @@ class UserSession {
       'is_seller': prefs.getBool(_isSellerKey) ?? false,
       'is_runner': prefs.getBool(_isRunnerKey) ?? false,
       'is_admin': prefs.getBool('user_is_admin') ?? false,
+      'vehicle_type': prefs.getString('user_vehicle_type'),
+      'is_online': prefs.getBool('user_is_online') ?? false,
       'photo_url': prefs.getString(_photoKey),
       'token': token,
     };
@@ -364,6 +372,8 @@ class UserSession {
     await prefs.remove(_isSellerKey);
     await prefs.remove(_isRunnerKey);
     await prefs.remove('user_is_admin');
+    await prefs.remove('user_vehicle_type');
+    await prefs.remove('user_is_online');
   }
 
   static Future<String?> becomeSeller() async {
@@ -3626,6 +3636,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<dynamic> _products = [];
   List<dynamic> _deliveries = [];
   bool _loading = true;
+  String _vehicleType = 'Motorbike';
+  bool _isOnline = false;
 
   bool get _isSellerUser => isSeller(widget.currentUser);
   bool get _isRunnerUser => isRunner(widget.currentUser);
@@ -3633,7 +3645,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    final u = widget.currentUser;
+    if (u != null) {
+      _vehicleType = (u['vehicle_type'] ?? 'Motorbike').toString();
+      _isOnline = u['is_online'] == 1 || u['is_online'] == true;
+    }
     _load();
+  }
+
+  Future<void> _saveRunnerSetting(Map<String, dynamic> patch) async {
+    final ok = await UserSession.update(patch);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Could not save - check your connection')),
+      );
+      return;
+    }
+    widget.onUserChanged();
   }
 
   Future<void> _load() async {
@@ -3792,6 +3822,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(width: 10),
                   _statBox('SLE $_earned', 'Earned'),
                 ],
+              ),
+              const SizedBox(height: 24),
+              const Text('Runner Settings',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 24,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        const Text('Vehicle Type',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        DropdownButton<String>(
+                          value: _vehicleType,
+                          underline: const SizedBox.shrink(),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'Motorbike', child: Text('Motorbike')),
+                            DropdownMenuItem(
+                                value: 'Bicycle', child: Text('Bicycle')),
+                            DropdownMenuItem(value: 'Car', child: Text('Car')),
+                            DropdownMenuItem(
+                                value: 'On Foot', child: Text('On Foot')),
+                          ],
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() => _vehicleType = v);
+                            _saveRunnerSetting({'vehicle_type': v});
+                          },
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Available for Deliveries'),
+                      subtitle: Text(
+                        _isOnline ? 'Online' : 'Offline',
+                        style: TextStyle(
+                          color: _isOnline
+                              ? const Color(0xFF1B5E20)
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                      value: _isOnline,
+                      onChanged: (v) {
+                        setState(() => _isOnline = v);
+                        _saveRunnerSetting({'is_online': v ? 1 : 0});
+                      },
+                    ),
+                  ],
+                ),
               ),
             ],
             if (_isSellerUser) ...[
@@ -7379,9 +7474,19 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
   Future<void> fetchJobs() async {
     setState(() => _loadingJobs = true);
     try {
-      final res = await http.get(Uri.parse('$baseUrl/deliveries/available/'));
+      final user = await UserSession.load();
+      final res = await http.get(
+        Uri.parse('$baseUrl/deliveries/available/'),
+        headers: {
+          'x-api-key': apiKey,
+          if (user?['token'] != null)
+            'Authorization': 'Bearer ${user!['token']}',
+        },
+      );
       if (res.statusCode >= 200 && res.statusCode < 300) {
         setState(() => jobs = jsonDecode(res.body));
+      } else {
+        setState(() => jobs = []);
       }
     } catch (_) {}
     if (mounted) setState(() => _loadingJobs = false);
