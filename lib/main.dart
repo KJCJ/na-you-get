@@ -17,6 +17,7 @@ const Color kNyqOchre = Color(0xFFD4A017);
 const Color kNyqSand = Color(0xFFFAF7F2);
 const Color kNyqInk = Color(0xFF231F1C);
 const Color kNyqAccentDeep = Color(0xFF072E66);
+const Color kNyqGreen = Color(0xFF1B5E20);
 const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk';
 
 // ==========================================
@@ -296,21 +297,31 @@ class NaYouGetApp extends StatelessWidget {
           surfaceTintColor: Colors.transparent,
           elevation: 6,
           height: 68,
-          indicatorColor: kNyqAccent.withAlpha(38),
+          indicatorColor: kNyqGreen.withAlpha(38),
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           iconTheme: WidgetStateProperty.resolveWith((states) {
             final on = states.contains(WidgetState.selected);
             return IconThemeData(
                 size: 24,
-                color: on ? kNyqAccent : const Color(0xFF9A9088));
+                color: on ? kNyqGreen : const Color(0xFF9A9088));
           }),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final on = states.contains(WidgetState.selected);
             return TextStyle(
               fontSize: 11,
               fontWeight: on ? FontWeight.w700 : FontWeight.w500,
-              color: on ? kNyqAccent : const Color(0xFF9A9088),
+              color: on ? kNyqGreen : const Color(0xFF9A9088),
             );
+          }),
+        ),
+        switchTheme: SwitchThemeData(
+          thumbColor: WidgetStateProperty.resolveWith((states) {
+            final on = states.contains(WidgetState.selected);
+            return on ? kNyqGreen : Colors.grey.shade400;
+          }),
+          trackColor: WidgetStateProperty.resolveWith((states) {
+            final on = states.contains(WidgetState.selected);
+            return on ? kNyqGreen.withAlpha(90) : Colors.grey.shade300;
           }),
         ),
         dividerTheme: const DividerThemeData(
@@ -3693,7 +3704,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(successMessage),
-          backgroundColor: const Color(0xFF1B5E20),
+          backgroundColor: kNyqGreen,
           duration: const Duration(seconds: 2),
         ),
       );
@@ -4496,13 +4507,13 @@ class KenteStripe extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const colours = [
+      kNyqGreen,
+      Colors.white,
       kNyqAccent,
       kNyqOchre,
-      kNyqInk,
-      kNyqOchre,
       kNyqAccent,
-      Color(0xFF1565C0),
-      kNyqOchre,
+      Colors.white,
+      kNyqGreen,
     ];
     return SizedBox(
       height: height,
