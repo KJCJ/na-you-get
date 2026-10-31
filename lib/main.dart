@@ -244,18 +244,57 @@ class NaYouGetApp extends StatelessWidget {
       title: 'Na You Get (NYG)',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        useMaterial3: true,
+        scaffoldBackgroundColor: Colors.white,
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF1B5E20),
           primary: const Color(0xFF1B5E20),
           secondary: const Color(0xFF0D47A1),
+          surface: Colors.white,
         ),
-        useMaterial3: true,
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
-          elevation: 0,
-          iconTheme: IconThemeData(color: Colors.black),
+          surfaceTintColor: Colors.white,
+          foregroundColor: Color(0xFF1C1C1E),
+          elevation: 1.5,
+          scrolledUnderElevation: 1.5,
+          shadowColor: Color(0x12000000),
+          centerTitle: false,
+          titleTextStyle: TextStyle(
+            color: Color(0xFF1C1C1E),
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+          iconTheme: IconThemeData(color: Color(0xFF1C1C1E)),
         ),
-        scaffoldBackgroundColor: const Color(0xFFF7F9F7),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          elevation: 3,
+          height: 68,
+          indicatorColor: const Color(0x1F1B5E20),
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            final on = states.contains(WidgetState.selected);
+            return IconThemeData(
+              size: 24,
+              color: on ? const Color(0xFF1B5E20) : const Color(0xFF9E9E9E),
+            );
+          }),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            final on = states.contains(WidgetState.selected);
+            return TextStyle(
+              fontSize: 11,
+              fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+              color: on ? const Color(0xFF1B5E20) : const Color(0xFF9E9E9E),
+            );
+          }),
+        ),
+        dividerTheme: const DividerThemeData(
+          color: Color(0xFFEDEDED),
+          thickness: 1,
+          space: 1,
+        ),
       ),
       home: const MainNavigationScreen(),
     );
@@ -3973,12 +4012,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.shopping_bag_outlined), label: 'Shopping'),
-          NavigationDestination(icon: Icon(Icons.store), label: 'Shops'),
+              icon: Icon(Icons.shopping_bag_outlined),
+              selectedIcon: Icon(Icons.shopping_bag),
+              label: 'Shopping'),
           NavigationDestination(
-              icon: Icon(Icons.location_on_outlined), label: 'Marketplace'),
+              icon: Icon(Icons.store_outlined),
+              selectedIcon: Icon(Icons.store),
+              label: 'Shops'),
           NavigationDestination(
-              icon: Icon(Icons.directions_run), label: 'Runner'),
+              icon: Icon(Icons.location_on_outlined),
+              selectedIcon: Icon(Icons.location_on),
+              label: 'Marketplace'),
+          NavigationDestination(
+              icon: Icon(Icons.directions_run_outlined),
+              selectedIcon: Icon(Icons.directions_run),
+              label: 'Runner'),
         ],
       ),
         ),
@@ -4056,12 +4104,12 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: widget.cardColour ?? Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(
-            color: Colors.black12,
-            blurRadius: 14,
-            offset: Offset(0, 6),
+            color: Color(0x14000000),
+            blurRadius: 24,
+            offset: Offset(0, 10),
           ),
         ],
       ),
@@ -4142,8 +4190,8 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                   Text(
                     'SLE ${item['price_sle']}',
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
                       color: accent,
                     ),
                   ),
@@ -4163,18 +4211,48 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                   Row(
                     children: [
                       Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: accent,
-                            foregroundColor: onAccent,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                accent,
+                                Color.lerp(accent, Colors.white, 0.18)!,
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: accent.withAlpha(70),
+                                blurRadius: 12,
+                                offset: const Offset(0, 5),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
                               borderRadius: BorderRadius.circular(12),
+                              onTap: () => widget.onBuy(item),
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.shopping_cart,
+                                        size: 18, color: onAccent),
+                                    const SizedBox(width: 8),
+                                    Text('Buy Now',
+                                        style: TextStyle(
+                                            color: onAccent,
+                                            fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                          icon: const Icon(Icons.shopping_cart, size: 18),
-                          label: const Text('Buy Now'),
-                          onPressed: () => widget.onBuy(item),
                         ),
                       ),
                       if (widget.onEdit != null) ...[
@@ -4199,6 +4277,61 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? message;
+
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: const BoxDecoration(
+                color: Color(0xFFF1F7F1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 44, color: const Color(0xFF1B5E20)),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1C1C1E),
+              ),
+            ),
+            if (message != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                message!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 14, height: 1.4, color: Colors.grey.shade600),
+              ),
+            ],
           ],
         ),
       ),
@@ -4231,23 +4364,10 @@ class ShopProductGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (products.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.storefront_outlined,
-                size: 80, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              'No items listed yet.',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade700,
-              ),
-            ),
-          ],
-        ),
+      return const EmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: 'No products yet',
+        message: 'Check back soon!',
       );
     }
 
@@ -6893,21 +7013,33 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     onChanged: (v) => setState(() => searchQuery = v),
                     decoration: InputDecoration(
                       hintText: 'Search products, shops, categories...',
-                      prefixIcon: const Icon(Icons.search),
+                      hintStyle:
+                          TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                      prefixIcon:
+                          Icon(Icons.search, color: Colors.grey.shade500),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(
+                            color: Color(0xFF1B5E20), width: 1.5),
                       ),
                       filled: true,
-                      fillColor: Colors.white,
-                      isDense: true,
+                      fillColor: const Color(0xFFF5F5F5),
                       contentPadding: const EdgeInsets.symmetric(
-                          vertical: 12, horizontal: 12),
+                          vertical: 18, horizontal: 16),
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 SizedBox(
-                  height: 40,
+                  height: 44,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -6920,6 +7052,21 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         child: ChoiceChip(
                           label: Text(cat),
                           selected: selected,
+                          showCheckmark: false,
+                          shape: const StadiumBorder(),
+                          backgroundColor: Colors.white,
+                          selectedColor: const Color(0xFF1B5E20),
+                          side: selected
+                              ? BorderSide.none
+                              : BorderSide(color: Colors.grey.shade300),
+                          labelStyle: TextStyle(
+                            fontSize: 13,
+                            fontWeight:
+                                selected ? FontWeight.w700 : FontWeight.w500,
+                            color: selected
+                                ? Colors.white
+                                : Colors.grey.shade700,
+                          ),
                           onSelected: (val) {
                             setState(() => selectedFilterCategory = cat);
                           },
@@ -6932,27 +7079,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 const Divider(height: 1),
                 Expanded(
                   child: visible.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.storefront_outlined,
-                                  size: 80, color: Colors.grey.shade400),
-                              const SizedBox(height: 16),
-                              Text(
-                                searchQuery.isNotEmpty
-                                    ? 'No products match "$searchQuery".'
-                                    : selectedFilterCategory == 'All'
-                                        ? 'No items listed yet in Sierra Leone.'
-                                        : 'No items in "$selectedFilterCategory".',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
+                      ? EmptyState(
+                          icon: Icons.storefront_outlined,
+                          title: searchQuery.isNotEmpty
+                              ? 'No matches for "$searchQuery"'
+                              : selectedFilterCategory == 'All'
+                                  ? 'No products yet'
+                                  : 'Nothing in "$selectedFilterCategory"',
+                          message: searchQuery.isNotEmpty
+                              ? 'Try a different search.'
+                              : 'Check back soon!',
                         )
                       : ShopProductGrid(
                           products: visible,
