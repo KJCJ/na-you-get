@@ -15,6 +15,7 @@ const Color kNyqTerracotta = Color(0xFFC35A3D);
 const Color kNyqOchre = Color(0xFFD4A017);
 const Color kNyqSand = Color(0xFFFAF7F2);
 const Color kNyqInk = Color(0xFF231F1C);
+const Color kNyqTerracottaDeep = Color(0xFF9C3F27);
 const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk';
 
 // ==========================================
@@ -253,10 +254,10 @@ class NaYouGetApp extends StatelessWidget {
         useMaterial3: true,
         scaffoldBackgroundColor: kNyqSand,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: kNyqBlue,
-          primary: kNyqBlue,
-          secondary: kNyqTerracotta,
-          tertiary: kNyqOchre,
+          seedColor: kNyqTerracotta,
+          primary: kNyqTerracotta,
+          secondary: kNyqOchre,
+          tertiary: kNyqBlueDeep,
           surface: kNyqSand,
         ),
         textTheme: const TextTheme(
@@ -294,19 +295,20 @@ class NaYouGetApp extends StatelessWidget {
           surfaceTintColor: Colors.transparent,
           elevation: 6,
           height: 68,
-          indicatorColor: kNyqBlue.withAlpha(30),
+          indicatorColor: kNyqTerracotta.withAlpha(38),
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           iconTheme: WidgetStateProperty.resolveWith((states) {
             final on = states.contains(WidgetState.selected);
             return IconThemeData(
-                size: 24, color: on ? kNyqBlue : const Color(0xFF9A9088));
+                size: 24,
+                color: on ? kNyqTerracotta : const Color(0xFF9A9088));
           }),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final on = states.contains(WidgetState.selected);
             return TextStyle(
               fontSize: 11,
               fontWeight: on ? FontWeight.w700 : FontWeight.w500,
-              color: on ? kNyqBlue : const Color(0xFF9A9088),
+              color: on ? kNyqTerracotta : const Color(0xFF9A9088),
             );
           }),
         ),
@@ -4256,9 +4258,7 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: const Border(
-          top: BorderSide(color: kNyqOchre, width: 2),
-        ),
+        border: Border.all(color: const Color(0xFFEFE9E0)),
         boxShadow: const [
           BoxShadow(
             color: Color(0x1A5A3A28),
@@ -4272,6 +4272,7 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const KenteStripe(),
             SizedBox(
               height: 260,
               width: double.infinity,
@@ -4336,7 +4337,12 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                   Text(
                     item['title'] ?? '',
                     style: const TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.bold),
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
+                      color: kNyqInk,
+                      height: 1.2,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -4368,14 +4374,14 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                              colors: [kNyqBlue, kNyqBlueDeep],
+                              colors: [kNyqTerracotta, kNyqTerracottaDeep],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: kNyqBlue.withAlpha(80),
+                                color: kNyqTerracotta.withAlpha(85),
                                 blurRadius: 14,
                                 offset: const Offset(0, 6),
                               ),
@@ -4437,37 +4443,75 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
 
 class KentePainter extends CustomPainter {
   final Color colour;
-  const KentePainter({this.colour = kNyqTerracotta});
+  final Color accent;
+  const KentePainter({this.colour = kNyqTerracotta, this.accent = kNyqOchre});
 
   @override
   void paint(Canvas canvas, Size size) {
     final stroke = Paint()
-      ..color = colour.withAlpha(13)
+      ..color = colour.withAlpha(17)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    final bead = Paint()..color = colour.withAlpha(20);
+      ..strokeWidth = 1.3;
+    final accentStroke = Paint()
+      ..color = accent.withAlpha(22)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3;
+    final bead = Paint()..color = colour.withAlpha(28);
 
-    const step = 48.0;
+    const step = 56.0;
     int row = 0;
     for (double y = 0; y < size.height + step; y += step) {
       final shift = row.isEven ? 0.0 : step / 2;
       for (double x = -step; x < size.width + step; x += step) {
         final cx = x + shift;
-        final path = Path()
-          ..moveTo(cx, y - 7)
-          ..lineTo(cx + 7, y)
-          ..lineTo(cx, y + 7)
-          ..lineTo(cx - 7, y)
+        final diamond = Path()
+          ..moveTo(cx, y - 9)
+          ..lineTo(cx + 9, y)
+          ..lineTo(cx, y + 9)
+          ..lineTo(cx - 9, y)
           ..close();
-        canvas.drawPath(path, stroke);
-        canvas.drawCircle(Offset(cx + step / 2, y + step / 2), 1.5, bead);
+        canvas.drawPath(diamond, row.isEven ? stroke : accentStroke);
+
+        final mx = cx + step / 2;
+        final my = y + step / 2;
+        canvas.drawLine(Offset(mx - 4, my), Offset(mx + 4, my), accentStroke);
+        canvas.drawLine(Offset(mx, my - 4), Offset(mx, my + 4), accentStroke);
+
+        canvas.drawCircle(Offset(cx, my), 1.7, bead);
       }
       row++;
     }
   }
 
   @override
-  bool shouldRepaint(covariant KentePainter old) => old.colour != colour;
+  bool shouldRepaint(covariant KentePainter old) =>
+      old.colour != colour || old.accent != accent;
+}
+
+class KenteStripe extends StatelessWidget {
+  final double height;
+  const KenteStripe({super.key, this.height = 7});
+
+  @override
+  Widget build(BuildContext context) {
+    const colours = [
+      kNyqTerracotta,
+      kNyqOchre,
+      kNyqInk,
+      kNyqOchre,
+      kNyqTerracotta,
+      Color(0xFF1B5E20),
+      kNyqOchre,
+    ];
+    return SizedBox(
+      height: height,
+      child: Row(
+        children: colours
+            .map((c) => Expanded(child: Container(color: c)))
+            .toList(),
+      ),
+    );
+  }
 }
 
 class KenteBackground extends StatelessWidget {
@@ -6554,7 +6598,10 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                               color: bg,
                               borderRadius: BorderRadius.circular(16),
                               border: const Border(
-                                top: BorderSide(color: kNyqOchre, width: 2),
+                                top: BorderSide(color: kNyqTerracotta, width: 3),
+                                left: BorderSide(color: Color(0xFFEFE9E0)),
+                                right: BorderSide(color: Color(0xFFEFE9E0)),
+                                bottom: BorderSide(color: Color(0xFFEFE9E0)),
                               ),
                               boxShadow: const [
                                 BoxShadow(
@@ -6970,14 +7017,14 @@ class ProductDetailScreen extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [kNyqBlue, kNyqBlueDeep],
+                      colors: [kNyqTerracotta, kNyqTerracottaDeep],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: kNyqBlue.withAlpha(80),
+                        color: kNyqTerracotta.withAlpha(85),
                         blurRadius: 14,
                         offset: const Offset(0, 6),
                       ),
