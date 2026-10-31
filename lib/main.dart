@@ -260,11 +260,19 @@ class NaYouGetApp extends StatelessWidget {
           surface: kNyqSand,
         ),
         textTheme: const TextTheme(
-          headlineSmall:
-              TextStyle(fontWeight: FontWeight.w800, color: kNyqInk),
-          titleLarge: TextStyle(fontWeight: FontWeight.w700, color: kNyqInk),
-          titleMedium: TextStyle(fontWeight: FontWeight.w700, color: kNyqInk),
-          bodyMedium: TextStyle(height: 1.4, color: kNyqInk),
+          headlineSmall: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: kNyqInk,
+              letterSpacing: -0.5),
+          titleLarge: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: kNyqInk,
+              letterSpacing: -0.2),
+          titleMedium:
+              TextStyle(fontWeight: FontWeight.w600, color: kNyqInk),
+          bodyMedium: TextStyle(
+              height: 1.5, fontWeight: FontWeight.w400, color: kNyqInk),
+          bodySmall: TextStyle(height: 1.4, color: Color(0xFF6B615A)),
         ),
         appBarTheme: const AppBarTheme(
           backgroundColor: kNyqSand,
@@ -2334,7 +2342,7 @@ class _ChatBubbleState extends State<ChatBubble> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: const Color(0xFF1B5E20),
+                color: kNyqBlue,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 3)),
@@ -4141,7 +4149,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       body: KenteBackground(
         child: IndexedStack(index: _currentIndex, children: screens),
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: NavigationBar(
+            elevation: 8,
+            backgroundColor: Colors.white,
+            shadowColor: const Color(0x33000000),
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
         destinations: const [
@@ -4162,11 +4177,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               selectedIcon: Icon(Icons.directions_run),
               label: 'Runner'),
         ],
-      ),
+          ),
+        ),
+        ),
         ),
         Positioned(
           right: 16,
-          bottom: 90,
+          bottom: 108,
           child: ChatBubble(currentUser: _currentUser),
         ),
       ],
@@ -4237,7 +4254,7 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
       margin: const EdgeInsets.only(bottom: 14),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: widget.cardColour ?? Colors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: const Border(
           top: BorderSide(color: kNyqOchre, width: 2),
@@ -4312,7 +4329,7 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -6950,17 +6967,46 @@ class ProductDetailScreen extends StatelessWidget {
                 const SizedBox(width: 8),
               ],
               Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _accent,
-                    foregroundColor: _onAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [kNyqBlue, kNyqBlueDeep],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: kNyqBlue.withAlpha(80),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
-                  icon: const Icon(Icons.shopping_cart),
-                  label: const Text('Buy Now'),
-                  onPressed: () {
-                    onBuy(product);
-                  },
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        onBuy(product);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(Icons.shopping_cart,
+                                size: 18, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text('Buy Now',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
