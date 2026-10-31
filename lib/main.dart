@@ -5121,6 +5121,17 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     }
   }
 
+  Future<void> _openWhatsApp() async {
+    final digits = (shop['whatsapp_number'] ?? '')
+        .toString()
+        .replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return;
+    final uri = Uri.parse('https://wa.me/$digits');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   Future<void> _openEditProfile() async {
     final u = _currentUser;
     if (u == null) return;
@@ -5378,6 +5389,11 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     String selectedCategory = shop['category'] ?? 'Other';
     String selectedTheme = shop['theme_colour'] ?? '#1B5E20';
     String selectedBg = shop['background_colour'] ?? '#FFFFFF';
+    final bioController =
+        TextEditingController(text: shop['description'] ?? '');
+    final whatsappController =
+        TextEditingController(text: shop['whatsapp_number'] ?? '');
+    String? currentBanner = shop['banner_url'];
 
     showDialog(
       context: context,
@@ -5420,6 +5436,27 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
+                TextField(
+                  controller: bioController,
+                  maxLines: 3,
+                  maxLength: 160,
+                  decoration: const InputDecoration(
+                    labelText: 'Shop Bio',
+                    hintText: 'Tell customers about your shop',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: whatsappController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'WhatsApp Number',
+                    hintText: '+232 78 839002',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -5443,6 +5480,37 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                       child: Image.network(
                         currentLogo ?? '',
                         height: 100,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final url = await pickAndUploadImage(context);
+                      if (url != null) {
+                        setDialogState(() => currentBanner = url);
+                      }
+                    },
+                    icon: const Icon(Icons.wallpaper),
+                    label: Text((currentBanner ?? '').isEmpty
+                        ? 'Upload Banner Image'
+                        : 'Change Banner'),
+                  ),
+                ),
+                if ((currentBanner ?? '').isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        currentBanner ?? '',
+                        height: 90,
+                        width: double.infinity,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) =>
                             const SizedBox.shrink(),
@@ -5510,6 +5578,9 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'logo_url': currentLogo,
                     'theme_colour': selectedTheme,
                     'background_colour': selectedBg,
+                    'description': bioController.text.trim(),
+                    'whatsapp_number': whatsappController.text.trim(),
+                    'banner_url': currentBanner,
                   }),
                 );
 
@@ -5588,6 +5659,14 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       ),
       body: Column(
         children: [
+          if ((shop['banner_url'] ?? '').toString().isNotEmpty)
+            Image.network(
+              shop['banner_url'].toString(),
+              width: double.infinity,
+              height: 150,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
           Container(
             padding: const EdgeInsets.all(16),
             color: _headerColour,
@@ -5638,8 +5717,28 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                         ],
                       ),
                     ),
+                    if ((shop['whatsapp_number'] ?? '')
+                        .toString()
+                        .isNotEmpty)
+                      IconButton(
+                        icon: const Icon(Icons.chat),
+                        tooltip: 'Chat on WhatsApp',
+                        onPressed: _openWhatsApp,
+                      ),
                   ],
                 ),
+                if ((shop['description'] ?? '').toString().trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      shop['description'].toString().trim(),
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.35,
+                        color: _headerTextColour.withAlpha(200),
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 if (shop['city'] != null)
                   Row(
