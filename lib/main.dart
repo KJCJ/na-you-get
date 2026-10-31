@@ -4588,6 +4588,72 @@ class EmptyState extends StatelessWidget {
   }
 }
 
+class HexColourField extends StatefulWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const HexColourField(
+      {super.key, required this.value, required this.onChanged});
+
+  @override
+  State<HexColourField> createState() => _HexColourFieldState();
+}
+
+class _HexColourFieldState extends State<HexColourField> {
+  late final TextEditingController _c =
+      TextEditingController(text: widget.value);
+
+  @override
+  void didUpdateWidget(covariant HexColourField old) {
+    super.didUpdateWidget(old);
+    if (widget.value.toUpperCase() != _c.text.toUpperCase()) {
+      _c.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  void _submit(String raw) {
+    var v = raw.trim().toUpperCase();
+    if (!v.startsWith('#')) v = '#$v';
+    if (RegExp(r'^#[0-9A-F]{6}$').hasMatch(v)) {
+      widget.onChanged(v);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _c,
+      onSubmitted: _submit,
+      onEditingComplete: () => _submit(_c.text),
+      textCapitalization: TextCapitalization.characters,
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: 'Hex',
+        hintText: '#C35A3D',
+        border: const OutlineInputBorder(),
+        prefixIcon: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Container(
+            width: 24,
+            decoration: BoxDecoration(
+              color: parseThemeColour(widget.value,
+                  fallback: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ShopProductGrid extends StatelessWidget {
   final List<dynamic> products;
   final void Function(dynamic product) onBuy;
@@ -4775,30 +4841,95 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
     final name = (shop['shop_name'] ?? 'Shop').toString();
     final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: ListTile(
-        leading: (logoUrl != null && logoUrl.toString().isNotEmpty)
-            ? CircleAvatar(
-                backgroundImage: NetworkImage(logoUrl.toString()),
-                child: Text(initial),
-              )
-            : CircleAvatar(
-                backgroundColor: const Color(0xFF1B5E20),
-                child: Text(
-                  initial,
-                  style: const TextStyle(color: Colors.white),
+    final header = parseThemeColour(shop['theme_colour']?.toString());
+    final body = parseThemeColour(
+      shop['background_colour']?.toString(),
+      fallback: Colors.white,
+    );
+    final headerDark =
+        ThemeData.estimateBrightnessForColor(header) == Brightness.dark;
+    final bodyDark =
+        ThemeData.estimateBrightnessForColor(body) == Brightness.dark;
+    final onHeader = headerDark ? Colors.white : Colors.black87;
+    final subBody = bodyDark ? Colors.white70 : Colors.black54;
+    final hasLogo = logoUrl != null && logoUrl.toString().isNotEmpty;
+
+    return GestureDetector(
+      onTap: () => _openShop(shop),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: header,
+          borderRadius: BorderRadius.circular(16),
+          border: const Border(
+            top: BorderSide(color: kNyqTerracotta, width: 3),
+            left: BorderSide(color: Color(0xFFEFE9E0)),
+            right: BorderSide(color: Color(0xFFEFE9E0)),
+            bottom: BorderSide(color: Color(0xFFEFE9E0)),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x1A5A3A28),
+              blurRadius: 18,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(13),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                color: header,
+                padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor:
+                          headerDark ? Colors.white24 : Colors.black12,
+                      backgroundImage:
+                          hasLogo ? NetworkImage(logoUrl.toString()) : null,
+                      child: hasLogo
+                          ? null
+                          : Text(
+                              initial,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: onHeader,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: onHeader,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: onHeader),
+                  ],
                 ),
               ),
-        title: Text(
-          name,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+              Container(
+                color: body,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Text(
+                  '${shop['city'] ?? ''} • ${shop['category'] ?? ''}',
+                  style: TextStyle(fontSize: 13, color: subBody),
+                ),
+              ),
+            ],
+          ),
         ),
-        subtitle: Text(
-          '${shop['city'] ?? ''} • ${shop['category'] ?? ''}',
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => _openShop(shop),
       ),
     );
   }
@@ -4974,6 +5105,93 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
           ? Colors.white
           : Colors.black87;
 
+  String _toHex(Color c) {
+    final argb = c.toARGB32();
+    return '#${argb.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+  }
+
+  Widget _buildModeToggle({
+    required String selectedBg,
+    required ValueChanged<String> onBg,
+    required ValueChanged<String> onHeader,
+  }) {
+    final isDark =
+        parseThemeColour(selectedBg, fallback: Colors.white) == Colors.black;
+    return Row(
+      children: [
+        const Text('Theme mode',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        const Spacer(),
+        ChoiceChip(
+          label: const Text('Light'),
+          selected: !isDark,
+          onSelected: (_) {
+            onBg('#FFFFFF');
+            onHeader('#FFFFFF');
+          },
+        ),
+        const SizedBox(width: 8),
+        ChoiceChip(
+          label: const Text('Dark'),
+          selected: isDark,
+          onSelected: (_) {
+            onBg('#000000');
+            onHeader('#000000');
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHueSlider(String selectedHex, ValueChanged<String> onPick) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        void pick(Offset local) {
+          final hue = (local.dx.clamp(0.0, width) / width) * 359.9;
+          final base =
+              parseThemeColour(selectedHex, fallback: kNyqTerracotta);
+          final hsv = HSVColor.fromColor(base);
+          final colour = HSVColor.fromAHSV(
+            1,
+            hue,
+            hsv.saturation < 0.05 ? 0.72 : hsv.saturation,
+            hsv.value < 0.05 ? 0.88 : hsv.value,
+          ).toColor();
+          onPick(_toHex(colour));
+        }
+
+        return GestureDetector(
+          onTapDown: (d) => pick(d.localPosition),
+          onPanUpdate: (d) => pick(d.localPosition),
+          child: Container(
+            height: 34,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(17),
+              gradient: LinearGradient(
+                colors: [
+                  for (int i = 0; i <= 6; i++)
+                    HSVColor.fromAHSV(1, (i * 60) % 360, 0.72, 0.88)
+                        .toColor(),
+                ],
+              ),
+            ),
+            child: Align(
+              alignment: Alignment.center,
+              child: Text(
+                'Tap or drag to pick any colour',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black.withAlpha(90),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
   Widget _buildColourPicker({
     required String label,
     required String selectedHex,
@@ -4988,6 +5206,13 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 fontWeight: FontWeight.w600,
                 color: Colors.grey.shade700)),
         const SizedBox(height: 8),
+        _buildHueSlider(selectedHex, onPick),
+        const SizedBox(height: 10),
+        HexColourField(value: selectedHex, onChanged: onPick),
+        const SizedBox(height: 10),
+        Text('Quick picks',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+        const SizedBox(height: 6),
         Wrap(
           spacing: 10,
           runSpacing: 10,
@@ -5006,7 +5231,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: isSelected
-                        ? const Color(0xFF1B5E20)
+                        ? kNyqTerracotta
                         : Colors.grey.shade300,
                     width: isSelected ? 3 : 1,
                   ),
@@ -5852,6 +6077,12 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     ),
                   ),
                 const SizedBox(height: 10),
+                _buildModeToggle(
+                  selectedBg: selectedBg,
+                  onBg: (hex) => setDialogState(() => selectedBg = hex),
+                  onHeader: (hex) => setDialogState(() => selectedTheme = hex),
+                ),
+                const SizedBox(height: 12),
                 _buildColourPicker(
                   label: 'Header Colour',
                   selectedHex: selectedTheme,
