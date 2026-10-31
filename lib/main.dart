@@ -5121,6 +5121,54 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     }
   }
 
+  Future<void> _launchExternal(String? raw) async {
+    final value = (raw ?? '').trim();
+    if (value.isEmpty) return;
+    final normalized =
+        value.startsWith('http://') || value.startsWith('https://')
+            ? value
+            : 'https://$value';
+    final uri = Uri.tryParse(normalized);
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Widget _socialDot(String label, Color colour, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: colour,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(45),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openWhatsApp() async {
     final digits = (shop['whatsapp_number'] ?? '')
         .toString()
@@ -5394,6 +5442,12 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     final whatsappController =
         TextEditingController(text: shop['whatsapp_number'] ?? '');
     String? currentBanner = shop['banner_url'];
+    final igController =
+        TextEditingController(text: shop['instagram_url'] ?? '');
+    final ttController =
+        TextEditingController(text: shop['tiktok_url'] ?? '');
+    final xController =
+        TextEditingController(text: shop['twitter_url'] ?? '');
 
     showDialog(
       context: context,
@@ -5453,6 +5507,36 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   decoration: const InputDecoration(
                     labelText: 'WhatsApp Number',
                     hintText: '+232 78 839002',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: igController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'Instagram URL',
+                    hintText: 'instagram.com/yourshop',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: ttController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'TikTok URL',
+                    hintText: 'tiktok.com/@yourshop',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: xController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'X (Twitter) URL',
+                    hintText: 'x.com/yourshop',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -5581,6 +5665,9 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'description': bioController.text.trim(),
                     'whatsapp_number': whatsappController.text.trim(),
                     'banner_url': currentBanner,
+                    'instagram_url': igController.text.trim(),
+                    'tiktok_url': ttController.text.trim(),
+                    'twitter_url': xController.text.trim(),
                   }),
                 );
 
@@ -5717,14 +5804,6 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                         ],
                       ),
                     ),
-                    if ((shop['whatsapp_number'] ?? '')
-                        .toString()
-                        .isNotEmpty)
-                      IconButton(
-                        icon: const Icon(Icons.chat),
-                        tooltip: 'Chat on WhatsApp',
-                        onPressed: _openWhatsApp,
-                      ),
                   ],
                 ),
                 if ((shop['description'] ?? '').toString().trim().isNotEmpty)
@@ -5737,6 +5816,42 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                         height: 1.35,
                         color: _headerTextColour.withAlpha(200),
                       ),
+                    ),
+                  ),
+                if ((shop['whatsapp_number'] ?? '').toString().isNotEmpty ||
+                    (shop['instagram_url'] ?? '').toString().isNotEmpty ||
+                    (shop['tiktok_url'] ?? '').toString().isNotEmpty ||
+                    (shop['twitter_url'] ?? '').toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Row(
+                      children: [
+                        if ((shop['whatsapp_number'] ?? '')
+                            .toString()
+                            .isNotEmpty)
+                          _socialDot(
+                              'WA', const Color(0xFF25D366), _openWhatsApp),
+                        if ((shop['instagram_url'] ?? '')
+                            .toString()
+                            .isNotEmpty)
+                          _socialDot(
+                              'IG',
+                              const Color(0xFFE1306C),
+                              () => _launchExternal(
+                                  shop['instagram_url']?.toString())),
+                        if ((shop['tiktok_url'] ?? '').toString().isNotEmpty)
+                          _socialDot(
+                              'TT',
+                              const Color(0xFF111111),
+                              () => _launchExternal(
+                                  shop['tiktok_url']?.toString())),
+                        if ((shop['twitter_url'] ?? '').toString().isNotEmpty)
+                          _socialDot(
+                              'X',
+                              const Color(0xFF111111),
+                              () => _launchExternal(
+                                  shop['twitter_url']?.toString())),
+                      ],
                     ),
                   ),
                 const SizedBox(height: 12),
