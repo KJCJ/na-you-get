@@ -11,11 +11,11 @@ const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785
 const String appVersion = '1.0.0';
 const Color kNyqBlue = Color(0xFF1A5AD7);
 const Color kNyqBlueDeep = Color(0xFF0D47A1);
-const Color kNyqTerracotta = Color(0xFFC35A3D);
+const Color kNyqAccent = Color(0xFF0D47A1);
 const Color kNyqOchre = Color(0xFFD4A017);
 const Color kNyqSand = Color(0xFFFAF7F2);
 const Color kNyqInk = Color(0xFF231F1C);
-const Color kNyqTerracottaDeep = Color(0xFF9C3F27);
+const Color kNyqAccentDeep = Color(0xFF072E66);
 const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk';
 
 // ==========================================
@@ -254,8 +254,8 @@ class NaYouGetApp extends StatelessWidget {
         useMaterial3: true,
         scaffoldBackgroundColor: kNyqSand,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: kNyqTerracotta,
-          primary: kNyqTerracotta,
+          seedColor: kNyqAccent,
+          primary: kNyqAccent,
           secondary: kNyqOchre,
           tertiary: kNyqBlueDeep,
           surface: kNyqSand,
@@ -295,20 +295,20 @@ class NaYouGetApp extends StatelessWidget {
           surfaceTintColor: Colors.transparent,
           elevation: 6,
           height: 68,
-          indicatorColor: kNyqTerracotta.withAlpha(38),
+          indicatorColor: kNyqAccent.withAlpha(38),
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           iconTheme: WidgetStateProperty.resolveWith((states) {
             final on = states.contains(WidgetState.selected);
             return IconThemeData(
                 size: 24,
-                color: on ? kNyqTerracotta : const Color(0xFF9A9088));
+                color: on ? kNyqAccent : const Color(0xFF9A9088));
           }),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final on = states.contains(WidgetState.selected);
             return TextStyle(
               fontSize: 11,
               fontWeight: on ? FontWeight.w700 : FontWeight.w500,
-              color: on ? kNyqTerracotta : const Color(0xFF9A9088),
+              color: on ? kNyqAccent : const Color(0xFF9A9088),
             );
           }),
         ),
@@ -4352,7 +4352,7 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: kNyqTerracotta,
+                      color: kNyqAccent,
                     ),
                   ),
                   if (description.isNotEmpty) ...[
@@ -4374,14 +4374,14 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                              colors: [kNyqTerracotta, kNyqTerracottaDeep],
+                              colors: [kNyqAccent, kNyqAccentDeep],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: kNyqTerracotta.withAlpha(85),
+                                color: kNyqAccent.withAlpha(85),
                                 blurRadius: 14,
                                 offset: const Offset(0, 6),
                               ),
@@ -4444,7 +4444,7 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
 class KentePainter extends CustomPainter {
   final Color colour;
   final Color accent;
-  const KentePainter({this.colour = kNyqTerracotta, this.accent = kNyqOchre});
+  const KentePainter({this.colour = kNyqAccent, this.accent = kNyqOchre});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -4495,12 +4495,12 @@ class KenteStripe extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const colours = [
-      kNyqTerracotta,
+      kNyqAccent,
       kNyqOchre,
       kNyqInk,
       kNyqOchre,
-      kNyqTerracotta,
-      Color(0xFF1B5E20),
+      kNyqAccent,
+      Color(0xFF1565C0),
       kNyqOchre,
     ];
     return SizedBox(
@@ -4862,7 +4862,7 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
           color: header,
           borderRadius: BorderRadius.circular(16),
           border: const Border(
-            top: BorderSide(color: kNyqTerracotta, width: 3),
+            top: BorderSide(color: kNyqAccent, width: 3),
             left: BorderSide(color: Color(0xFFEFE9E0)),
             right: BorderSide(color: Color(0xFFEFE9E0)),
             bottom: BorderSide(color: Color(0xFFEFE9E0)),
@@ -5150,7 +5150,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         void pick(Offset local) {
           final hue = (local.dx.clamp(0.0, width) / width) * 359.9;
           final base =
-              parseThemeColour(selectedHex, fallback: kNyqTerracotta);
+              parseThemeColour(selectedHex, fallback: kNyqAccent);
           final hsv = HSVColor.fromColor(base);
           final colour = HSVColor.fromAHSV(
             1,
@@ -5231,7 +5231,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: isSelected
-                        ? kNyqTerracotta
+                        ? kNyqAccent
                         : Colors.grey.shade300,
                     width: isSelected ? 3 : 1,
                   ),
@@ -6829,7 +6829,7 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                               color: bg,
                               borderRadius: BorderRadius.circular(16),
                               border: const Border(
-                                top: BorderSide(color: kNyqTerracotta, width: 3),
+                                top: BorderSide(color: kNyqAccent, width: 3),
                                 left: BorderSide(color: Color(0xFFEFE9E0)),
                                 right: BorderSide(color: Color(0xFFEFE9E0)),
                                 bottom: BorderSide(color: Color(0xFFEFE9E0)),
@@ -7248,14 +7248,14 @@ class ProductDetailScreen extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [kNyqTerracotta, kNyqTerracottaDeep],
+                      colors: [kNyqAccent, kNyqAccentDeep],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: kNyqTerracotta.withAlpha(85),
+                        color: kNyqAccent.withAlpha(85),
                         blurRadius: 14,
                         offset: const Offset(0, 6),
                       ),
