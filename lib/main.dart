@@ -244,18 +244,57 @@ class NaYouGetApp extends StatelessWidget {
       title: 'Na You Get (NYG)',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        useMaterial3: true,
+        scaffoldBackgroundColor: Colors.white,
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF1B5E20),
           primary: const Color(0xFF1B5E20),
           secondary: const Color(0xFF0D47A1),
+          surface: Colors.white,
         ),
-        useMaterial3: true,
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
-          elevation: 0,
-          iconTheme: IconThemeData(color: Colors.black),
+          surfaceTintColor: Colors.white,
+          foregroundColor: Color(0xFF1C1C1E),
+          elevation: 1.5,
+          scrolledUnderElevation: 1.5,
+          shadowColor: Color(0x12000000),
+          centerTitle: false,
+          titleTextStyle: TextStyle(
+            color: Color(0xFF1C1C1E),
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+          iconTheme: IconThemeData(color: Color(0xFF1C1C1E)),
         ),
-        scaffoldBackgroundColor: const Color(0xFFF7F9F7),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          elevation: 3,
+          height: 68,
+          indicatorColor: const Color(0x1F1B5E20),
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            final on = states.contains(WidgetState.selected);
+            return IconThemeData(
+              size: 24,
+              color: on ? const Color(0xFF1B5E20) : const Color(0xFF9E9E9E),
+            );
+          }),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            final on = states.contains(WidgetState.selected);
+            return TextStyle(
+              fontSize: 11,
+              fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+              color: on ? const Color(0xFF1B5E20) : const Color(0xFF9E9E9E),
+            );
+          }),
+        ),
+        dividerTheme: const DividerThemeData(
+          color: Color(0xFFEDEDED),
+          thickness: 1,
+          space: 1,
+        ),
       ),
       home: const MainNavigationScreen(),
     );
@@ -290,6 +329,12 @@ class UserSession {
     if (user['is_admin'] != null) {
       await prefs.setBool('user_is_admin', user['is_admin'] == 1 || user['is_admin'] == true);
     }
+    if (user['vehicle_type'] != null) {
+      await prefs.setString('user_vehicle_type', user['vehicle_type']);
+    }
+    if (user['is_online'] != null) {
+      await prefs.setBool('user_is_online', user['is_online'] == 1 || user['is_online'] == true);
+    }
     if (user['photo_url'] != null) {
       await prefs.setString(_photoKey, user['photo_url']);
     }
@@ -309,6 +354,8 @@ class UserSession {
       'is_seller': prefs.getBool(_isSellerKey) ?? false,
       'is_runner': prefs.getBool(_isRunnerKey) ?? false,
       'is_admin': prefs.getBool('user_is_admin') ?? false,
+      'vehicle_type': prefs.getString('user_vehicle_type'),
+      'is_online': prefs.getBool('user_is_online') ?? false,
       'photo_url': prefs.getString(_photoKey),
       'token': token,
     };
@@ -325,6 +372,8 @@ class UserSession {
     await prefs.remove(_isSellerKey);
     await prefs.remove(_isRunnerKey);
     await prefs.remove('user_is_admin');
+    await prefs.remove('user_vehicle_type');
+    await prefs.remove('user_is_online');
   }
 
   static Future<String?> becomeSeller() async {
@@ -446,35 +495,44 @@ class UserSession {
     final token = prefs.getString('user_token');
     if (token == null) return false;
 
-    final res = await http.put(
-      Uri.parse('$baseUrl/auth/me'),
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(updates),
-    );
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/auth/me'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(updates),
+      ).timeout(const Duration(seconds: 10));
 
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = jsonDecode(res.body);
-      final user = data['user'];
-      await prefs.setString('user_name', user['name']);
-      await prefs.setString('user_phone', user['phone_number']);
-      if (user['is_seller'] != null) {
-        await prefs.setBool(_isSellerKey, user['is_seller'] == 1 || user['is_seller'] == true);
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body);
+        final user = data['user'];
+        await prefs.setString('user_name', user['name']);
+        await prefs.setString('user_phone', user['phone_number']);
+        if (user['is_seller'] != null) {
+          await prefs.setBool(_isSellerKey, user['is_seller'] == 1 || user['is_seller'] == true);
+        }
+        if (user['is_runner'] != null) {
+          await prefs.setBool(_isRunnerKey, user['is_runner'] == 1 || user['is_runner'] == true);
+        }
+        if (user['is_admin'] != null) {
+          await prefs.setBool('user_is_admin', user['is_admin'] == 1 || user['is_admin'] == true);
+        }
+        if (user['vehicle_type'] != null) {
+          await prefs.setString('user_vehicle_type', user['vehicle_type']);
+        }
+        if (user['is_online'] != null) {
+          await prefs.setBool('user_is_online',
+              user['is_online'] == 1 || user['is_online'] == true);
+        }
+        if (user['photo_url'] != null) {
+          await prefs.setString('user_photo', user['photo_url']);
+        }
+        return true;
       }
-      if (user['is_runner'] != null) {
-        await prefs.setBool(_isRunnerKey, user['is_runner'] == 1 || user['is_runner'] == true);
-      }
-      if (user['is_admin'] != null) {
-        await prefs.setBool('user_is_admin', user['is_admin'] == 1 || user['is_admin'] == true);
-      }
-      if (user['photo_url'] != null) {
-        await prefs.setString('user_photo', user['photo_url']);
-      }
-      return true;
-    }
+    } catch (_) {}
     return false;
   }
 
@@ -836,6 +894,8 @@ class ShopSession {
   static const _cityKey = 'city';
   static const _categoryKey = 'category';
   static const _logoKey = 'logo_url';
+  static const _themeKey = 'theme_colour';
+  static const _bgKey = 'background_colour';
 
   static Future<void> save(Map<String, dynamic> merchant) async {
     final prefs = await SharedPreferences.getInstance();
@@ -847,6 +907,12 @@ class ShopSession {
     await prefs.setString(_categoryKey, merchant['category'] ?? 'Other');
     if (merchant['logo_url'] != null) {
       await prefs.setString(_logoKey, merchant['logo_url']);
+    }
+    if (merchant['theme_colour'] != null) {
+      await prefs.setString(_themeKey, merchant['theme_colour']);
+    }
+    if (merchant['background_colour'] != null) {
+      await prefs.setString(_bgKey, merchant['background_colour']);
     }
   }
 
@@ -862,6 +928,8 @@ class ShopSession {
       'city': prefs.getString(_cityKey) ?? 'Freetown',
       'category': prefs.getString(_categoryKey) ?? 'Other',
       'logo_url': prefs.getString(_logoKey),
+      'theme_colour': prefs.getString(_themeKey),
+      'background_colour': prefs.getString(_bgKey),
     };
   }
 
@@ -1188,6 +1256,27 @@ bool isRunner(Map<String, dynamic>? u) {
   return v == true || v == 1 || v?.toString() == '1';
 }
 
+Color parseThemeColour(String? hex, {Color fallback = const Color(0xFFE8F5E9)}) {
+  if (hex == null) return fallback;
+  var h = hex.trim().replaceAll('#', '');
+  if (h.length == 6) h = 'FF$h';
+  if (h.length != 8) return fallback;
+  final v = int.tryParse(h, radix: 16);
+  if (v == null) return fallback;
+  return Color(v);
+}
+
+const Map<String, String> kShopPalette = {
+  '#000000': 'Black',
+  '#FFFFFF': 'White',
+  '#1B5E20': 'NYG Green',
+  '#03A9F4': 'Blue',
+  '#F44336': 'Red',
+  '#FF9800': 'Orange',
+  '#9C27B0': 'Purple',
+  '#F5F5F5': 'Light Grey',
+};
+
 void showAccountSheet(
   BuildContext context,
   Map<String, dynamic>? currentUser,
@@ -1207,6 +1296,25 @@ void showAccountSheet(
     onUserChanged();
     onRefreshUser?.call();
   }
+
+  final isAdmin = currentUser != null &&
+      (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true);
+
+  Widget sectionHeader(String label) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ),
+      );
 
   showModalBottomSheet(
     context: context,
@@ -1302,21 +1410,98 @@ void showAccountSheet(
                 ),
               ),
               const Divider(height: 24),
-              if (shop != null)
+              if (user != null && (isSeller(currentUser) || isAdmin))
                 ListTile(
-                  leading: const Icon(Icons.storefront),
-                  title: const Text('My Shop'),
-                  subtitle: Text(shop['shop_name'] ?? ''),
+                  leading: Icon(
+                      shop != null ? Icons.storefront : Icons.person_outline),
+                  title: const Text('My Storefront'),
+                  subtitle: shop != null ? Text(shop['shop_name'] ?? '') : null,
                   onTap: () {
                     Navigator.pop(ctx);
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ShopProfileScreen(merchant: shop),
+                        builder: (_) => shop != null
+                            ? ShopPageScreen(
+                                shop: shop,
+                                currentUser: currentUser,
+                                onUserChanged: onUserChanged,
+                              )
+                            : ProfileScreen(
+                                currentUser: user,
+                                onUserChanged: onUserChanged,
+                              ),
                       ),
                     );
                   },
                 ),
+              const Divider(height: 8),
+              sectionHeader('ACTIVITY'),
+              ListTile(
+                leading: const Icon(Icons.receipt_long),
+                title: const Text('My Orders'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MyOrdersScreen(currentUser: user),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.chat_bubble_outline),
+                title: const Text('Messages'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MessagesScreen(currentUser: currentUser!),
+                    ),
+                  );
+                },
+              ),
+              if (isSeller(currentUser) || isAdmin)
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: const Text('My Invoices'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: false)),
+                  );
+                },
+              ),
+              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
+                ListTile(
+                  leading: const Icon(Icons.attach_money, color: Color(0xFF1B5E20)),
+                  title: const Text('My Earnings'),
+                  subtitle: const Text('Admin only'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AdminEarningsScreen()),
+                    );
+                  },
+                ),
+              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
+                ListTile(
+                  leading: const Icon(Icons.receipt, color: Color(0xFF1B5E20)),
+                  title: const Text('All Invoices'),
+                  subtitle: const Text('Admin - generate and confirm'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: true)),
+                    );
+                  },
+                ),
+              sectionHeader('SELLER TOOLS'),
               if (isSeller(currentUser) && shop != null)
                 ListTile(
                   leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
@@ -1355,6 +1540,51 @@ void showAccountSheet(
                     if (err == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Selling paused')),
+                      );
+                      onUserChanged();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(err)),
+                      );
+                    }
+                  },
+                ),
+              if (shop == null)
+                ListTile(
+                  leading: const Icon(Icons.storefront, color: Color(0xFF1B5E20)),
+                  title: const Text('Start Selling'),
+                  subtitle: const Text('Create your own shop'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final err = await UserSession.becomeSeller();
+                    if (!context.mounted) return;
+                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
+                    if (err == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('You can now sell on NYG')),
+                      );
+                      onUserChanged();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(err)),
+                      );
+                    }
+                  },
+                ),
+              sectionHeader('DELIVERIES'),
+              if (!isRunner(currentUser))
+                ListTile(
+                  leading: const Icon(Icons.directions_run, color: Color(0xFF0D47A1)),
+                  title: const Text('Become a Runner'),
+                  subtitle: const Text('Deliver items and earn'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final err = await UserSession.becomeRunner();
+                    if (!context.mounted) return;
+                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
+                    if (err == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('You can now deliver on NYG')),
                       );
                       onUserChanged();
                     } else {
@@ -1411,113 +1641,7 @@ void showAccountSheet(
                     }
                   },
                 ),
-              if (shop == null)
-                ListTile(
-                  leading: const Icon(Icons.storefront, color: Color(0xFF1B5E20)),
-                  title: const Text('Become a Seller'),
-                  subtitle: const Text('Create your own shop'),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    final err = await UserSession.becomeSeller();
-                    if (!context.mounted) return;
-                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
-                    if (err == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('You can now sell on NYG')),
-                      );
-                      onUserChanged();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(err)),
-                      );
-                    }
-                  },
-                ),
-              if (!isRunner(currentUser))
-                ListTile(
-                  leading: const Icon(Icons.directions_run, color: Color(0xFF0D47A1)),
-                  title: const Text('Become a Runner'),
-                  subtitle: const Text('Deliver items and earn'),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    final err = await UserSession.becomeRunner();
-                    if (!context.mounted) return;
-                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
-                    if (err == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('You can now deliver on NYG')),
-                      );
-                      onUserChanged();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(err)),
-                      );
-                    }
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.receipt_long),
-                title: const Text('My Orders'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => MyOrdersScreen(currentUser: user),
-                    ),
-                  );
-                },
-              ),
-              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
-                ListTile(
-                  leading: const Icon(Icons.attach_money, color: Color(0xFF1B5E20)),
-                  title: const Text('My Earnings'),
-                  subtitle: const Text('Admin only'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AdminEarningsScreen()),
-                    );
-                  },
-                ),
-              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
-                ListTile(
-                  leading: const Icon(Icons.receipt, color: Color(0xFF1B5E20)),
-                  title: const Text('All Invoices'),
-                  subtitle: const Text('Admin - generate and confirm'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: true)),
-                    );
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.description_outlined),
-                title: const Text('My Invoices'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: false)),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.chat_bubble_outline),
-                title: const Text('Messages'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => MessagesScreen(currentUser: currentUser!),
-                    ),
-                  );
-                },
-              ),
+              sectionHeader('SETTINGS'),
               ListTile(
                 leading: const Icon(Icons.edit),
                 title: const Text('Edit Profile'),
@@ -1542,6 +1666,7 @@ void showAccountSheet(
                   showChangePasswordDialog(context);
                 },
               ),
+              const Divider(height: 8),
               ListTile(
                 leading: const Icon(Icons.logout, color: Colors.red),
                 title:
@@ -3502,82 +3627,381 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 }
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic>? currentUser;
   final VoidCallback onUserChanged;
-  final bool runnerMode;
-  final VoidCallback onToggleRunnerMode;
 
   const ProfileScreen({
     super.key,
     required this.currentUser,
     required this.onUserChanged,
-    required this.runnerMode,
-    required this.onToggleRunnerMode,
   });
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  List<dynamic> _products = [];
+  List<dynamic> _deliveries = [];
+  bool _loading = true;
+  String _vehicleType = 'Motorbike';
+  bool _isOnline = false;
+
+  bool get _isSellerUser => isSeller(widget.currentUser);
+  bool get _isRunnerUser => isRunner(widget.currentUser);
+
+  @override
+  void initState() {
+    super.initState();
+    final u = widget.currentUser;
+    if (u != null) {
+      _vehicleType = (u['vehicle_type'] ?? 'Motorbike').toString();
+      _isOnline = u['is_online'] == 1 || u['is_online'] == true;
+    }
+    _load();
+  }
+
+  Future<void> _saveRunnerSetting(
+      Map<String, dynamic> patch, String successMessage) async {
+    final ok = await UserSession.update(patch);
+    if (!mounted) return;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(successMessage),
+          backgroundColor: const Color(0xFF1B5E20),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      widget.onUserChanged();
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Could not save your settings'),
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () => _saveRunnerSetting(patch, successMessage),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    await _loadProducts();
+    await _loadDeliveries();
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _loadProducts() async {
+    if (!_isSellerUser) return;
+    try {
+      final shop = await ShopSession.load();
+      if (shop == null) return;
+      final res = await http.get(
+        Uri.parse('$baseUrl/merchants/${shop['id']}/products/'),
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        _products = jsonDecode(res.body) as List;
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadDeliveries() async {
+    if (!_isRunnerUser) return;
+    final user = await UserSession.load();
+    if (user == null) return;
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/deliveries/mine/${user['id']}'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        _deliveries = jsonDecode(res.body) as List;
+      }
+    } catch (_) {}
+  }
+
+  int get _completed {
+    var n = 0;
+    for (final d in _deliveries) {
+      if (d['delivered_by_runner_at'] != null) n++;
+    }
+    return n;
+  }
+
+  String get _earned {
+    var total = 0.0;
+    for (final d in _deliveries) {
+      final v = d['runner_fee_sle'];
+      if (v is num) total += v.toDouble();
+    }
+    return total.toStringAsFixed(0);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final name = currentUser?['name']?.toString() ?? 'Not signed in';
-    final phone = currentUser?['phone_number']?.toString() ?? '-';
+    final user = widget.currentUser;
+    final name = user?['name']?.toString() ?? 'Guest';
+    final phone = user?['phone_number']?.toString() ?? '';
+    final photo = user?['photo_url']?.toString() ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Center(
-            child: CircleAvatar(
-              radius: 40,
-              backgroundColor: const Color(0xFF1B5E20),
-              child: Text(
-                name.isNotEmpty ? name[0].toUpperCase() : '?',
-                style: const TextStyle(fontSize: 30, color: Colors.white),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text('Profile'),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        elevation: 0,
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          children: [
+            const SizedBox(height: 8),
+            Center(
+              child: CircleAvatar(
+                radius: 48,
+                backgroundColor: const Color(0xFF1B5E20),
+                backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
+                child: photo.isEmpty
+                    ? Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: const TextStyle(
+                          fontSize: 36,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      )
+                    : null,
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Center(
-            child: Text(name,
+            const SizedBox(height: 16),
+            Center(
+              child: Text(
+                name,
                 style: const TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(height: 4),
-          Center(
-            child: Text(phone, style: TextStyle(color: Colors.grey.shade700)),
-          ),
-          const SizedBox(height: 28),
-          if (currentUser != null)
-            ElevatedButton.icon(
-              icon: const Icon(Icons.edit),
-              label: const Text('Edit Profile'),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => EditProfileScreen(
-                      currentUser: currentUser!,
-                      onUserChanged: onUserChanged,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            if (phone.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Center(
+                child: Text(
+                  phone,
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            if (user != null)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.black87,
+                    side: BorderSide(color: Colors.grey.shade300),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                );
-              },
-            ),
-          const SizedBox(height: 12),
-          // Only runners get the toggle. The `|| runnerMode` guard means a
-          // user can always get back out if their runner status is revoked
-          // while the app is still in runner mode.
-          if (isRunner(currentUser) || runnerMode)
-            OutlinedButton.icon(
-              icon: Icon(runnerMode
-                  ? Icons.shopping_bag_outlined
-                  : Icons.directions_run),
-              label: Text(runnerMode
-                  ? 'Switch to Shopping Mode'
-                  : 'Switch to Runner Mode'),
-              onPressed: onToggleRunnerMode,
-            ),
-        ],
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => EditProfileScreen(
+                          currentUser: user,
+                          onUserChanged: widget.onUserChanged,
+                        ),
+                      ),
+                    );
+                    widget.onUserChanged();
+                    _load();
+                  },
+                  child: const Text('Edit Profile'),
+                ),
+              ),
+            if (_isRunnerUser) ...[
+              const SizedBox(height: 32),
+              const Text('Delivery stats',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _statBox('${_deliveries.length}', 'Deliveries'),
+                  const SizedBox(width: 10),
+                  _statBox('$_completed', 'Completed'),
+                  const SizedBox(width: 10),
+                  _statBox('SLE $_earned', 'Earned'),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Text('Runner Settings',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 24,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        const Text('Vehicle Type',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        DropdownButton<String>(
+                          value: _vehicleType,
+                          underline: const SizedBox.shrink(),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'Motorbike', child: Text('Motorbike')),
+                            DropdownMenuItem(
+                                value: 'Bicycle', child: Text('Bicycle')),
+                            DropdownMenuItem(value: 'Car', child: Text('Car')),
+                            DropdownMenuItem(
+                                value: 'On Foot', child: Text('On Foot')),
+                          ],
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() => _vehicleType = v);
+                            _saveRunnerSetting(
+                                {'vehicle_type': v}, 'Vehicle: $v');
+                          },
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Available for Deliveries'),
+                      subtitle: Text(
+                        _isOnline ? 'Online' : 'Offline',
+                        style: TextStyle(
+                          color: _isOnline
+                              ? const Color(0xFF1B5E20)
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                      value: _isOnline,
+                      onChanged: (v) {
+                        setState(() => _isOnline = v);
+                        _saveRunnerSetting(
+                            {'is_online': v ? 1 : 0},
+                            v ? 'You are now Online' : 'You are now Offline');
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (_isSellerUser) ...[
+              const SizedBox(height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('My Products',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text('${_products.length}',
+                      style: TextStyle(color: Colors.grey.shade600)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (_loading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else if (_products.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text('No products listed yet',
+                        style: TextStyle(color: Colors.grey.shade600)),
+                  ),
+                )
+              else
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _products.length,
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 6,
+                    mainAxisSpacing: 6,
+                    childAspectRatio: 1,
+                  ),
+                  itemBuilder: (ctx, i) {
+                    final photos =
+                        productPhotos(_products[i] as Map<String, dynamic>);
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: photos.isEmpty
+                          ? Container(
+                              color: Colors.grey.shade200,
+                              child: Icon(Icons.image_outlined,
+                                  color: Colors.grey.shade400),
+                            )
+                          : Image.network(
+                              photos.first,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: Colors.grey.shade200,
+                                child: Icon(Icons.broken_image_outlined,
+                                    color: Colors.grey.shade400),
+                              ),
+                            ),
+                    );
+                  },
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statBox(String value, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF2F2F2),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 2),
+            Text(label,
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+          ],
+        ),
       ),
     );
   }
@@ -3684,46 +4108,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   void _refreshUser() => _loadUser();
 
-  bool _runnerMode = false;
-
-  void _toggleRunnerMode() {
-    setState(() {
-      _runnerMode = !_runnerMode;
-      _currentIndex = 0;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loadingUser) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final screens = _runnerMode
-        ? [
-            RunnerDashboardScreen(
-                currentUser: _currentUser, onUserChanged: _refreshUser),
-            ProfileScreen(
-              currentUser: _currentUser,
-              onUserChanged: _refreshUser,
-              runnerMode: _runnerMode,
-              onToggleRunnerMode: _toggleRunnerMode,
-            ),
-          ]
-        : [
-            MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
-            ShopsBrowseScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
-            MarketplaceLocationsScreen(
-                currentUser: _currentUser, onUserChanged: _refreshUser),
-            RunnerDashboardScreen(
-                currentUser: _currentUser, onUserChanged: _refreshUser),
-            ProfileScreen(
-              currentUser: _currentUser,
-              onUserChanged: _refreshUser,
-              runnerMode: _runnerMode,
-              onToggleRunnerMode: _toggleRunnerMode,
-            ),
-          ];
+    final screens = [
+      MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
+      ShopsBrowseScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
+      MarketplaceLocationsScreen(
+          currentUser: _currentUser, onUserChanged: _refreshUser),
+      RunnerDashboardScreen(
+          currentUser: _currentUser, onUserChanged: _refreshUser),
+    ];
 
     return Stack(
       children: [
@@ -3732,24 +4130,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
-        destinations: _runnerMode
-            ? const [
-                NavigationDestination(
-                    icon: Icon(Icons.delivery_dining), label: 'My Deliveries'),
-                NavigationDestination(
-                    icon: Icon(Icons.person_outline), label: 'Profile'),
-              ]
-            : const [
-                NavigationDestination(
-                    icon: Icon(Icons.shopping_bag_outlined), label: 'Shopping'),
-                NavigationDestination(icon: Icon(Icons.store), label: 'Shops'),
-                NavigationDestination(
-                    icon: Icon(Icons.location_on_outlined), label: 'Marketplace'),
-                NavigationDestination(
-                    icon: Icon(Icons.directions_run), label: 'Runner'),
-                NavigationDestination(
-                    icon: Icon(Icons.person_outline), label: 'Profile'),
-              ],
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.shopping_bag_outlined),
+              selectedIcon: Icon(Icons.shopping_bag),
+              label: 'Shopping'),
+          NavigationDestination(
+              icon: Icon(Icons.store_outlined),
+              selectedIcon: Icon(Icons.store),
+              label: 'Shops'),
+          NavigationDestination(
+              icon: Icon(Icons.location_on_outlined),
+              selectedIcon: Icon(Icons.location_on),
+              label: 'Marketplace'),
+          NavigationDestination(
+              icon: Icon(Icons.directions_run_outlined),
+              selectedIcon: Icon(Icons.directions_run),
+              label: 'Runner'),
+        ],
       ),
         ),
         Positioned(
@@ -3765,12 +4163,311 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 // ==========================================
 // REUSABLE: SHOP PRODUCT GRID
 // ==========================================
+class ProductFeedCard extends StatefulWidget {
+  final Map<String, dynamic> product;
+  final void Function(dynamic product) onBuy;
+  final void Function(dynamic product)? onDelete;
+  final void Function(Map<String, dynamic> product)? onOpen;
+  final Color? cardColour;
+  final Color? accentColour;
+  final void Function(Map<String, dynamic> product)? onEdit;
+
+  const ProductFeedCard({
+    super.key,
+    required this.product,
+    required this.onBuy,
+    this.onDelete,
+    this.onOpen,
+    this.cardColour,
+    this.accentColour,
+    this.onEdit,
+  });
+
+  @override
+  State<ProductFeedCard> createState() => _ProductFeedCardState();
+}
+
+class _ProductFeedCardState extends State<ProductFeedCard> {
+  int _page = 0;
+
+  Widget _photoPlaceholder() {
+    return Container(
+      color: Colors.grey.shade100,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.image_not_supported_outlined,
+                size: 44, color: Colors.grey.shade400),
+            const SizedBox(height: 6),
+            Text('No photo',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.product;
+    final photos = productPhotos(item);
+    final accent = widget.accentColour ?? const Color(0xFF1B5E20);
+    final onAccent =
+        ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+            ? Colors.white
+            : Colors.black87;
+    final description = (item['description'] ?? '').toString().trim();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: widget.cardColour ?? Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 24,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: InkWell(
+        onTap: widget.onOpen == null ? null : () => widget.onOpen!(item),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 260,
+              width: double.infinity,
+              child: Stack(
+                children: [
+                  if (photos.isEmpty)
+                    _photoPlaceholder()
+                  else
+                    PageView.builder(
+                      itemCount: photos.length,
+                      onPageChanged: (i) => setState(() => _page = i),
+                      itemBuilder: (ctx, i) => Image.network(
+                        photos[i],
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                        loadingBuilder: (ctx, child, progress) {
+                          if (progress == null) return child;
+                          return Container(
+                            color: Colors.grey.shade100,
+                            child: const Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  if (photos.length > 1)
+                    Positioned(
+                      bottom: 10,
+                      left: 0,
+                      right: 0,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(photos.length, (i) {
+                          final active = i == _page;
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: active ? 16 : 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: active ? Colors.white : Colors.white54,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item['title'] ?? '',
+                    style: const TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.bold),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'SLE ${item['price_sle']}',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: accent,
+                    ),
+                  ),
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      description,
+                      style: TextStyle(
+                          fontSize: 13,
+                          height: 1.35,
+                          color: Colors.grey.shade700),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                accent,
+                                Color.lerp(accent, Colors.white, 0.18)!,
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: accent.withAlpha(70),
+                                blurRadius: 12,
+                                offset: const Offset(0, 5),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () => widget.onBuy(item),
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.shopping_cart,
+                                        size: 18, color: onAccent),
+                                    const SizedBox(width: 8),
+                                    Text('Buy Now',
+                                        style: TextStyle(
+                                            color: onAccent,
+                                            fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (widget.onEdit != null) ...[
+                        const SizedBox(width: 6),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          tooltip: 'Edit product',
+                          onPressed: () => widget.onEdit!(widget.product),
+                        ),
+                      ],
+                      if (widget.onDelete != null) ...[
+                        const SizedBox(width: 6),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline,
+                              color: Colors.red),
+                          tooltip: 'Delete product',
+                          onPressed: () => widget.onDelete!(item),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? message;
+
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: const BoxDecoration(
+                color: Color(0xFFF1F7F1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 44, color: const Color(0xFF1B5E20)),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1C1C1E),
+              ),
+            ),
+            if (message != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                message!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 14, height: 1.4, color: Colors.grey.shade600),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class ShopProductGrid extends StatelessWidget {
   final List<dynamic> products;
   final void Function(dynamic product) onBuy;
   final void Function(dynamic product)? onDelete;
   final VoidCallback? onRefresh;
   final void Function(Map<String, dynamic> product)? onOpen;
+  final Color? cardColour;
+  final Color? accentColour;
+  final void Function(Map<String, dynamic> product)? onEdit;
 
   const ShopProductGrid({
     super.key,
@@ -3779,109 +4476,33 @@ class ShopProductGrid extends StatelessWidget {
     this.onDelete,
     this.onRefresh,
     this.onOpen,
+    this.cardColour,
+    this.accentColour,
+    this.onEdit,
   });
 
   @override
   Widget build(BuildContext context) {
     if (products.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.storefront_outlined,
-                size: 80, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              'No items listed yet.',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade700,
-              ),
-            ),
-          ],
-        ),
+      return const EmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: 'No products yet',
+        message: 'Check back soon!',
       );
     }
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(10),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.72,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-      ),
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       itemCount: products.length,
-      itemBuilder: (ctx, i) {
-        final item = products[i];
-        return InkWell(
-          onTap: onOpen == null ? null : () => onOpen!(item),
-          borderRadius: BorderRadius.circular(12),
-          child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Container(
-                    color: Colors.white,
-                    width: double.infinity,
-                    child: Builder(builder: (context) {
-                      final photos = productPhotos(item);
-                      final url = photos.isNotEmpty ? photos[0] : null;
-                      if (url == null) {
-                        return const Center(child: Icon(Icons.shopping_bag, size: 40));
-                      }
-                      return Image.network(
-                        url,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.shopping_bag, size: 40)),
-                      );
-                    }),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  item['title'] ?? '',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text('SLE ${item['price_sle']}'),
-                if (item['shop_name'] != null)
-                  Text(
-                    '🏪 ${item['shop_name']} • ${item['shop_city'] ?? ''}',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => onBuy(item),
-                        child: const Text('Buy'),
-                      ),
-                    ),
-                    if (onDelete != null) ...[
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        tooltip: 'Delete product',
-                        onPressed: () => onDelete!(item),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        );
-      },
+      itemBuilder: (ctx, i) => ProductFeedCard(
+        product: Map<String, dynamic>.from(products[i] as Map),
+        onBuy: onBuy,
+        onDelete: onDelete,
+        onOpen: onOpen,
+        onEdit: onEdit,
+        cardColour: cardColour,
+        accentColour: accentColour,
+      ),
     );
   }
 }
@@ -4144,10 +4765,6 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
               currentUser: widget.currentUser,
               onUserChanged: widget.onUserChanged,
               ensureLoggedIn: _ensureLoggedIn),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _fetchShops,
-          ),
         ],
       ),
       body: _buildBody(),
@@ -4163,13 +4780,13 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
 class ShopPageScreen extends StatefulWidget {
   final Map<String, dynamic> shop;
   final Map<String, dynamic>? currentUser;
-  final VoidCallback onUserChanged;
+  final VoidCallback? onUserChanged;
 
   const ShopPageScreen({
     super.key,
     required this.shop,
-    required this.currentUser,
-    required this.onUserChanged,
+    this.currentUser,
+    this.onUserChanged,
   });
 
   @override
@@ -4180,12 +4797,100 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
   List<dynamic> products = [];
   bool isLoading = true;
   late Map<String, dynamic> shop;
+  Map<String, dynamic>? _currentUser;
 
   @override
   void initState() {
     super.initState();
     shop = Map<String, dynamic>.from(widget.shop);
+    _currentUser = widget.currentUser;
+    if (_currentUser == null) _loadUser();
     _fetchProducts();
+    _refreshShop();
+  }
+
+  Future<void> _loadUser() async {
+    final u = await UserSession.load();
+    if (mounted) setState(() => _currentUser = u);
+  }
+
+  Future<void> _refreshShop() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/merchants/${shop['id']}'),
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body);
+        final fresh = Map<String, dynamic>.from(data['merchant'] ?? data);
+        if (mounted) setState(() => shop = fresh);
+      }
+    } catch (_) {}
+  }
+
+  Color get _headerColour =>
+      parseThemeColour(shop['theme_colour']?.toString());
+
+  Color get _headerTextColour =>
+      ThemeData.estimateBrightnessForColor(_headerColour) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
+
+  Color get _pageBackground => parseThemeColour(
+      shop['background_colour']?.toString(),
+      fallback: Colors.white);
+
+  Color get _pageTextColour =>
+      ThemeData.estimateBrightnessForColor(_pageBackground) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
+
+  Widget _buildColourPicker({
+    required String label,
+    required String selectedHex,
+    required ValueChanged<String> onPick,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: kShopPalette.keys.map((hex) {
+            final colour = parseThemeColour(hex, fallback: Colors.white);
+            final isSelected = selectedHex.toUpperCase() == hex.toUpperCase();
+            final isDark =
+                ThemeData.estimateBrightnessForColor(colour) == Brightness.dark;
+            return GestureDetector(
+              onTap: () => onPick(hex),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: colour,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFF1B5E20)
+                        : Colors.grey.shade300,
+                    width: isSelected ? 3 : 1,
+                  ),
+                ),
+                child: isSelected
+                    ? Icon(Icons.check,
+                        size: 18, color: isDark ? Colors.white : Colors.black87)
+                    : null,
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
   }
 
   Future<void> _fetchProducts() async {
@@ -4197,12 +4902,11 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final data = jsonDecode(res.body) as List;
         final enriched = data.map((p) {
-          return {
-            ...p,
-            'shop_name': shop['shop_name'],
-            'shop_city': shop['city'],
-            'shop_category': shop['category'],
-          };
+          final m = Map<String, dynamic>.from(p as Map);
+          m['shop_name'] = shop['shop_name'];
+          m['shop_city'] = shop['city'];
+          m['shop_category'] = shop['category'];
+          return m;
         }).toList();
         setState(() {
           products = enriched;
@@ -4214,6 +4918,269 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     } catch (_) {
       setState(() => isLoading = false);
     }
+  }
+
+  void _showAddItemDialog() {
+    final titleController = TextEditingController();
+    final descController = TextEditingController();
+    final priceController = TextEditingController();
+    String selectedCategory = 'Other';
+    List<String> uploadedPhotos = [];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Add Item to ${shop['shop_name']}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Item Title',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: priceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Price in Leones (SLE)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: const InputDecoration(
+                    labelText: 'Product Category',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
+                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
+                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
+                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
+                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
+                    DropdownMenuItem(value: 'Services', child: Text('Services')),
+                    DropdownMenuItem(value: 'Other', child: Text('Other')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => selectedCategory = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await showMultiPhotoPicker(context, uploadedPhotos, (newPhotos) {
+                        setDialogState(() => uploadedPhotos = newPhotos);
+                      });
+                    },
+                    icon: const Icon(Icons.photo_library),
+                    label: Text(uploadedPhotos.isEmpty ? 'Add Photos (up to 4)' : '${uploadedPhotos.length} photo(s) added'),
+                  ),
+                ),
+                if (uploadedPhotos.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: uploadedPhotos.map((url) => ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      )).toList(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.isEmpty ||
+                    priceController.text.isEmpty) return;
+
+                final price = double.tryParse(priceController.text) ?? 0.0;
+
+                final user = await UserSession.load();
+                final response = await http.post(
+                  Uri.parse('$baseUrl/products/'),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
+                  },
+                  body: jsonEncode({
+                    'merchant_id': shop['id'],
+                    'title': titleController.text,
+                    'description': descController.text,
+                    'category': selectedCategory,
+                    'price_sle': price,
+                    'image_url': uploadedPhotos.isNotEmpty ? uploadedPhotos[0] : null,
+                    'image_urls': uploadedPhotos,
+                  }),
+                );
+
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  if (response.statusCode >= 200 &&
+                      response.statusCode < 300) {
+                    _fetchProducts();
+                  } else {
+                    showApiError(context, response.statusCode, response.body,
+                        fallback: 'Failed to add product.');
+                  }
+                }
+              },
+              child: const Text('Add to Shop'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditProductDialog(Map<String, dynamic> product) {
+    final titleController = TextEditingController(text: product['title'] ?? '');
+    final descController = TextEditingController(text: product['description'] ?? '');
+    final priceController = TextEditingController(text: (product['price_sle'] ?? '').toString());
+    List<String> uploadedPhotos = productPhotos(product);
+    String selectedCategory = product['category'] ?? 'Other';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Edit ${product['title']}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(labelText: 'Item Title', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: priceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Price in Leones (SLE)', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: const InputDecoration(labelText: 'Product Category', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
+                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
+                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
+                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
+                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
+                    DropdownMenuItem(value: 'Services', child: Text('Services')),
+                    DropdownMenuItem(value: 'Other', child: Text('Other')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => selectedCategory = value);
+                  },
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await showMultiPhotoPicker(context, uploadedPhotos, (newPhotos) {
+                        setDialogState(() => uploadedPhotos = newPhotos);
+                      });
+                    },
+                    icon: const Icon(Icons.photo_library),
+                    label: Text(uploadedPhotos.isEmpty ? 'Add Photos (up to 4)' : '${uploadedPhotos.length} photo(s)'),
+                  ),
+                ),
+                if (uploadedPhotos.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: uploadedPhotos.map((url) => ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      )).toList(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.isEmpty || priceController.text.isEmpty) return;
+                final price = double.tryParse(priceController.text) ?? 0.0;
+                final err = await UserSession.updateProduct(
+                  (product['id'] as num).toInt(),
+                  {
+                    'title': titleController.text,
+                    'description': descController.text,
+                    'category': selectedCategory,
+                    'price_sle': price,
+                    'image_url': uploadedPhotos.isNotEmpty ? uploadedPhotos[0] : null,
+                    'image_urls': uploadedPhotos,
+                  },
+                );
+                if (!context.mounted) return;
+                if (err == 'SESSION_EXPIRED') {
+                  handleSessionExpired(context);
+                  return;
+                }
+                if (err == null) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Product updated')),
+                  );
+                  _fetchProducts();
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(err)),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteProduct(int productId, String productTitle) async {
@@ -4272,6 +5239,83 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         );
       }
     }
+  }
+
+  Future<void> _launchExternal(String? raw) async {
+    final value = (raw ?? '').trim();
+    if (value.isEmpty) return;
+    final normalized =
+        value.startsWith('http://') || value.startsWith('https://')
+            ? value
+            : 'https://$value';
+    final uri = Uri.tryParse(normalized);
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Widget _socialDot(String label, Color colour, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: colour,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(45),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openWhatsApp() async {
+    final digits = (shop['whatsapp_number'] ?? '')
+        .toString()
+        .replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return;
+    final uri = Uri.parse('https://wa.me/$digits');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _openEditProfile() async {
+    final u = _currentUser;
+    if (u == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditProfileScreen(
+          currentUser: u,
+          onUserChanged: () {
+            widget.onUserChanged?.call();
+            _loadUser();
+          },
+        ),
+      ),
+    );
+    await _loadUser();
   }
 
   Future<void> _deleteShop() async {
@@ -4334,7 +5378,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         // Revoke seller status so the user can become a seller again
         await UserSession.revokeSeller();
-        widget.onUserChanged();
+        widget.onUserChanged?.call();
         await ShopSession.clear();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -4359,18 +5403,22 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
   }
 
   Future<void> _showCheckout(dynamic product) async {
-    if (widget.currentUser == null) {
+    if (_currentUser == null) {
       final ok = await Navigator.push<bool>(
         context,
         MaterialPageRoute(builder: (_) => const AuthScreen()),
       );
-      if (ok == true) widget.onUserChanged();
-      if (ok != true) return;
+      if (ok == true) {
+        widget.onUserChanged?.call();
+        await _loadUser();
+      }
+      if (ok != true || !mounted) return;
     }
 
     if (!mounted) return;
 
     String paymentMethod = 'cash_on_delivery';
+    bool collectInStore = false;
     final deliveryController = TextEditingController();
 
     showDialog(
@@ -4382,14 +5430,22 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('Price: SLE ${product['price_sle']}'),
-              const SizedBox(height: 10),
-              TextField(
-                controller: deliveryController,
-                decoration: const InputDecoration(
-                  labelText: 'Delivery Address',
-                  border: OutlineInputBorder(),
-                ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Collect from Shop'),
+                subtitle: const Text('No delivery fee'),
+                value: collectInStore,
+                onChanged: (v) => setDialogState(() => collectInStore = v),
               ),
+              const SizedBox(height: 6),
+              if (!collectInStore)
+                TextField(
+                  controller: deliveryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Delivery Address',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
               const SizedBox(height: 10),
               RadioListTile(
                 title: const Text('Cash on Delivery'),
@@ -4418,7 +5474,9 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (deliveryController.text.isEmpty) return;
+                if (!collectInStore && deliveryController.text.isEmpty) {
+                  return;
+                }
                 final response = await http.post(
                   Uri.parse('$baseUrl/orders/'),
                   headers: {
@@ -4426,12 +5484,15 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'x-api-key': apiKey,
                   },
                   body: jsonEncode({
-                    'customer_id': widget.currentUser!['id'],
+                    'customer_id': _currentUser!['id'],
                     'merchant_id': product['merchant_id'],
                     'product_id': product['id'],
                     'pickup_address': 'Freetown Central Market',
-                    'delivery_address': deliveryController.text,
-                    'delivery_fee_sle': 25.0,
+                    'delivery_address': collectInStore
+                        ? 'Collect from shop'
+                        : deliveryController.text,
+                    'delivery_fee_sle': collectInStore ? 0.0 : 25.0,
+                    'requires_delivery': !collectInStore,
                     'payment_method': paymentMethod,
                   }),
                 );
@@ -4457,7 +5518,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                       context,
                       method: paymentMethod,
                       shopPhone: shopPhone,
-                      total: '${(product['price_sle'] ?? 0) + 25.0}',
+                      total:
+                          '${(product['price_sle'] ?? 0) + (collectInStore ? 0.0 : 25.0)}',
                       orderRef: 'NYG-$newOrderId',
                     );
                   } else {
@@ -4478,8 +5540,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
   }
 
   bool get _isOwner {
-    if (widget.currentUser == null) return false;
-    return widget.currentUser!['phone_number'] == shop['phone_number'];
+    if (_currentUser == null) return false;
+    return _currentUser!['phone_number'] == shop['phone_number'];
   }
 
   Future<void> _showEditShopDialog() async {
@@ -4493,6 +5555,19 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         TextEditingController(text: shop['city'] ?? 'Freetown');
     String? currentLogo = shop['logo_url'];
     String selectedCategory = shop['category'] ?? 'Other';
+    String selectedTheme = shop['theme_colour'] ?? '#1B5E20';
+    String selectedBg = shop['background_colour'] ?? '#FFFFFF';
+    final bioController =
+        TextEditingController(text: shop['description'] ?? '');
+    final whatsappController =
+        TextEditingController(text: shop['whatsapp_number'] ?? '');
+    String? currentBanner = shop['banner_url'];
+    final igController =
+        TextEditingController(text: shop['instagram_url'] ?? '');
+    final ttController =
+        TextEditingController(text: shop['tiktok_url'] ?? '');
+    final xController =
+        TextEditingController(text: shop['twitter_url'] ?? '');
 
     showDialog(
       context: context,
@@ -4535,6 +5610,57 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
+                TextField(
+                  controller: bioController,
+                  maxLines: 3,
+                  maxLength: 160,
+                  decoration: const InputDecoration(
+                    labelText: 'Shop Bio',
+                    hintText: 'Tell customers about your shop',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: whatsappController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'WhatsApp Number',
+                    hintText: '+232 78 839002',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: igController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'Instagram URL',
+                    hintText: 'instagram.com/yourshop',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: ttController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'TikTok URL',
+                    hintText: 'tiktok.com/@yourshop',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: xController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'X (Twitter) URL',
+                    hintText: 'x.com/yourshop',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -4564,6 +5690,49 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                       ),
                     ),
                   ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final url = await pickAndUploadImage(context);
+                      if (url != null) {
+                        setDialogState(() => currentBanner = url);
+                      }
+                    },
+                    icon: const Icon(Icons.wallpaper),
+                    label: Text((currentBanner ?? '').isEmpty
+                        ? 'Upload Banner Image'
+                        : 'Change Banner'),
+                  ),
+                ),
+                if ((currentBanner ?? '').isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        currentBanner ?? '',
+                        height: 90,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                _buildColourPicker(
+                  label: 'Header Colour',
+                  selectedHex: selectedTheme,
+                  onPick: (hex) => setDialogState(() => selectedTheme = hex),
+                ),
+                const SizedBox(height: 14),
+                _buildColourPicker(
+                  label: 'Background Colour',
+                  selectedHex: selectedBg,
+                  onPick: (hex) => setDialogState(() => selectedBg = hex),
+                ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
@@ -4611,6 +5780,14 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'city': cityController.text,
                     'category': selectedCategory,
                     'logo_url': currentLogo,
+                    'theme_colour': selectedTheme,
+                    'background_colour': selectedBg,
+                    'description': bioController.text.trim(),
+                    'whatsapp_number': whatsappController.text.trim(),
+                    'banner_url': currentBanner,
+                    'instagram_url': igController.text.trim(),
+                    'tiktok_url': ttController.text.trim(),
+                    'twitter_url': xController.text.trim(),
                   }),
                 );
 
@@ -4643,8 +5820,12 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _pageBackground,
       appBar: AppBar(
-        title: Text(shop['shop_name'] ?? 'Shop'),
+        backgroundColor: _pageBackground,
+        surfaceTintColor: _pageBackground,
+        foregroundColor: _pageTextColour,
+        elevation: 0,
         actions: [
           if (_isOwner)
             IconButton(
@@ -4656,8 +5837,19 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
             PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'delete') _deleteShop();
+                if (value == 'profile') _openEditProfile();
               },
               itemBuilder: (ctx) => const [
+                PopupMenuItem<String>(
+                  value: 'profile',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_outline),
+                      SizedBox(width: 8),
+                      Text('Edit Profile'),
+                    ],
+                  ),
+                ),
                 PopupMenuItem<String>(
                   value: 'delete',
                   child: Row(
@@ -4674,18 +5866,30 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       ),
       body: Column(
         children: [
+          if ((shop['banner_url'] ?? '').toString().isNotEmpty)
+            Image.network(
+              shop['banner_url'].toString(),
+              width: double.infinity,
+              height: 150,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
           Container(
             padding: const EdgeInsets.all(16),
-            color: Colors.green.shade50,
+            color: _headerColour,
             width: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            child: DefaultTextStyle.merge(
+              style: TextStyle(color: _headerTextColour),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 Row(
                   children: [
                     CircleAvatar(
                       radius: 24,
-                      backgroundColor: const Color(0xFF1B5E20),
+                      backgroundColor: _headerTextColour == Colors.white
+                          ? Colors.white24
+                          : const Color(0xFF1B5E20),
                       backgroundImage: shop['logo_url'] != null &&
                               shop['logo_url'].toString().isNotEmpty
                           ? NetworkImage(shop['logo_url'])
@@ -4722,6 +5926,54 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     ),
                   ],
                 ),
+                if ((shop['description'] ?? '').toString().trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      shop['description'].toString().trim(),
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.35,
+                        color: _headerTextColour.withAlpha(200),
+                      ),
+                    ),
+                  ),
+                if ((shop['whatsapp_number'] ?? '').toString().isNotEmpty ||
+                    (shop['instagram_url'] ?? '').toString().isNotEmpty ||
+                    (shop['tiktok_url'] ?? '').toString().isNotEmpty ||
+                    (shop['twitter_url'] ?? '').toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Row(
+                      children: [
+                        if ((shop['whatsapp_number'] ?? '')
+                            .toString()
+                            .isNotEmpty)
+                          _socialDot(
+                              'WA', const Color(0xFF25D366), _openWhatsApp),
+                        if ((shop['instagram_url'] ?? '')
+                            .toString()
+                            .isNotEmpty)
+                          _socialDot(
+                              'IG',
+                              const Color(0xFFE1306C),
+                              () => _launchExternal(
+                                  shop['instagram_url']?.toString())),
+                        if ((shop['tiktok_url'] ?? '').toString().isNotEmpty)
+                          _socialDot(
+                              'TT',
+                              const Color(0xFF111111),
+                              () => _launchExternal(
+                                  shop['tiktok_url']?.toString())),
+                        if ((shop['twitter_url'] ?? '').toString().isNotEmpty)
+                          _socialDot(
+                              'X',
+                              const Color(0xFF111111),
+                              () => _launchExternal(
+                                  shop['twitter_url']?.toString())),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 if (shop['city'] != null)
                   Row(
@@ -4743,7 +5995,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                       Text(shop['category'] ?? '',
                           style: TextStyle(color: Colors.grey.shade700)),
                     ],
-                    if (shop['phone_number'] != null) ...[
+                    if (_isOwner && shop['phone_number'] != null) ...[
                       const SizedBox(width: 16),
                       Icon(Icons.phone, size: 16, color: Colors.grey.shade600),
                       const SizedBox(width: 4),
@@ -4752,7 +6004,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     ],
                   ],
                 ),
-              ],
+                ],
+              ),
             ),
           ),
           const Divider(height: 1),
@@ -4760,13 +6013,22 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
             padding: const EdgeInsets.all(12.0),
             child: Row(
               children: [
-                const Icon(Icons.inventory_2, size: 18),
+                Icon(Icons.inventory_2, size: 18, color: _pageTextColour),
                 const SizedBox(width: 8),
                 Text(
                   '${products.length} product${products.length == 1 ? '' : 's'}',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: _pageTextColour),
                 ),
+                const Spacer(),
+                if (_isOwner)
+                  ElevatedButton.icon(
+                    onPressed: _showAddItemDialog,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Product'),
+                  ),
               ],
             ),
           ),
@@ -4775,6 +6037,9 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : ShopProductGrid(
                     products: products,
+                    cardColour: Colors.white.withAlpha(230),
+                    accentColour: _headerColour,
+                    onEdit: _isOwner ? _showEditProductDialog : null,
                     onBuy: _showCheckout,
                     onDelete: _isOwner
                         ? (product) => _deleteProduct(
@@ -4793,6 +6058,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                                   p['id'], p['title'] ?? 'this product')
                               : null,
                           isOwner: _isOwner,
+                          themeColour: _headerColour,
                           sellerUserId: product['seller_user_id'],
                         ),
                       ),
@@ -5097,126 +6363,16 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (pageContext) => ShopProfileScreen(merchant: merchantData),
+        builder: (pageContext) => ShopPageScreen(
+          shop: merchantData,
+          currentUser: widget.currentUser,
+          onUserChanged: widget.onUserChanged,
+        ),
       ),
     ).then((_) {
       _fetchShops();
       _loadMyShop();
     });
-  }
-
-  Widget _buildTopCard() {
-    final hasShop = myShop != null;
-    final seller = isSeller(widget.currentUser);
-    final needsSeller = !seller;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: hasShop
-              ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
-              : [const Color(0xFF0D47A1), const Color(0xFF1565C0)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                hasShop
-                    ? Icons.store
-                    : (needsSeller ? Icons.person_add : Icons.store),
-                color: Colors.white,
-                size: 28,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  hasShop
-                      ? myShop!['shop_name']
-                      : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            hasShop
-                ? 'Owner: ${myShop!['owner_name']} • ${myShop!['city']}'
-                : (needsSeller
-                    ? 'Turn on selling to create your shop.'
-                    : 'Create your shop to start selling.'),
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: hasShop
-                    ? const Color(0xFF1B5E20)
-                    : const Color(0xFF0D47A1),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              icon: Icon(hasShop
-                  ? Icons.open_in_new
-                  : (needsSeller ? Icons.storefront : Icons.store)),
-              label: Text(
-                hasShop
-                    ? 'Open My Shop'
-                    : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onPressed: () async {
-                if (hasShop) {
-                  _openShopProfilePage(myShop!);
-                } else if (needsSeller) {
-                  final err = await UserSession.becomeSeller();
-                  if (!mounted) return;
-                  if (err == 'SESSION_EXPIRED') {
-                    handleSessionExpired(context);
-                    return;
-                  }
-                  if (err == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('You can now sell on NYG')),
-                    );
-                    widget.onUserChanged();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(err)),
-                    );
-                  }
-                } else {
-                  _showCreateShopDialog();
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -5234,15 +6390,10 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                 _loadMyShop();
               },
               currentShop: myShop),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _fetchShops,
-          ),
         ],
       ),
       body: Column(
         children: [
-          _buildTopCard(),
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
@@ -5302,19 +6453,39 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                         itemCount: filteredShops.length,
                         itemBuilder: (ctx, i) {
                           final shop = filteredShops[i];
-                          return Card(
+                          final bg = parseThemeColour(
+                              shop['theme_colour']?.toString());
+                          final isDark =
+                              ThemeData.estimateBrightnessForColor(bg) ==
+                                  Brightness.dark;
+                          final onBg = isDark ? Colors.white : Colors.black87;
+                          final sub = isDark ? Colors.white70 : Colors.black54;
+                          return Container(
                             margin: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 6),
+                                horizontal: 6, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: bg,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black12,
+                                  blurRadius: 10,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
                             child: InkWell(
                               onTap: () => _openShop(shop),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                               child: Padding(
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.all(16),
                                 child: Row(
                                   children: [
                                     CircleAvatar(
-                                      radius: 28,
-                                      backgroundColor: const Color(0xFF1B5E20),
+                                      radius: 32,
+                                      backgroundColor: isDark
+                                          ? Colors.white24
+                                          : const Color(0xFF1B5E20),
                                       backgroundImage: shop['logo_url'] != null &&
                                               shop['logo_url'].toString().isNotEmpty
                                           ? NetworkImage(shop['logo_url'])
@@ -5326,13 +6497,13 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                                               (shop['shop_name'] ?? '?')[0]
                                                   .toUpperCase(),
                                               style: const TextStyle(
-                                                fontSize: 24,
+                                                fontSize: 26,
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
                                     ),
-                                    const SizedBox(width: 14),
+                                    const SizedBox(width: 16),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -5340,9 +6511,10 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                                         children: [
                                           Text(
                                             shop['shop_name'] ?? 'Shop',
-                                            style: const TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold),
+                                            style: TextStyle(
+                                                fontSize: 17,
+                                                fontWeight: FontWeight.bold,
+                                                color: onBg),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -5350,30 +6522,27 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                                           Text(
                                             '${shop['city'] ?? ''} • ${shop['category'] ?? 'Other'}',
                                             style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.grey.shade600),
+                                                fontSize: 13, color: sub),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                           const SizedBox(height: 4),
                                           Row(
                                             children: [
                                               Icon(Icons.inventory_2,
-                                                  size: 14,
-                                                  color: Colors.grey.shade500),
+                                                  size: 14, color: sub),
                                               const SizedBox(width: 4),
                                               Text(
                                                 '${shop['product_count'] ?? 0} products',
                                                 style: TextStyle(
-                                                    fontSize: 12,
-                                                    color:
-                                                        Colors.grey.shade600),
+                                                    fontSize: 12, color: sub),
                                               ),
                                             ],
                                           ),
                                         ],
                                       ),
                                     ),
-                                    Icon(Icons.chevron_right,
-                                        color: Colors.grey.shade400),
+                                    Icon(Icons.chevron_right, color: sub),
                                   ],
                                 ),
                               ),
@@ -5391,12 +6560,137 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
 // ==========================================
 // PRODUCT DETAIL SCREEN
 // ==========================================
+class _ShopBanner extends StatefulWidget {
+  final Map<String, dynamic> product;
+  const _ShopBanner({required this.product});
+
+  @override
+  State<_ShopBanner> createState() => _ShopBannerState();
+}
+
+class _ShopBannerState extends State<_ShopBanner> {
+  Map<String, dynamic>? _merchant;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final id = widget.product['merchant_id'];
+    if (id == null) return;
+    setState(() => _loading = true);
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/merchants/$id'),
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body);
+        if (mounted) {
+          setState(() => _merchant =
+              Map<String, dynamic>.from(data['merchant'] ?? data));
+        }
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _openShop() async {
+    if (widget.product['merchant_id'] == null) return;
+    if (_merchant == null) {
+      await _load();
+      if (!mounted || _merchant == null) return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShopPageScreen(shop: _merchant!),
+      ),
+    );
+    if (mounted) _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shopName =
+        (_merchant?['shop_name'] ?? widget.product['shop_name'] ?? 'Shop')
+            .toString();
+    final city =
+        (_merchant?['city'] ?? widget.product['shop_city'] ?? '').toString();
+    final logo = (_merchant?['logo_url'] ?? '').toString();
+
+    return InkWell(
+      onTap: _openShop,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F7F7),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: const Color(0xFF1B5E20),
+              backgroundImage: logo.isNotEmpty ? NetworkImage(logo) : null,
+              child: logo.isEmpty
+                  ? Text(
+                      shopName.isNotEmpty ? shopName[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    shopName,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (city.isNotEmpty)
+                    Text(
+                      city,
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                ],
+              ),
+            ),
+            if (_loading)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              const Icon(Icons.chevron_right, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class ProductDetailScreen extends StatelessWidget {
   final Map<String, dynamic> product;
   final void Function(Map<String, dynamic> product) onBuy;
   final void Function(Map<String, dynamic> product)? onDelete;
   final bool isOwner;
   final int? sellerUserId;
+  final Color? themeColour;
 
   const ProductDetailScreen({
     super.key,
@@ -5405,12 +6699,26 @@ class ProductDetailScreen extends StatelessWidget {
     this.onDelete,
     this.isOwner = false,
     this.sellerUserId,
+    this.themeColour,
   });
+
+  Color get _accent => themeColour ?? const Color(0xFF1B5E20);
+
+  Color get _onAccent =>
+      ThemeData.estimateBrightnessForColor(_accent) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(product['title'] ?? 'Product')),
+      appBar: AppBar(
+        backgroundColor: _accent,
+        foregroundColor: _onAccent,
+        surfaceTintColor: _accent,
+        elevation: 0,
+        title: Text(product['title'] ?? 'Product'),
+      ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -5513,18 +6821,7 @@ class ProductDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const Divider(height: 32),
-                  Row(
-                    children: [
-                      const Icon(Icons.store, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${product['shop_name'] ?? ''} • ${product['shop_city'] ?? ''}',
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ),
-                    ],
-                  ),
+                  _ShopBanner(product: product),
                   const SizedBox(height: 24),
                   const Text(
                     'Description',
@@ -5582,8 +6879,8 @@ class ProductDetailScreen extends StatelessWidget {
               Expanded(
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B5E20),
-                    foregroundColor: Colors.white,
+                    backgroundColor: _accent,
+                    foregroundColor: _onAccent,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   icon: const Icon(Icons.shopping_cart),
@@ -5880,7 +7177,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ShopProfileScreen(merchant: merchantData),
+        builder: (context) => ShopPageScreen(
+          shop: merchantData,
+          currentUser: widget.currentUser,
+          onUserChanged: widget.onUserChanged,
+        ),
       ),
     ).then((_) {
       fetchProducts();
@@ -5894,6 +7195,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     if (!mounted) return;
 
     String paymentMethod = 'cash_on_delivery';
+    bool collectInStore = false;
     final deliveryController = TextEditingController();
 
     showDialog(
@@ -5905,14 +7207,22 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('Price: SLE ${product['price_sle']}'),
-              const SizedBox(height: 10),
-              TextField(
-                controller: deliveryController,
-                decoration: const InputDecoration(
-                  labelText: 'Delivery Address',
-                  border: OutlineInputBorder(),
-                ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Collect from Shop'),
+                subtitle: const Text('No delivery fee'),
+                value: collectInStore,
+                onChanged: (v) => setDialogState(() => collectInStore = v),
               ),
+              const SizedBox(height: 6),
+              if (!collectInStore)
+                TextField(
+                  controller: deliveryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Delivery Address',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
               const SizedBox(height: 10),
               RadioListTile(
                 title: const Text('Cash on Delivery'),
@@ -5941,7 +7251,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (deliveryController.text.isEmpty) return;
+                if (!collectInStore && deliveryController.text.isEmpty) {
+                  return;
+                }
                 final response = await http.post(
                   Uri.parse('$baseUrl/orders/'),
                   headers: {
@@ -5953,8 +7265,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     'merchant_id': product['merchant_id'],
                     'product_id': product['id'],
                     'pickup_address': 'Freetown Central Market',
-                    'delivery_address': deliveryController.text,
-                    'delivery_fee_sle': 25.0,
+                    'delivery_address': collectInStore
+                        ? 'Collect from shop'
+                        : deliveryController.text,
+                    'delivery_fee_sle': collectInStore ? 0.0 : 25.0,
+                    'requires_delivery': !collectInStore,
                     'payment_method': paymentMethod,
                   }),
                 );
@@ -5980,7 +7295,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       context,
                       method: paymentMethod,
                       shopPhone: shopPhone,
-                      total: '${(product['price_sle'] ?? 0) + 25.0}',
+                      total:
+                          '${(product['price_sle'] ?? 0) + (collectInStore ? 0.0 : 25.0)}',
                       orderRef: 'NYG-$newOrderId',
                     );
                   } else {
@@ -6000,122 +7316,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
-  Widget _buildTopCard() {
-    final hasShop = myShop != null;
-    final user = widget.currentUser;
-    final userName = user?['name'] ?? 'there';
-    final seller = isSeller(user);
-    final needsSeller = !seller;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: hasShop
-              ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
-              : [const Color(0xFF0D47A1), const Color(0xFF1565C0)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                hasShop
-                    ? Icons.storefront
-                    : (needsSeller ? Icons.person_add : Icons.add_business),
-                color: Colors.white,
-                size: 28,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  hasShop
-                      ? myShop!['shop_name']
-                      : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            hasShop
-                ? 'Owner: ${myShop!['owner_name']} • ${myShop!['city']}'
-                : (needsSeller
-                    ? 'Turn on selling to create your shop.'
-                    : 'Hi $userName! Create your shop to start selling.'),
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: hasShop
-                    ? const Color(0xFF1B5E20)
-                    : const Color(0xFF0D47A1),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              icon: Icon(hasShop
-                  ? Icons.open_in_new
-                  : (needsSeller ? Icons.storefront : Icons.store)),
-              label: Text(
-                hasShop
-                    ? 'Upload Your Goods Items You Are Selling'
-                    : (needsSeller ? 'Become a Seller' : 'Create My Shop'),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onPressed: () async {
-                if (hasShop) {
-                  _openShopProfilePage(myShop!);
-                } else if (needsSeller) {
-                  final err = await UserSession.becomeSeller();
-                  if (!mounted) return;
-                  if (err == 'SESSION_EXPIRED') {
-                    handleSessionExpired(context);
-                    return;
-                  }
-                  if (err == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('You can now sell on NYG')),
-                    );
-                    widget.onUserChanged();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(err)),
-                    );
-                  }
-                } else {
-                  _showCreateShopDialog();
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final visible = filteredProducts;
@@ -6124,10 +7324,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadEverything,
-          ),
           AccountButton(
               currentUser: widget.currentUser,
               onUserChanged: widget.onUserChanged,
@@ -6145,29 +7341,39 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                _buildTopCard(),
-                const SizedBox(height: 8),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: TextField(
                     onChanged: (v) => setState(() => searchQuery = v),
                     decoration: InputDecoration(
                       hintText: 'Search products, shops, categories...',
-                      prefixIcon: const Icon(Icons.search),
+                      hintStyle:
+                          TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                      prefixIcon:
+                          Icon(Icons.search, color: Colors.grey.shade500),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(
+                            color: Color(0xFF1B5E20), width: 1.5),
                       ),
                       filled: true,
-                      fillColor: Colors.white,
-                      isDense: true,
+                      fillColor: const Color(0xFFF5F5F5),
                       contentPadding: const EdgeInsets.symmetric(
-                          vertical: 12, horizontal: 12),
+                          vertical: 18, horizontal: 16),
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 SizedBox(
-                  height: 40,
+                  height: 44,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -6180,6 +7386,21 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         child: ChoiceChip(
                           label: Text(cat),
                           selected: selected,
+                          showCheckmark: false,
+                          shape: const StadiumBorder(),
+                          backgroundColor: Colors.white,
+                          selectedColor: const Color(0xFF1B5E20),
+                          side: selected
+                              ? BorderSide.none
+                              : BorderSide(color: Colors.grey.shade300),
+                          labelStyle: TextStyle(
+                            fontSize: 13,
+                            fontWeight:
+                                selected ? FontWeight.w700 : FontWeight.w500,
+                            color: selected
+                                ? Colors.white
+                                : Colors.grey.shade700,
+                          ),
                           onSelected: (val) {
                             setState(() => selectedFilterCategory = cat);
                           },
@@ -6192,27 +7413,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 const Divider(height: 1),
                 Expanded(
                   child: visible.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.storefront_outlined,
-                                  size: 80, color: Colors.grey.shade400),
-                              const SizedBox(height: 16),
-                              Text(
-                                searchQuery.isNotEmpty
-                                    ? 'No products match "$searchQuery".'
-                                    : selectedFilterCategory == 'All'
-                                        ? 'No items listed yet in Sierra Leone.'
-                                        : 'No items in "$selectedFilterCategory".',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
+                      ? EmptyState(
+                          icon: Icons.storefront_outlined,
+                          title: searchQuery.isNotEmpty
+                              ? 'No matches for "$searchQuery"'
+                              : selectedFilterCategory == 'All'
+                                  ? 'No products yet'
+                                  : 'Nothing in "$selectedFilterCategory"',
+                          message: searchQuery.isNotEmpty
+                              ? 'Try a different search.'
+                              : 'Check back soon!',
                         )
                       : ShopProductGrid(
                           products: visible,
@@ -6241,656 +7451,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 // ==========================================
 // SHOP PROFILE — SELLER'S OWN VIEW
 // ==========================================
-class ShopProfileScreen extends StatefulWidget {
-  final Map<String, dynamic> merchant;
-  const ShopProfileScreen({super.key, required this.merchant});
-
-  @override
-  State<ShopProfileScreen> createState() => _ShopProfileScreenState();
-}
-
-class _ShopProfileScreenState extends State<ShopProfileScreen> {
-  List<dynamic> myProducts = [];
-  bool isLoading = true;
-  late Map<String, dynamic> merchant;
-
-  @override
-  void initState() {
-    super.initState();
-    merchant = Map<String, dynamic>.from(widget.merchant);
-    fetchShopProducts();
-  }
-
-  Future<void> fetchShopProducts() async {
-    setState(() => isLoading = true);
-    try {
-      final res = await http.get(
-        Uri.parse('$baseUrl/merchants/${merchant['id']}/products/'),
-      );
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        setState(() {
-          myProducts = jsonDecode(res.body);
-          isLoading = false;
-        });
-      } else {
-        setState(() => isLoading = false);
-      }
-    } catch (_) {
-      setState(() => isLoading = false);
-    }
-  }
-
-  Future<void> _showEditShopDialog() async {
-    final shopNameController =
-        TextEditingController(text: merchant['shop_name'] ?? '');
-    final ownerNameController =
-        TextEditingController(text: merchant['owner_name'] ?? '');
-    final phoneController =
-        TextEditingController(text: merchant['phone_number'] ?? '');
-    final cityController =
-        TextEditingController(text: merchant['city'] ?? 'Freetown');
-    String? currentLogo = merchant['logo_url'];
-    String selectedCategory = merchant['category'] ?? 'Other';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Edit Shop Info'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: shopNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Shop Name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: ownerNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Owner Name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: phoneController,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: cityController,
-                  decoration: const InputDecoration(
-                    labelText: 'City',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final url = await pickAndUploadImage(context);
-                      if (url != null) {
-                        setDialogState(() => currentLogo = url);
-                      }
-                    },
-                    icon: const Icon(Icons.photo_camera),
-                    label: Text((currentLogo ?? '').isEmpty
-                        ? 'Pick Shop Logo'
-                        : 'Change Logo'),
-                  ),
-                ),
-                if ((currentLogo ?? '').isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        currentLogo ?? '',
-                        height: 100,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Category',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
-                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
-                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
-                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
-                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
-                    DropdownMenuItem(value: 'Services', child: Text('Services')),
-                    DropdownMenuItem(value: 'Other', child: Text('Other')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() => selectedCategory = value);
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final user = await UserSession.load();
-                final response = await http.put(
-                  Uri.parse('$baseUrl/merchants/${merchant['id']}'),
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
-                  },
-                  body: jsonEncode({
-                    'shop_name': shopNameController.text,
-                    'owner_name': ownerNameController.text,
-                    'phone_number': phoneController.text,
-                    'city': cityController.text,
-                    'category': selectedCategory,
-                    'logo_url': currentLogo,
-                  }),
-                );
-
-                if (response.statusCode >= 200 && response.statusCode < 300) {
-                  final updated = jsonDecode(response.body)['merchant'];
-                  await ShopSession.save(updated);
-                  if (mounted) {
-                    Navigator.pop(ctx);
-                    setState(() => merchant = Map<String, dynamic>.from(updated));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Shop updated')),
-                    );
-                  }
-                } else {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Failed to update shop')),
-                    );
-                  }
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _deleteProduct(int productId, String productTitle) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete product?'),
-        content: Text('Delete "$productTitle"? This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    final user = await UserSession.load();
-    try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/products/$productId'),
-        headers: {
-          'x-api-key': apiKey,
-          'Authorization': 'Bearer ${user?['token'] ?? ''}',
-        },
-      );
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Product deleted')),
-          );
-          fetchShopProducts();
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('You cannot delete this product')),
-          );
-        }
-      }
-    } catch (_) {}
-  }
-
-  void _showAddItemDialog() {
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
-    final priceController = TextEditingController();
-    String selectedCategory = 'Other';
-    List<String> uploadedPhotos = [];
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Add Item to ${merchant['shop_name']}'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Item Title',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: descController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: priceController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Price in Leones (SLE)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Product Category',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
-                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
-                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
-                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
-                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
-                    DropdownMenuItem(value: 'Services', child: Text('Services')),
-                    DropdownMenuItem(value: 'Other', child: Text('Other')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() => selectedCategory = value);
-                    }
-                  },
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await showMultiPhotoPicker(context, uploadedPhotos, (newPhotos) {
-                        setDialogState(() => uploadedPhotos = newPhotos);
-                      });
-                    },
-                    icon: const Icon(Icons.photo_library),
-                    label: Text(uploadedPhotos.isEmpty ? 'Add Photos (up to 4)' : '${uploadedPhotos.length} photo(s) added'),
-                  ),
-                ),
-                if (uploadedPhotos.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: uploadedPhotos.map((url) => ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const SizedBox.shrink()),
-                      )).toList(),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (titleController.text.isEmpty ||
-                    priceController.text.isEmpty) return;
-
-                final price = double.tryParse(priceController.text) ?? 0.0;
-
-                final user = await UserSession.load();
-                final response = await http.post(
-                  Uri.parse('$baseUrl/products/'),
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
-                  },
-                  body: jsonEncode({
-                    'merchant_id': merchant['id'],
-                    'title': titleController.text,
-                    'description': descController.text,
-                    'category': selectedCategory,
-                    'price_sle': price,
-                    'image_url': uploadedPhotos.isNotEmpty ? uploadedPhotos[0] : null,
-                    'image_urls': uploadedPhotos,
-                  }),
-                );
-
-                if (mounted) {
-                  Navigator.pop(ctx);
-                  if (response.statusCode >= 200 &&
-                      response.statusCode < 300) {
-                    fetchShopProducts();
-                  } else {
-                    showApiError(context, response.statusCode, response.body,
-                        fallback: 'Failed to add product.');
-                  }
-                }
-              },
-              child: const Text('Add to Shop'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showEditProductDialog(Map<String, dynamic> product) {
-    final titleController = TextEditingController(text: product['title'] ?? '');
-    final descController = TextEditingController(text: product['description'] ?? '');
-    final priceController = TextEditingController(text: (product['price_sle'] ?? '').toString());
-    List<String> uploadedPhotos = productPhotos(product);
-    String selectedCategory = product['category'] ?? 'Other';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Edit ${product['title']}'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Item Title', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: descController,
-                  decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: priceController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Price in Leones (SLE)', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(labelText: 'Product Category', border: OutlineInputBorder()),
-                  items: const [
-                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
-                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
-                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
-                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
-                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
-                    DropdownMenuItem(value: 'Services', child: Text('Services')),
-                    DropdownMenuItem(value: 'Other', child: Text('Other')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setDialogState(() => selectedCategory = value);
-                  },
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await showMultiPhotoPicker(context, uploadedPhotos, (newPhotos) {
-                        setDialogState(() => uploadedPhotos = newPhotos);
-                      });
-                    },
-                    icon: const Icon(Icons.photo_library),
-                    label: Text(uploadedPhotos.isEmpty ? 'Add Photos (up to 4)' : '${uploadedPhotos.length} photo(s)'),
-                  ),
-                ),
-                if (uploadedPhotos.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: uploadedPhotos.map((url) => ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const SizedBox.shrink()),
-                      )).toList(),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (titleController.text.isEmpty || priceController.text.isEmpty) return;
-                final price = double.tryParse(priceController.text) ?? 0.0;
-                final err = await UserSession.updateProduct(
-                  (product['id'] as num).toInt(),
-                  {
-                    'title': titleController.text,
-                    'description': descController.text,
-                    'category': selectedCategory,
-                    'price_sle': price,
-                    'image_url': uploadedPhotos.isNotEmpty ? uploadedPhotos[0] : null,
-                    'image_urls': uploadedPhotos,
-                  },
-                );
-                if (!context.mounted) return;
-                if (err == 'SESSION_EXPIRED') {
-                  handleSessionExpired(context);
-                  return;
-                }
-                if (err == null) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Product updated')),
-                  );
-                  fetchShopProducts();
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(err)),
-                  );
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(merchant['shop_name'] ?? 'My Shop'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.receipt_long),
-            tooltip: 'Orders',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => MerchantOrdersScreen(merchant: merchant),
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.edit),
-            tooltip: 'Edit shop info',
-            onPressed: _showEditShopDialog,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.green.shade50,
-            width: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: const Color(0xFF1B5E20),
-                      backgroundImage: merchant['logo_url'] != null &&
-                              merchant['logo_url'].toString().isNotEmpty
-                          ? NetworkImage(merchant['logo_url'])
-                          : null,
-                      child: merchant['logo_url'] != null &&
-                              merchant['logo_url'].toString().isNotEmpty
-                          ? null
-                          : Text(
-                              (merchant['shop_name'] ?? '?')[0].toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 24,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        merchant['shop_name'] ?? '',
-                        style: const TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text('Owner: ${merchant['owner_name']}'),
-                Text('Location: ${merchant['city']}, Sierra Leone'),
-                Text('Category: ${merchant['category'] ?? 'Other'}'),
-                Text('Contact: ${merchant['phone_number']}'),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'My Inventory',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _showAddItemDialog,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Product'),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : myProducts.isEmpty
-                    ? const Center(
-                        child: Text(
-                            'No items in your shop yet.\nTap "Add Product" to list your first item.'),
-                      )
-                    : ListView.builder(
-                        itemCount: myProducts.length,
-                        itemBuilder: (ctx, i) {
-                          final item = myProducts[i];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
-                            child: ListTile(
-                              leading: const Icon(Icons.shopping_bag,
-                                  size: 36, color: Colors.green),
-                              title: Text(item['title']),
-                              subtitle: Text(
-                                  'Price: SLE ${item['price_sle']} • ${item['category'] ?? 'Other'}'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, color: Color(0xFF1B5E20)),
-                                    tooltip: 'Edit product',
-                                    onPressed: () => _showEditProductDialog(item),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red),
-                                    tooltip: 'Delete product',
-                                    onPressed: () => _deleteProduct(
-                                      item['id'],
-                                      item['title'] ?? 'this product',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ==========================================
 // RUNNER DASHBOARD
@@ -6939,9 +7499,19 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
   Future<void> fetchJobs() async {
     setState(() => _loadingJobs = true);
     try {
-      final res = await http.get(Uri.parse('$baseUrl/deliveries/available/'));
+      final user = await UserSession.load();
+      final res = await http.get(
+        Uri.parse('$baseUrl/deliveries/available/'),
+        headers: {
+          'x-api-key': apiKey,
+          if (user?['token'] != null)
+            'Authorization': 'Bearer ${user!['token']}',
+        },
+      );
       if (res.statusCode >= 200 && res.statusCode < 300) {
         setState(() => jobs = jsonDecode(res.body));
+      } else {
+        setState(() => jobs = []);
       }
     } catch (_) {}
     if (mounted) setState(() => _loadingJobs = false);
@@ -6981,12 +7551,10 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
               currentUser: widget.currentUser,
               onUserChanged: widget.onUserChanged,
               ensureLoggedIn: _ensureLoggedIn),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: fetchJobs),
         ],
       ),
       body: Column(
         children: [
-          _buildTopCard(),
           Expanded(
             child: _loadingJobs
                 ? const Center(child: CircularProgressIndicator())
@@ -7055,107 +7623,6 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
     );
   }
 
-  Widget _buildTopCard() {
-    final user = widget.currentUser;
-    final isUserRunner = isRunner(user);
-
-    final String subtitle;
-    if (isUserRunner) {
-      subtitle = 'You are registered as a Runner';
-    } else if (user == null) {
-      subtitle = 'Sign up to deliver items and earn';
-    } else {
-      subtitle = 'Sign out and create a Runner account to earn';
-    }
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isUserRunner
-              ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
-              : [const Color(0xFF0D47A1), const Color(0xFF1565C0)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.directions_run,
-                color: Colors.white,
-                size: 28,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Become a Runner',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: isUserRunner
-                    ? const Color(0xFF1B5E20)
-                    : const Color(0xFF0D47A1),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              icon: Icon(isUserRunner ? Icons.list_alt : Icons.directions_run),
-              label: Text(
-                isUserRunner ? 'View Available Jobs' : 'How to become a Runner',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onPressed: () {
-                if (isUserRunner) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => RunnerDeliveriesScreen(currentUser: user!),
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                          'Sign out from the profile menu, then create a new account and choose Runner.'),
-                    ),
-                  );
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ==========================================

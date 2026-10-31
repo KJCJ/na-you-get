@@ -47,4 +47,3 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 apk/*.apk
-apk/*.apk
