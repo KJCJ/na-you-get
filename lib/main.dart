@@ -9,6 +9,12 @@ import 'package:image_picker/image_picker.dart';
 const String baseUrl = 'https://random.taila91e03.ts.net';
 const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785acabfd295';
 const String appVersion = '1.0.0';
+const Color kNyqBlue = Color(0xFF1A5AD7);
+const Color kNyqBlueDeep = Color(0xFF0D47A1);
+const Color kNyqTerracotta = Color(0xFFC35A3D);
+const Color kNyqOchre = Color(0xFFD4A017);
+const Color kNyqSand = Color(0xFFFAF7F2);
+const Color kNyqInk = Color(0xFF231F1C);
 const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk';
 
 // ==========================================
@@ -245,53 +251,59 @@ class NaYouGetApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: Colors.white,
+        scaffoldBackgroundColor: kNyqSand,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1B5E20),
-          primary: const Color(0xFF1B5E20),
-          secondary: const Color(0xFF0D47A1),
-          surface: Colors.white,
+          seedColor: kNyqBlue,
+          primary: kNyqBlue,
+          secondary: kNyqTerracotta,
+          tertiary: kNyqOchre,
+          surface: kNyqSand,
+        ),
+        textTheme: const TextTheme(
+          headlineSmall:
+              TextStyle(fontWeight: FontWeight.w800, color: kNyqInk),
+          titleLarge: TextStyle(fontWeight: FontWeight.w700, color: kNyqInk),
+          titleMedium: TextStyle(fontWeight: FontWeight.w700, color: kNyqInk),
+          bodyMedium: TextStyle(height: 1.4, color: kNyqInk),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.white,
-          foregroundColor: Color(0xFF1C1C1E),
-          elevation: 1.5,
-          scrolledUnderElevation: 1.5,
-          shadowColor: Color(0x12000000),
+          backgroundColor: kNyqSand,
+          surfaceTintColor: kNyqSand,
+          foregroundColor: kNyqInk,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          shadowColor: Color(0x0F5A3A28),
           centerTitle: false,
           titleTextStyle: TextStyle(
-            color: Color(0xFF1C1C1E),
+            color: kNyqInk,
             fontSize: 18,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w800,
           ),
-          iconTheme: IconThemeData(color: Color(0xFF1C1C1E)),
+          iconTheme: IconThemeData(color: kNyqInk),
         ),
         navigationBarTheme: NavigationBarThemeData(
-          backgroundColor: Colors.white,
+          backgroundColor: kNyqSand,
           surfaceTintColor: Colors.transparent,
-          elevation: 3,
+          elevation: 6,
           height: 68,
-          indicatorColor: const Color(0x1F1B5E20),
+          indicatorColor: kNyqBlue.withAlpha(30),
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           iconTheme: WidgetStateProperty.resolveWith((states) {
             final on = states.contains(WidgetState.selected);
             return IconThemeData(
-              size: 24,
-              color: on ? const Color(0xFF1B5E20) : const Color(0xFF9E9E9E),
-            );
+                size: 24, color: on ? kNyqBlue : const Color(0xFF9A9088));
           }),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final on = states.contains(WidgetState.selected);
             return TextStyle(
               fontSize: 11,
               fontWeight: on ? FontWeight.w700 : FontWeight.w500,
-              color: on ? const Color(0xFF1B5E20) : const Color(0xFF9E9E9E),
+              color: on ? kNyqBlue : const Color(0xFF9A9088),
             );
           }),
         ),
         dividerTheme: const DividerThemeData(
-          color: Color(0xFFEDEDED),
+          color: Color(0xFFE8E0D5),
           thickness: 1,
           space: 1,
         ),
@@ -4126,7 +4138,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return Stack(
       children: [
         Scaffold(
-      body: IndexedStack(index: _currentIndex, children: screens),
+      body: KenteBackground(
+        child: IndexedStack(index: _currentIndex, children: screens),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
@@ -4225,11 +4239,14 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
       decoration: BoxDecoration(
         color: widget.cardColour ?? Colors.white,
         borderRadius: BorderRadius.circular(20),
+        border: const Border(
+          top: BorderSide(color: kNyqOchre, width: 2),
+        ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 24,
-            offset: Offset(0, 10),
+            color: Color(0x1A5A3A28),
+            blurRadius: 20,
+            offset: Offset(0, 8),
           ),
         ],
       ),
@@ -4309,10 +4326,10 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                   const SizedBox(height: 4),
                   Text(
                     'SLE ${item['price_sle']}',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: accent,
+                      color: kNyqTerracotta,
                     ),
                   ),
                   if (description.isNotEmpty) ...[
@@ -4333,20 +4350,17 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                       Expanded(
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                accent,
-                                Color.lerp(accent, Colors.white, 0.18)!,
-                              ],
+                            gradient: const LinearGradient(
+                              colors: [kNyqBlue, kNyqBlueDeep],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: accent.withAlpha(70),
-                                blurRadius: 12,
-                                offset: const Offset(0, 5),
+                                color: kNyqBlue.withAlpha(80),
+                                blurRadius: 14,
+                                offset: const Offset(0, 6),
                               ),
                             ],
                           ),
@@ -4357,16 +4371,16 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                               onTap: () => widget.onBuy(item),
                               child: Padding(
                                 padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
+                                    const EdgeInsets.symmetric(vertical: 14),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.shopping_cart,
-                                        size: 18, color: onAccent),
+                                    const Icon(Icons.shopping_cart,
+                                        size: 18, color: Colors.white),
                                     const SizedBox(width: 8),
-                                    Text('Buy Now',
+                                    const Text('Buy Now',
                                         style: TextStyle(
-                                            color: onAccent,
+                                            color: Colors.white,
                                             fontWeight: FontWeight.w600)),
                                   ],
                                 ),
@@ -4400,6 +4414,60 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class KentePainter extends CustomPainter {
+  final Color colour;
+  const KentePainter({this.colour = kNyqTerracotta});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = Paint()
+      ..color = colour.withAlpha(13)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    final bead = Paint()..color = colour.withAlpha(20);
+
+    const step = 48.0;
+    int row = 0;
+    for (double y = 0; y < size.height + step; y += step) {
+      final shift = row.isEven ? 0.0 : step / 2;
+      for (double x = -step; x < size.width + step; x += step) {
+        final cx = x + shift;
+        final path = Path()
+          ..moveTo(cx, y - 7)
+          ..lineTo(cx + 7, y)
+          ..lineTo(cx, y + 7)
+          ..lineTo(cx - 7, y)
+          ..close();
+        canvas.drawPath(path, stroke);
+        canvas.drawCircle(Offset(cx + step / 2, y + step / 2), 1.5, bead);
+      }
+      row++;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant KentePainter old) => old.colour != colour;
+}
+
+class KenteBackground extends StatelessWidget {
+  final Widget child;
+  const KenteBackground({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(painter: KentePainter()),
+          ),
+        ),
+        Positioned.fill(child: child),
+      ],
     );
   }
 }
@@ -4758,6 +4826,7 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
@@ -6378,6 +6447,7 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
@@ -6466,11 +6536,14 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                             decoration: BoxDecoration(
                               color: bg,
                               borderRadius: BorderRadius.circular(16),
+                              border: const Border(
+                                top: BorderSide(color: kNyqOchre, width: 2),
+                              ),
                               boxShadow: const [
                                 BoxShadow(
-                                  color: Colors.black12,
-                                  blurRadius: 10,
-                                  offset: Offset(0, 4),
+                                  color: Color(0x1A5A3A28),
+                                  blurRadius: 18,
+                                  offset: Offset(0, 6),
                                 ),
                               ],
                             ),
@@ -7321,6 +7394,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     final visible = filteredProducts;
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
@@ -7544,6 +7618,7 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
