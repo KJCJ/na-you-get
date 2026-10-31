@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show Random;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -5759,15 +5760,10 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
 
   Future<void> _showCheckout(dynamic product) async {
     if (_currentUser == null) {
-      final ok = await Navigator.push<bool>(
-        context,
-        MaterialPageRoute(builder: (_) => const AuthScreen()),
-      );
-      if (ok == true) {
-        widget.onUserChanged?.call();
-        await _loadUser();
-      }
-      if (ok != true || !mounted) return;
+      final guest = await guestSignupFlow(context);
+      if (guest == null || !mounted) return;
+      widget.onUserChanged?.call();
+      await _loadUser();
     }
 
     if (!mounted) return;
@@ -7052,6 +7048,177 @@ class _ShopBannerState extends State<_ShopBanner> {
   }
 }
 
+String generateGuestPassword() {
+  final rnd = Random.secure();
+  return List.generate(32, (_) => rnd.nextInt(16).toRadixString(16)).join();
+}
+
+Future<Map<String, dynamic>?> guestSignupFlow(BuildContext context) async {
+  final nameCtl = TextEditingController();
+  final phoneCtl = TextEditingController();
+  final passCtl = TextEditingController();
+  bool busy = false;
+  bool loginMode = false;
+  String? error;
+
+  final result = await showDialog<Map<String, dynamic>>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        Future<void> submit() async {
+          final name = nameCtl.text.trim();
+          final phone = normalisePhone(phoneCtl.text);
+          if (phone.isEmpty) {
+            setDialogState(() => error = 'Enter your phone number.');
+            return;
+          }
+          if (!loginMode && name.isEmpty) {
+            setDialogState(() => error = 'Enter your name.');
+            return;
+          }
+          if (loginMode && passCtl.text.isEmpty) {
+            setDialogState(() => error = 'Enter your password.');
+            return;
+          }
+          setDialogState(() {
+            busy = true;
+            error = null;
+          });
+          try {
+            final url =
+                loginMode ? '$baseUrl/auth/login' : '$baseUrl/auth/signup';
+            final body = loginMode
+                ? {'phone_number': phone, 'password': passCtl.text}
+                : {
+                    'phone_number': phone,
+                    'name': name,
+                    'password': generateGuestPassword(),
+                    'role': 'customer',
+                  };
+            final res = await http
+                .post(
+                  Uri.parse(url),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                  },
+                  body: jsonEncode(body),
+                )
+                .timeout(const Duration(seconds: 12));
+            final data = jsonDecode(res.body);
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              final user = {
+                ...Map<String, dynamic>.from(data['user'] as Map),
+                'token': data['token'],
+              };
+              await UserSession.save(user, data['token'] as String);
+              if (context.mounted) Navigator.pop(ctx, user);
+              return;
+            }
+            final detail =
+                (data['detail'] ?? 'Could not continue.').toString();
+            final already = detail.toLowerCase().contains('already');
+            setDialogState(() {
+              busy = false;
+              if (already && !loginMode) {
+                loginMode = true;
+                error =
+                    'This number already has an account. Enter your password to log in.';
+              } else {
+                error = detail;
+              }
+            });
+          } catch (_) {
+            setDialogState(() {
+              busy = false;
+              error = 'Network error. Please try again.';
+            });
+          }
+        }
+
+        return AlertDialog(
+          title: Text(loginMode ? 'Log In to Buy' : 'Continue as Guest'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                loginMode
+                    ? 'Your number is already registered. Enter your password.'
+                    : 'Just your name and phone number to buy.',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              if (!loginMode) ...[
+                TextField(
+                  controller: nameCtl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              TextField(
+                controller: phoneCtl,
+                keyboardType: TextInputType.phone,
+                enabled: !loginMode,
+                decoration: const InputDecoration(
+                  labelText: 'Phone Number',
+                  hintText: '+232 78 839002',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (loginMode) ...[
+                const SizedBox(height: 10),
+                TextField(
+                  controller: passCtl,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+              if (error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  error!,
+                  style:
+                      const TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: busy ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: busy ? null : submit,
+              child: busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(loginMode ? 'Log In' : 'Continue'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  nameCtl.dispose();
+  phoneCtl.dispose();
+  passCtl.dispose();
+  return result;
+}
 class ProductDetailScreen extends StatelessWidget {
   final Map<String, dynamic> product;
   final void Function(Map<String, dynamic> product) onBuy;
@@ -7587,8 +7754,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   Future<void> _showCheckout(dynamic product) async {
-    final loggedIn = await _ensureLoggedIn();
-    if (!loggedIn) return;
+    var buyer = widget.currentUser;
+    if (buyer == null) {
+      final guest = await guestSignupFlow(context);
+      if (guest == null || !mounted) return;
+      widget.onUserChanged();
+      buyer = guest;
+    }
     if (!mounted) return;
 
     String paymentMethod = 'cash_on_delivery';
@@ -7658,7 +7830,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     'x-api-key': apiKey,
                   },
                   body: jsonEncode({
-                    'customer_id': widget.currentUser!['id'],
+                    'customer_id': buyer!['id'],
                     'merchant_id': product['merchant_id'],
                     'product_id': product['id'],
                     'pickup_address': 'Freetown Central Market',
