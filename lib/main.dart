@@ -4677,11 +4677,13 @@ class _EditableAvatarState extends State<EditableAvatar> {
 class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic>? currentUser;
   final VoidCallback onUserChanged;
+  final VoidCallback? onOpenJobs;
 
   const ProfileScreen({
     super.key,
     required this.currentUser,
     required this.onUserChanged,
+    this.onOpenJobs,
   });
 
   @override
@@ -4919,6 +4921,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ],
+            if (widget.currentUser?['is_admin'] == 1 ||
+                widget.currentUser?['is_admin'] == true) ...[
+              const SizedBox(height: 18),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [kNyqAccent, kNyqAccentDeep],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                        color: kNyqAccent.withAlpha(60),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8)),
+                  ],
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 4),
+                  leading: const Icon(Icons.admin_panel_settings,
+                      color: Colors.white),
+                  title: const Text('Admin Dashboard',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15)),
+                  subtitle: const Text('Users, invoices and overview',
+                      style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right,
+                      color: Colors.white, size: 18),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const AdminDashboardScreen()),
+                  ),
+                ),
+              ),
+            ],
             if (!_isSellerUser && !_isRunnerUser) ...[
               const SizedBox(height: 24),
               Container(
@@ -4982,20 +5024,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
                 child: _isWorker
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 16),
-                        child: Row(
-                          children: [
-                            Icon(Icons.verified, color: kNyqGreen),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text('Job Worker',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w700)),
-                            ),
-                          ],
-                        ),
+                    ? ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.work, color: kNyqGreen),
+                        title: const Text('Available Jobs'),
+                        subtitle: const Text('See jobs you can accept'),
+                        trailing: const Icon(Icons.chevron_right,
+                            size: 18, color: Color(0xFFB0A89F)),
+                        onTap: () {
+                          if (widget.onOpenJobs != null) {
+                            widget.onOpenJobs!();
+                          } else {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => RunnerDashboardScreen(
+                                  currentUser: widget.currentUser,
+                                  onUserChanged: widget.onUserChanged,
+                                ),
+                              ),
+                            );
+                          }
+                        },
                       )
                     : ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -5584,7 +5634,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             currentUser: _currentUser, onUserChanged: _refreshUser),
       if (isLoggedIn)
         ProfileScreen(
-            currentUser: _currentUser, onUserChanged: _refreshUser),
+            currentUser: _currentUser,
+            onUserChanged: _refreshUser,
+            onOpenJobs: canTakeJobs
+                ? () => setState(() => _currentIndex = 3)
+                : null),
     ];
 
     // Clamp in case someone loses the worker role while on the Jobs tab.
