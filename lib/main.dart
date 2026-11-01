@@ -1723,6 +1723,40 @@ Future<void> showWorkerApplicationDialog(
   );
 }
 
+Future<void> requestRoleRemoval(
+    BuildContext context, String roleLabel, String message) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dctx) => AlertDialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Text('Stop being a ' + roleLabel + '?'),
+      content: const Text(
+        'NYG Support will review your request. You keep full access until they approve it.',
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: const Text('Cancel')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+          onPressed: () => Navigator.pop(dctx, true),
+          child: const Text('Send Request'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+  await sendApplication('ROLE REMOVAL REQUEST', [message]);
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('Request sent to NYG Support'),
+      backgroundColor: kNyqGreen,
+    ),
+  );
+}
+
 String _profileRoleLabel(Map<String, dynamic>? user) {
   if (user == null) return 'Guest';
   final admin = user['is_admin'] == 1 || user['is_admin'] == true;
@@ -1982,50 +2016,14 @@ void showAccountSheet(
               if (isSeller(currentUser) && shop != null)
                 ListTile(
                   leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
-                  title: const Text('Stop Selling'),
-                  subtitle: const Text('Pause your shop temporarily'),
+                  title: const Text('Request to Stop Selling'),
+                  subtitle: const Text('Ask NYG Support to close your seller account'),
                   trailing: const Icon(Icons.chevron_right,
                       size: 18, color: Color(0xFFB0A89F)),
-                  onTap: () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (dctx) => AlertDialog(
-                        title: const Text('Stop selling?'),
-                        content: const Text(
-                          'You will not be able to add or edit products until you turn selling back on. Your shop, products, and existing orders all stay safe and visible — you can re-enable selling anytime.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(dctx, false),
-                            child: const Text('Cancel'),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () => Navigator.pop(dctx, true),
-                            child: const Text('Stop Selling'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (!context.mounted) return;
-                    if (confirmed != true) return;
+                  onTap: () {
                     Navigator.pop(ctx);
-                    final err = await UserSession.revokeSeller();
-                    if (!context.mounted) return;
-                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
-                    if (err == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Selling paused')),
-                      );
-                      onUserChanged();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(err)),
-                      );
-                    }
+                    requestRoleRemoval(context, 'a Seller',
+                        'I want to stop being a Seller.');
                   },
                 ),
               if (isSeller(currentUser))
@@ -2053,50 +2051,14 @@ void showAccountSheet(
                 sectionHeader('DELIVERIES'),
                 ListTile(
                   leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
-                  title: const Text('Stop Taking Jobs'),
-                  subtitle: const Text('Pause deliveries temporarily'),
+                  title: const Text('Request to Stop Working'),
+                  subtitle: const Text('Ask NYG Support to remove your worker role'),
                   trailing: const Icon(Icons.chevron_right,
                       size: 18, color: Color(0xFFB0A89F)),
-                  onTap: () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (dctx) => AlertDialog(
-                        title: const Text('Stop taking jobs?'),
-                        content: const Text(
-                          'You will not see delivery jobs or be able to accept them until you turn running back on. Past deliveries stay in your history.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(dctx, false),
-                            child: const Text('Cancel'),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () => Navigator.pop(dctx, true),
-                            child: const Text('Stop Taking Jobs'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (!context.mounted) return;
-                    if (confirmed != true) return;
+                  onTap: () {
                     Navigator.pop(ctx);
-                    final err = await UserSession.revokeRunner();
-                    if (!context.mounted) return;
-                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
-                    if (err == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Running paused')),
-                      );
-                      onUserChanged();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(err)),
-                      );
-                    }
+                    requestRoleRemoval(context, 'a Job Worker',
+                        'I want to stop being a Job Worker.');
                   },
                 ),
               ],
@@ -5028,7 +4990,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.work, color: kNyqGreen),
                         title: const Text('Available Jobs'),
-                        subtitle: const Text('See jobs you can accept'),
+                        subtitle: const Text(
+                            'Status: Approved Job Worker - see jobs you can accept'),
                         trailing: const Icon(Icons.chevron_right,
                             size: 18, color: Color(0xFFB0A89F)),
                         onTap: () {
