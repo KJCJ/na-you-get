@@ -1632,12 +1632,12 @@ void showAccountSheet(
                         border: Border.all(color: Colors.white38),
                       ),
                       child: Text(
-                        isSeller(user) && isRunner(user)
-                            ? 'SELLER + WORKER'
-                            : isSeller(user)
-                                ? 'SELLER'
-                                : isRunner(user)
-                                    ? 'WORKER'
+                        isRunner(user) && isSeller(user)
+                            ? 'SELLER & WORKER'
+                            : isRunner(user)
+                                ? 'WORKER'
+                                : isSeller(user)
+                                    ? 'SELLER'
                                     : 'CUSTOMER',
                         style: const TextStyle(
                             fontSize: 10.5,
@@ -1780,7 +1780,7 @@ void showAccountSheet(
                     }
                   },
                 ),
-              if (shop == null)
+              if (!isSeller(currentUser) && shop == null)
                 ListTile(
                   leading: const Icon(Icons.storefront, color: Color(0xFF1B5E20)),
                   title: const Text('Start Selling'),
@@ -5157,7 +5157,26 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     } catch (_) {}
   }
 
-  void _refreshUser() => _loadUser();
+  Future<void> _refreshUser() async {
+    final cached = await UserSession.load();
+    final token = cached?['token'];
+    if (token != null) {
+      try {
+        final res = await http.get(
+          Uri.parse('$baseUrl/auth/me'),
+          headers: {
+            'x-api-key': apiKey,
+            'Authorization': 'Bearer $token',
+          },
+        ).timeout(const Duration(seconds: 8));
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          final fresh = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+          await UserSession.save(fresh, token);
+        }
+      } catch (_) {}
+    }
+    await _loadUser();
+  }
 
   @override
   Widget build(BuildContext context) {
