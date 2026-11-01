@@ -1508,10 +1508,10 @@ void showAccountSheet(
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: Colors.grey.shade600,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+              color: Color(0xFF9A9088),
             ),
           ),
         ),
@@ -1578,43 +1578,84 @@ void showAccountSheet(
                 ),
               ),
             ] else ...[
-              CircleAvatar(
-                radius: 32,
-                backgroundColor: const Color(0xFF1B5E20),
-                child: Text(
-                  user['name'].toString().isNotEmpty
-                      ? user['name'][0].toUpperCase()
-                      : '?',
-                  style: const TextStyle(
-                      fontSize: 28,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold),
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [kNyqAccent, kNyqAccentDeep],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                        color: kNyqAccent.withAlpha(60),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8)),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 34,
+                      backgroundColor: Colors.white24,
+                      child: Text(
+                        user['name'].toString().isNotEmpty
+                            ? user['name'][0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                            fontSize: 28,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(user['name'] ?? 'User',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white)),
+                    const SizedBox(height: 2),
+                    Text(user['phone_number'] ?? '',
+                        style: const TextStyle(
+                            fontSize: 13, color: Colors.white70)),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: Colors.white38),
+                      ),
+                      child: Text(
+                        isSeller(user) && isRunner(user)
+                            ? 'SELLER + RUNNER'
+                            : isSeller(user)
+                                ? 'SELLER'
+                                : isRunner(user)
+                                    ? 'RUNNER'
+                                    : 'CUSTOMER',
+                        style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                            color: Colors.white),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                user['name'] ?? 'User',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              Text(user['phone_number'] ?? ''),
-              const SizedBox(height: 4),
-              Chip(
-                label: Text(
-                  isSeller(user) && isRunner(user)
-                      ? 'SELLER + RUNNER'
-                      : isSeller(user)
-                          ? 'SELLER'
-                          : isRunner(user)
-                              ? 'RUNNER'
-                              : 'CUSTOMER',
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-              const Divider(height: 24),
+              const SizedBox(height: 6),
               ListTile(
                 leading: const Icon(Icons.person_outline),
                 title: const Text('My Profile'),
                 subtitle: Text(_profileRoleLabel(currentUser)),
+                trailing: const Icon(Icons.chevron_right,
+                    size: 18, color: Color(0xFFB0A89F)),
                 onTap: () {
                   Navigator.pop(ctx);
                   Navigator.push(
@@ -1633,6 +1674,8 @@ void showAccountSheet(
               ListTile(
                 leading: const Icon(Icons.receipt_long),
                 title: const Text('My Orders'),
+                trailing: const Icon(Icons.chevron_right,
+                    size: 18, color: Color(0xFFB0A89F)),
                 onTap: () {
                   Navigator.pop(ctx);
                   Navigator.push(
@@ -1646,6 +1689,8 @@ void showAccountSheet(
               ListTile(
                 leading: const Icon(Icons.chat_bubble_outline),
                 title: const Text('Messages'),
+                trailing: const Icon(Icons.chevron_right,
+                    size: 18, color: Color(0xFFB0A89F)),
                 onTap: () {
                   Navigator.pop(ctx);
                   Navigator.push(
@@ -1660,6 +1705,8 @@ void showAccountSheet(
               ListTile(
                 leading: const Icon(Icons.description_outlined),
                 title: const Text('My Invoices'),
+                trailing: const Icon(Icons.chevron_right,
+                    size: 18, color: Color(0xFFB0A89F)),
                 onTap: () {
                   Navigator.pop(ctx);
                   Navigator.push(
@@ -1673,6 +1720,8 @@ void showAccountSheet(
                   leading: const Icon(Icons.admin_panel_settings, color: kNyqGreen),
                   title: const Text('Admin Dashboard'),
                   subtitle: const Text('Users, invoices and earnings'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 18, color: Color(0xFFB0A89F)),
                   onTap: () {
                     Navigator.pop(ctx);
                     Navigator.push(
@@ -1687,6 +1736,8 @@ void showAccountSheet(
                   leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
                   title: const Text('Stop Selling'),
                   subtitle: const Text('Pause your shop temporarily'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 18, color: Color(0xFFB0A89F)),
                   onTap: () async {
                     final confirmed = await showDialog<bool>(
                       context: context,
@@ -1734,6 +1785,8 @@ void showAccountSheet(
                   leading: const Icon(Icons.storefront, color: Color(0xFF1B5E20)),
                   title: const Text('Start Selling'),
                   subtitle: const Text('Create your own shop'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 18, color: Color(0xFFB0A89F)),
                   onTap: () async {
                     Navigator.pop(ctx);
                     final err = await UserSession.becomeSeller();
@@ -1757,6 +1810,8 @@ void showAccountSheet(
                   leading: const Icon(Icons.directions_run, color: Color(0xFF0D47A1)),
                   title: const Text('Become a Runner'),
                   subtitle: const Text('Deliver items and earn'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 18, color: Color(0xFFB0A89F)),
                   onTap: () async {
                     Navigator.pop(ctx);
                     final err = await UserSession.becomeRunner();
@@ -1779,6 +1834,8 @@ void showAccountSheet(
                   leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
                   title: const Text('Stop Running'),
                   subtitle: const Text('Pause deliveries temporarily'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 18, color: Color(0xFFB0A89F)),
                   onTap: () async {
                     final confirmed = await showDialog<bool>(
                       context: context,
@@ -1825,6 +1882,8 @@ void showAccountSheet(
               ListTile(
                 leading: const Icon(Icons.edit),
                 title: const Text('Edit Profile'),
+                trailing: const Icon(Icons.chevron_right,
+                    size: 18, color: Color(0xFFB0A89F)),
                 onTap: () {
                   Navigator.pop(ctx);
                   Navigator.push(
@@ -1841,23 +1900,39 @@ void showAccountSheet(
               ListTile(
                 leading: const Icon(Icons.lock_outline),
                 title: const Text('Change Password'),
+                trailing: const Icon(Icons.chevron_right,
+                    size: 18, color: Color(0xFFB0A89F)),
                 onTap: () {
                   Navigator.pop(ctx);
                   showChangePasswordDialog(context);
                 },
               ),
               const Divider(height: 8),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.red),
-                title:
-                    const Text('Sign Out', style: TextStyle(color: Colors.red)),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await UserSession.clear();
-                  await ShopSession.clear();
-                  onUserChanged();
-                  onSignOut?.call();
-                },
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade700,
+                      side: BorderSide(color: Colors.red.shade200),
+                      backgroundColor: Colors.red.shade50,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.logout, size: 18),
+                    label: const Text('Sign Out',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      await UserSession.clear();
+                      await ShopSession.clear();
+                      onUserChanged();
+                      onSignOut?.call();
+                    },
+                  ),
+                ),
               ),
             ],
             const SizedBox(height: 12),
@@ -6839,6 +6914,56 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     }
   }
 
+  Widget _payCard(String current, String value, String label, IconData icon,
+      String hint, ValueChanged<String> onPick) {
+    final selected = current == value;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => onPick(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color:
+                selected ? kNyqAccent.withAlpha(18) : const Color(0xFFF7F7F7),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? kNyqAccent : Colors.grey.shade300,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon,
+                  size: 22,
+                  color: selected ? kNyqAccent : Colors.grey.shade600),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: selected ? kNyqAccent : kNyqInk)),
+                    if (hint.isNotEmpty)
+                      Text(hint,
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+              if (selected)
+                const Icon(Icons.check_circle, color: kNyqAccent, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showCheckout(dynamic product) async {
     if (_currentUser == null) {
       final guest = await guestSignupFlow(context);
@@ -6857,6 +6982,12 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+          actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24)),
           title: Text('Buy ${product['title']}'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -6873,30 +7004,47 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
               if (!collectInStore)
                 TextField(
                   controller: deliveryController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Delivery Address',
-                    border: OutlineInputBorder(),
+                    filled: true,
+                    fillColor: const Color(0xFFF5F5F5),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide:
+                          const BorderSide(color: kNyqAccent, width: 1.5),
+                    ),
                   ),
                 ),
               const SizedBox(height: 10),
-              RadioListTile(
-                title: const Text('Cash on Delivery'),
-                value: 'cash_on_delivery',
-                groupValue: paymentMethod,
-                onChanged: (val) => setDialogState(() => paymentMethod = val!),
-              ),
-              RadioListTile(
-                title: const Text('Orange Money (*144#)'),
-                value: 'orange_money',
-                groupValue: paymentMethod,
-                onChanged: (val) => setDialogState(() => paymentMethod = val!),
-              ),
-              RadioListTile(
-                title: const Text('Afrimoney (*161#)'),
-                value: 'africell_money',
-                groupValue: paymentMethod,
-                onChanged: (val) => setDialogState(() => paymentMethod = val!),
-              ),
+              _payCard(
+                  paymentMethod,
+                  'cash_on_delivery',
+                  'Cash on Delivery',
+                  Icons.payments_outlined,
+                  'Pay the runner on delivery',
+                  (v) => setDialogState(() => paymentMethod = v)),
+              _payCard(
+                  paymentMethod,
+                  'orange_money',
+                  'Orange Money',
+                  Icons.smartphone,
+                  '*144#',
+                  (v) => setDialogState(() => paymentMethod = v)),
+              _payCard(
+                  paymentMethod,
+                  'africell_money',
+                  'Afrimoney',
+                  Icons.phone_android,
+                  '*161#',
+                  (v) => setDialogState(() => paymentMethod = v)),
             ],
           ),
           actions: [
@@ -6904,8 +7052,17 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel'),
             ),
-            ElevatedButton(
-              onPressed: () async {
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: kNyqAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: () async {
                 if (!collectInStore && deliveryController.text.isEmpty) {
                   return;
                 }
@@ -6963,7 +7120,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   }
                 }
               },
-              child: const Text('Confirm Order'),
+                child: const Text('Confirm Order'),
+              ),
             ),
           ],
         ),
@@ -8432,6 +8590,56 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     return false;
   }
 
+  Widget _payCard(String current, String value, String label, IconData icon,
+      String hint, ValueChanged<String> onPick) {
+    final selected = current == value;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => onPick(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color:
+                selected ? kNyqAccent.withAlpha(18) : const Color(0xFFF7F7F7),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? kNyqAccent : Colors.grey.shade300,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon,
+                  size: 22,
+                  color: selected ? kNyqAccent : Colors.grey.shade600),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: selected ? kNyqAccent : kNyqInk)),
+                    if (hint.isNotEmpty)
+                      Text(hint,
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+              if (selected)
+                const Icon(Icons.check_circle, color: kNyqAccent, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showCheckout(dynamic product) async {
     var buyer = widget.currentUser;
     if (buyer == null) {
@@ -8450,6 +8658,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+          actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24)),
           title: Text('Buy ${product['title']}'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -8466,30 +8680,47 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               if (!collectInStore)
                 TextField(
                   controller: deliveryController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Delivery Address',
-                    border: OutlineInputBorder(),
+                    filled: true,
+                    fillColor: const Color(0xFFF5F5F5),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide:
+                          const BorderSide(color: kNyqAccent, width: 1.5),
+                    ),
                   ),
                 ),
               const SizedBox(height: 10),
-              RadioListTile(
-                title: const Text('Cash on Delivery'),
-                value: 'cash_on_delivery',
-                groupValue: paymentMethod,
-                onChanged: (val) => setDialogState(() => paymentMethod = val!),
-              ),
-              RadioListTile(
-                title: const Text('Orange Money (*144#)'),
-                value: 'orange_money',
-                groupValue: paymentMethod,
-                onChanged: (val) => setDialogState(() => paymentMethod = val!),
-              ),
-              RadioListTile(
-                title: const Text('Afrimoney (*161#)'),
-                value: 'africell_money',
-                groupValue: paymentMethod,
-                onChanged: (val) => setDialogState(() => paymentMethod = val!),
-              ),
+              _payCard(
+                  paymentMethod,
+                  'cash_on_delivery',
+                  'Cash on Delivery',
+                  Icons.payments_outlined,
+                  'Pay the runner on delivery',
+                  (v) => setDialogState(() => paymentMethod = v)),
+              _payCard(
+                  paymentMethod,
+                  'orange_money',
+                  'Orange Money',
+                  Icons.smartphone,
+                  '*144#',
+                  (v) => setDialogState(() => paymentMethod = v)),
+              _payCard(
+                  paymentMethod,
+                  'africell_money',
+                  'Afrimoney',
+                  Icons.phone_android,
+                  '*161#',
+                  (v) => setDialogState(() => paymentMethod = v)),
             ],
           ),
           actions: [
@@ -8497,8 +8728,17 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel'),
             ),
-            ElevatedButton(
-              onPressed: () async {
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: kNyqAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: () async {
                 if (!collectInStore && deliveryController.text.isEmpty) {
                   return;
                 }
@@ -8556,7 +8796,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   }
                 }
               },
-              child: const Text('Confirm Order'),
+                child: const Text('Confirm Order'),
+              ),
             ),
           ],
         ),
