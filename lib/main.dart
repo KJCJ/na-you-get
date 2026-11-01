@@ -1469,6 +1469,260 @@ const Map<String, String> kShopPalette = {
   '#F5F5F5': 'Light Grey',
 };
 
+const int kAdminUserId = 4;
+
+Future<void> sendApplication(String subject, List<String> lines) async {
+  final buffer = StringBuffer('[' + subject + ']')..writeln();
+  buffer.writeln('--------------------');
+  for (final l in lines) {
+    buffer.writeln('- ' + l);
+  }
+  buffer.writeln('--------------------');
+  buffer.write('Sent from the NYG app');
+  await MessageSession.send(kAdminUserId, buffer.toString());
+}
+
+Future<void> showSellerApplicationDialog(
+    BuildContext context, Map<String, dynamic> user) async {
+  final business = TextEditingController();
+  final city = TextEditingController(text: 'Freetown');
+  final about = TextEditingController();
+  final phone = TextEditingController(
+      text: (user['phone_number'] ?? '').toString());
+  var category = 'Fashion';
+  const categories = [
+    'Fashion',
+    'Food',
+    'Electronics',
+    'Home',
+    'Beauty',
+    'Services',
+    'Other',
+  ];
+  var busy = false;
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogCtx) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        backgroundColor: Colors.white,
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24)),
+        title: const Text('Apply to be a Seller'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: business,
+                decoration: const InputDecoration(
+                    labelText: 'Business Name',
+                    border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: category,
+                decoration: const InputDecoration(
+                    labelText: 'Business Category',
+                    border: OutlineInputBorder()),
+                items: categories
+                    .map((c) =>
+                        DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setDialogState(() => category = v);
+                },
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: city,
+                decoration: const InputDecoration(
+                    labelText: 'Business Address / City',
+                    border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: about,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                    labelText: 'What do you intend to sell?',
+                    border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: phone,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: busy ? null : () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: busy
+                ? null
+                : () async {
+                    if (business.text.trim().isEmpty ||
+                        about.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(
+                            content: Text(
+                                'Please fill in the business name and what you sell')),
+                      );
+                      return;
+                    }
+                    setDialogState(() => busy = true);
+                    await sendApplication('SELLER APPLICATION', [
+                      'Business: ' + business.text.trim(),
+                      'Category: ' + category,
+                      'City/Address: ' + city.text.trim(),
+                      'Intends to sell: ' + about.text.trim(),
+                      'Phone: ' + phone.text.trim(),
+                      'Account ID: ${user['id']}',
+                    ]);
+                    if (!dialogCtx.mounted) return;
+                    Navigator.pop(dialogCtx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Application sent. We will review it shortly.'),
+                        backgroundColor: kNyqGreen,
+                      ),
+                    );
+                  },
+            child: busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
+                : const Text('Submit'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Future<void> showWorkerApplicationDialog(
+    BuildContext context, Map<String, dynamic> user) async {
+  final name = TextEditingController(
+      text: (user['name'] ?? '').toString());
+  final area = TextEditingController(text: 'Freetown');
+  final phone = TextEditingController(
+      text: (user['phone_number'] ?? '').toString());
+  var vehicle = 'Motorbike';
+  const vehicles = ['Motorbike', 'Car', 'Bicycle', 'None / Walking'];
+  var busy = false;
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogCtx) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        backgroundColor: Colors.white,
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24)),
+        title: const Text('Apply to be a Job Worker'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: vehicle,
+                decoration: const InputDecoration(
+                    labelText: 'Vehicle Type',
+                    border: OutlineInputBorder()),
+                items: vehicles
+                    .map((v) =>
+                        DropdownMenuItem(value: v, child: Text(v)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setDialogState(() => vehicle = v);
+                },
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: area,
+                decoration: const InputDecoration(
+                    labelText: 'City / Area you operate in',
+                    border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: phone,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: busy ? null : () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: busy
+                ? null
+                : () async {
+                    if (name.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(
+                            content: Text('Please enter your full name')),
+                      );
+                      return;
+                    }
+                    setDialogState(() => busy = true);
+                    await sendApplication('JOB WORKER APPLICATION', [
+                      'Name: ' + name.text.trim(),
+                      'Vehicle: ' + vehicle,
+                      'Area: ' + area.text.trim(),
+                      'Phone: ' + phone.text.trim(),
+                      'Account ID: ${user['id']}',
+                    ]);
+                    if (!dialogCtx.mounted) return;
+                    Navigator.pop(dialogCtx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Application sent. We will review it shortly.'),
+                        backgroundColor: kNyqGreen,
+                      ),
+                    );
+                  },
+            child: busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
+                : const Text('Submit'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 String _profileRoleLabel(Map<String, dynamic>? user) {
   if (user == null) return 'Guest';
   final admin = user['is_admin'] == 1 || user['is_admin'] == true;
@@ -1780,28 +2034,36 @@ void showAccountSheet(
                     }
                   },
                 ),
-              if (!isSeller(currentUser) && shop == null)
+              if (isSeller(currentUser))
                 ListTile(
-                  leading: const Icon(Icons.storefront, color: Color(0xFF1B5E20)),
-                  title: const Text('Start Selling'),
-                  subtitle: const Text('Create your own shop'),
+                  leading: const Icon(Icons.storefront, color: kNyqGreen),
+                  title: const Text('My Shops'),
+                  subtitle: const Text('Manage your storefronts'),
                   trailing: const Icon(Icons.chevron_right,
                       size: 18, color: Color(0xFFB0A89F)),
-                  onTap: () async {
+                  onTap: () {
                     Navigator.pop(ctx);
-                    final err = await UserSession.becomeSeller();
-                    if (!context.mounted) return;
-                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
-                    if (err == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('You can now sell on NYG')),
-                      );
-                      onUserChanged();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(err)),
-                      );
-                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProfileScreen(
+                          currentUser: currentUser!,
+                          onUserChanged: onUserChanged,
+                        ),
+                      ),
+                    );
+                  },
+                )
+              else
+                ListTile(
+                  leading: const Icon(Icons.storefront, color: Color(0xFF1B5E20)),
+                  title: const Text('Apply to be a Seller'),
+                  subtitle: const Text('Tell us about your business'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 18, color: Color(0xFFB0A89F)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    showSellerApplicationDialog(context, currentUser!);
                   },
                 ),
               if (isRunner(currentUser)) ...[
@@ -4359,6 +4621,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _isWorker = isRunner(u);
     }
     _load();
+    // Pull fresh roles from the server so admin approvals show up immediately.
+    widget.onUserChanged();
   }
 
   @override
@@ -4374,20 +4638,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _load();
   }
 
-  Future<void> _setWorker(bool v) async {
-    setState(() => _isWorker = v);
-    final ok = await UserSession.update({'is_runner': v ? 1 : 0});
-    if (!mounted) return;
-    if (!ok) {
-      setState(() => _isWorker = !v);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not update your worker status')),
-      );
-      return;
-    }
-    await _load();
-    widget.onUserChanged();
-  }
 
   Future<void> _saveRunnerSetting(
       Map<String, dynamic> patch, String successMessage) async {
@@ -4651,23 +4901,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         offset: Offset(0, 10)),
                   ],
                 ),
-                child: SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Available for Delivery Jobs'),
-                  subtitle: Text(
-                    _isWorker
-                        ? 'Jobs tab is visible'
-                        : 'Turn on to see the Jobs tab',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _isWorker
-                          ? kNyqGreen
-                          : Colors.grey.shade600,
-                    ),
-                  ),
-                  value: _isWorker,
-                  onChanged: _setWorker,
-                ),
+                child: _isWorker
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 16),
+                        child: Row(
+                          children: [
+                            Icon(Icons.verified, color: kNyqGreen),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text('Job Worker',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.work_outline,
+                            color: kNyqAccent),
+                        title: const Text('Apply to be a Job Worker'),
+                        subtitle:
+                            const Text('Deliver and earn on your schedule'),
+                        trailing: const Icon(Icons.chevron_right,
+                            size: 18, color: Color(0xFFB0A89F)),
+                        onTap: () => showWorkerApplicationDialog(
+                            context, widget.currentUser!),
+                      ),
               ),
             ],
             if (_isRunnerUser) ...[
