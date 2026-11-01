@@ -7027,9 +7027,11 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
               _payCard(
                   paymentMethod,
                   'cash_on_delivery',
-                  'Cash on Delivery',
+                  collectInStore ? 'Cash at Shop' : 'Cash on Delivery',
                   Icons.payments_outlined,
-                  'Pay the runner on delivery',
+                  collectInStore
+                      ? 'Pay the seller when you collect'
+                      : 'Pay the runner on delivery',
                   (v) => setDialogState(() => paymentMethod = v)),
               _payCard(
                   paymentMethod,
@@ -8703,9 +8705,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               _payCard(
                   paymentMethod,
                   'cash_on_delivery',
-                  'Cash on Delivery',
+                  collectInStore ? 'Cash at Shop' : 'Cash on Delivery',
                   Icons.payments_outlined,
-                  'Pay the runner on delivery',
+                  collectInStore
+                      ? 'Pay the seller when you collect'
+                      : 'Pay the runner on delivery',
                   (v) => setDialogState(() => paymentMethod = v)),
               _payCard(
                   paymentMethod,
