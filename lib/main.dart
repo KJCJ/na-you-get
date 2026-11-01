@@ -1100,6 +1100,148 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _loading = false;
   String? _error;
 
+  Future<void> _showRecoveryDialog() async {
+    bool byPhone = true;
+    final inputCtl = TextEditingController();
+    bool busy = false;
+    String? error;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Future<void> submit() async {
+            final value = inputCtl.text.trim();
+            if (value.isEmpty) {
+              setDialogState(() => error = byPhone
+                  ? 'Enter your phone number.'
+                  : 'Enter your full name.');
+              return;
+            }
+            setDialogState(() {
+              busy = true;
+              error = null;
+            });
+            try {
+              final res = await http
+                  .post(
+                    Uri.parse('$baseUrl/support/recovery'),
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-api-key': apiKey,
+                    },
+                    body: jsonEncode({
+                      'request_type': byPhone ? 'password' : 'phone',
+                      'detail': value,
+                    }),
+                  )
+                  .timeout(const Duration(seconds: 12));
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'Your request has been sent to the Admin. We will contact you shortly.'),
+                      backgroundColor: kNyqGreen,
+                    ),
+                  );
+                }
+                return;
+              }
+              final data = jsonDecode(res.body);
+              setDialogState(() {
+                busy = false;
+                error =
+                    (data['detail'] ?? 'Could not send request.').toString();
+              });
+            } catch (_) {
+              setDialogState(() {
+                busy = false;
+                error = 'Network error. Please try again.';
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Account Recovery'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    byPhone
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    color: kNyqAccent,
+                  ),
+                  title: const Text('I know my phone number'),
+                  onTap: () => setDialogState(() {
+                    byPhone = true;
+                    inputCtl.clear();
+                    error = null;
+                  }),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    !byPhone
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    color: kNyqAccent,
+                  ),
+                  title: const Text('I forgot my phone number'),
+                  onTap: () => setDialogState(() {
+                    byPhone = false;
+                    inputCtl.clear();
+                    error = null;
+                  }),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: inputCtl,
+                  keyboardType:
+                      byPhone ? TextInputType.phone : TextInputType.name,
+                  decoration: InputDecoration(
+                    labelText: byPhone ? 'Phone Number' : 'Full Name',
+                    hintText:
+                        byPhone ? '+232 78 839002' : 'e.g. Mohamed Kamara',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(error!,
+                      style:
+                          const TextStyle(color: Colors.red, fontSize: 12)),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: busy ? null : submit,
+                child: busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Send Request'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    inputCtl.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1266,6 +1408,11 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Text(_isLogin
                     ? 'New here? Create an account'
                     : 'Already have an account? Sign in'),
+              ),
+              TextButton.icon(
+                onPressed: _showRecoveryDialog,
+                icon: const Icon(Icons.help_outline, size: 16),
+                label: const Text('Forgot password or phone number?'),
               ),
             ],
           ),
