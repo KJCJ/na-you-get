@@ -6723,6 +6723,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     String paymentMethod = 'cash_on_delivery';
     bool collectInStore = false;
     final deliveryController = TextEditingController();
+    final offerController = TextEditingController(text: '25');
 
     showDialog(
       context: context,
@@ -6747,7 +6748,32 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 onChanged: (v) => setDialogState(() => collectInStore = v),
               ),
               const SizedBox(height: 6),
-              if (!collectInStore)
+              if (!collectInStore) ...[
+                TextField(
+                  controller: offerController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Delivery Offer (SLE)',
+                    helperText: 'Offer what the delivery is worth to you',
+                    filled: true,
+                    fillColor: const Color(0xFFF5F5F5),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide:
+                          const BorderSide(color: kNyqAccent, width: 1.5),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: deliveryController,
                   decoration: InputDecoration(
@@ -6769,6 +6795,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     ),
                   ),
                 ),
+              ],
               const SizedBox(height: 10),
               _payCard(
                   paymentMethod,
@@ -6777,7 +6804,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   Icons.payments_outlined,
                   collectInStore
                       ? 'Pay the seller when you collect'
-                      : 'Pay the worker on delivery',
+                      : 'Pay the Job Worker SLE '
+                          '${(double.tryParse(offerController.text.trim()) ?? 25).toStringAsFixed(0)} on delivery',
                   (v) => setDialogState(() => paymentMethod = v)),
               _payCard(
                   paymentMethod,
@@ -6828,7 +6856,12 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'delivery_address': collectInStore
                         ? 'Collect from shop'
                         : deliveryController.text,
-                    'delivery_fee_sle': collectInStore ? 0.0 : 25.0,
+                    'delivery_fee_sle': collectInStore
+                        ? 0.0
+                        : (double.tryParse(offerController.text.trim()) ?? 25.0),
+                    'delivery_offer': collectInStore
+                        ? null
+                        : (double.tryParse(offerController.text.trim()) ?? 25.0),
                     'requires_delivery': !collectInStore,
                     'payment_method': paymentMethod,
                   }),
@@ -6856,7 +6889,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                       method: paymentMethod,
                       shopPhone: shopPhone,
                       total:
-                          '${(product['price_sle'] ?? 0) + (collectInStore ? 0.0 : 25.0)}',
+                          '${(product['price_sle'] ?? 0) + (collectInStore ? 0.0 : (double.tryParse(offerController.text.trim()) ?? 25.0))}',
                       orderRef: 'NYG-$newOrderId',
                     );
                   } else {
@@ -8401,6 +8434,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     String paymentMethod = 'cash_on_delivery';
     bool collectInStore = false;
     final deliveryController = TextEditingController();
+    final offerController = TextEditingController(text: '25');
 
     showDialog(
       context: context,
@@ -8425,7 +8459,32 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 onChanged: (v) => setDialogState(() => collectInStore = v),
               ),
               const SizedBox(height: 6),
-              if (!collectInStore)
+              if (!collectInStore) ...[
+                TextField(
+                  controller: offerController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Delivery Offer (SLE)',
+                    helperText: 'Offer what the delivery is worth to you',
+                    filled: true,
+                    fillColor: const Color(0xFFF5F5F5),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide:
+                          const BorderSide(color: kNyqAccent, width: 1.5),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: deliveryController,
                   decoration: InputDecoration(
@@ -8447,6 +8506,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     ),
                   ),
                 ),
+              ],
               const SizedBox(height: 10),
               _payCard(
                   paymentMethod,
@@ -8455,7 +8515,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   Icons.payments_outlined,
                   collectInStore
                       ? 'Pay the seller when you collect'
-                      : 'Pay the worker on delivery',
+                      : 'Pay the Job Worker SLE '
+                          '${(double.tryParse(offerController.text.trim()) ?? 25).toStringAsFixed(0)} on delivery',
                   (v) => setDialogState(() => paymentMethod = v)),
               _payCard(
                   paymentMethod,
@@ -8506,7 +8567,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     'delivery_address': collectInStore
                         ? 'Collect from shop'
                         : deliveryController.text,
-                    'delivery_fee_sle': collectInStore ? 0.0 : 25.0,
+                    'delivery_fee_sle': collectInStore
+                        ? 0.0
+                        : (double.tryParse(offerController.text.trim()) ?? 25.0),
+                    'delivery_offer': collectInStore
+                        ? null
+                        : (double.tryParse(offerController.text.trim()) ?? 25.0),
                     'requires_delivery': !collectInStore,
                     'payment_method': paymentMethod,
                   }),
@@ -8534,7 +8600,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       method: paymentMethod,
                       shopPhone: shopPhone,
                       total:
-                          '${(product['price_sle'] ?? 0) + (collectInStore ? 0.0 : 25.0)}',
+                          '${(product['price_sle'] ?? 0) + (collectInStore ? 0.0 : (double.tryParse(offerController.text.trim()) ?? 25.0))}',
                       orderRef: 'NYG-$newOrderId',
                     );
                   } else {
@@ -8823,14 +8889,49 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
                           final job = jobs[i];
                           return Card(
                             margin: const EdgeInsets.all(8),
-                            child: ListTile(
-                              leading: const Icon(Icons.work_outline,
-                                  size: 36, color: Colors.blue),
-                              title: Text('Address: ${job['delivery_address']}'),
-                              subtitle: Text(
-                                  'Fee: SLE ${job['delivery_fee_sle']} | Payment: ${job['payment_method']}'),
-                              trailing: ElevatedButton(
-                                onPressed: () async {
+                            child: Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.work_outline,
+                                          size: 20, color: kNyqAccent),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Address: ${job['delivery_address']}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Offer: SLE ${job['delivery_offer'] ?? job['delivery_fee_sle']}',
+                                    style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                        color: kNyqGreen),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Payment: ${job['payment_method']}',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed: () async {
+
                                   final ok = await _ensureLoggedInAsRunner();
                                   if (!ok) return;
 
@@ -8851,8 +8952,40 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
                                         fallback: 'Could not accept job.');
                                   }
                                   fetchJobs();
-                                },
-                                child: const Text('Accept'),
+                                
+                                          },
+                                          child: const Text('Accept Job'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          icon: const Icon(
+                                              Icons.chat_bubble_outline,
+                                              size: 16),
+                                          label: const Text('Negotiate'),
+                                          onPressed: job['customer_id'] == null
+                                              ? null
+                                              : () => Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          ChatScreen(
+                                                        otherUserId: (job[
+                                                                    'customer_id']
+                                                                as num)
+                                                            .toInt(),
+                                                        otherUserName:
+                                                            'Customer',
+                                                        orderId: job['id'],
+                                                      ),
+                                                    ),
+                                                  ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
                             ),
                           );
