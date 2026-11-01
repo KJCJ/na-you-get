@@ -23,12 +23,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # The artifact is the repo root, so strip VCS metadata first.
+      # Without this the whole git history is uploaded to Pages.
+      - name: Strip VCS metadata
+        run: rm -rf .git
+
       - name: Setup Pages
-        uses: actions/configure-pages@v4
+        uses: actions/configure-pages@v5
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: "."
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
