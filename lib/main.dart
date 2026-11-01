@@ -3420,21 +3420,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             _stepRow('Buyer received goods', s['buyer_received_goods'] as String?,
               step: role == 'customer' ? 'buyer-received-goods' : null, buttonLabel: "I've received",
               enabled: s['runner_delivered'] != null),
-            _stepRow('Seller paid NYG commission', s['seller_paid_nyg'] as String?,
-              step: role == 'seller' ? 'seller-paid-nyg' : null, buttonLabel: "I've paid NYG",
-              enabled: s['buyer_received_goods'] != null),
-            _stepRow('NYG confirmed commission', s['nyg_received'] as String?,
-              step: null, buttonLabel: null),
             const Divider(height: 32),
             const Text('Money breakdown', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             _moneyRow('Product price', _data!['product_price_sle']),
-            _moneyRow('NYG commission (5%)', _data!['commission_sle']),
-            _moneyRow('Seller receives', _data!['seller_payout_sle']),
             const Divider(height: 16),
-            _moneyRow('Runner fee (80% delivery)', _data!['runner_fee_sle']),
+            _moneyRow('Seller receives', _data!['seller_payout_sle'], bold: true),
             const Divider(height: 16),
-            _moneyRow('NYG total on this order', _data!['nyg_total_sle'], bold: true),
+            _moneyRow('Runner delivery fee', _data!['runner_fee_sle']),
           ],
         ),
       ),
@@ -3458,7 +3451,7 @@ class AdminDashboardScreen extends StatelessWidget {
             tabs: [
               Tab(text: 'Users', icon: Icon(Icons.people_outline)),
               Tab(text: 'Invoices', icon: Icon(Icons.receipt_long)),
-              Tab(text: 'Earnings', icon: Icon(Icons.payments_outlined)),
+              Tab(text: 'Overview', icon: Icon(Icons.insights_outlined)),
             ],
           ),
         ),
@@ -3929,14 +3922,50 @@ class _AdminEarningsScreenState extends State<AdminEarningsScreen> {
     });
   }
 
-  Widget _row(String label, dynamic value, {bool bold = false}) {
-    final v = (value is num) ? value.toStringAsFixed(2) : '0.00';
+  Widget _statCard(String label, dynamic value, Color colour) {
+    final v = (value is num) ? value.toStringAsFixed(2) : '0';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x14000000), blurRadius: 20, offset: Offset(0, 8)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 40,
+            decoration: BoxDecoration(
+                color: colour, borderRadius: BorderRadius.circular(4)),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(label,
+                style: const TextStyle(fontSize: 14, color: kNyqInk)),
+          ),
+          Text(v,
+              style: const TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w800, color: kNyqInk)),
+        ],
+      ),
+    );
+  }
+
+  Widget _countRow(String label, dynamic value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: 15))),
-          Text('SLE $v', style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: 15)),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
+          Text('${value ?? 0}',
+              style:
+                  const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -3952,47 +3981,57 @@ class _AdminEarningsScreenState extends State<AdminEarningsScreen> {
   Scaffold _buildInner(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Earnings'),
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+        title: const Text('Platform Overview'),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load)
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _data == null
-              ? const Center(child: Text('Could not load earnings'))
+              ? const Center(child: Text('Could not load platform stats'))
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Totals', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text('Platform growth',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 12),
-                      _row('Commission earned (5%)', _data!['total_commission_earned']),
-                      _row('Delivery cut earned (20%)', _data!['total_delivery_cut_earned']),
-                      const Divider(height: 24),
-                      _row('Settled', _data!['total_settled']),
-                      _row('Still owed to you', _data!['total_still_owed'], bold: true),
-                      const SizedBox(height: 24),
-                      const Text('Unsettled orders', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      _statCard('Total sales volume (SLE)',
+                          _data!['total_sales_volume'], kNyqAccent),
+                      _statCard('Items sold (SLE)',
+                          _data!['total_items_value'], kNyqGreen),
+                      _statCard('Delivery value (SLE)',
+                          _data!['total_delivery_value'], kNyqOchre),
+                      const SizedBox(height: 20),
+                      const Text('Activity',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 8),
-                      if ((_data!['unsettled_orders'] as List?)?.isEmpty ?? true)
-                        const Text('Nothing outstanding. All settled.')
-                      else
-                        ...(_data!['unsettled_orders'] as List).map((o) {
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            child: ListTile(
-                              title: Text('Order #${o['order_id']}'),
-                              subtitle: Text('Merchant ID ${o['merchant_id']}'),
-                              trailing: Text('SLE ${(o['amount_owed'] as num).toStringAsFixed(2)}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B5E20))),
-                            ),
-                          );
-                        }).toList(),
+                      _countRow('Orders paid', _data!['paid_orders']),
+                      _countRow('All orders', _data!['total_orders']),
+                      const SizedBox(height: 20),
+                      const Text('Ecosystem',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      _countRow('Sellers', _data!['total_sellers']),
+                      _countRow('Shops', _data!['total_shops']),
+                      _countRow('Products', _data!['total_products']),
+                      _countRow('Users', _data!['total_users']),
+                      const SizedBox(height: 24),
+                      Text(
+                          'NYG takes no commission. These figures measure platform activity.',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600)),
                     ],
                   ),
                 ),
     );
   }
+
 }
 
 class InvoiceDetailScreen extends StatefulWidget {
@@ -4063,6 +4102,29 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     }
   }
 
+  Widget _moneyRow(String label, double value, Color colour,
+      {bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label,
+                style: TextStyle(
+                    fontSize: bold ? 15 : 14,
+                    fontWeight: bold ? FontWeight.w800 : FontWeight.w400,
+                    color: colour)),
+          ),
+          Text('SLE ${value.toStringAsFixed(2)}',
+              style: TextStyle(
+                  fontSize: bold ? 15 : 14,
+                  fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+                  color: colour)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -4079,56 +4141,126 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Seller: ${_data!['seller_name'] ?? '?'}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text('Phone: ${_data!['seller_phone'] ?? '?'}'),
-                      Text('Status: ${_data!['status'] ?? '?'}'),
-                      const SizedBox(height: 8),
-                      Text('Total: SLE ${(_data!['total_sle'] as num).toStringAsFixed(2)}',
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20))),
-                      const Divider(height: 32),
-                      const Text('Orders covered', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: const [
+                            BoxShadow(
+                                color: Color(0x14000000),
+                                blurRadius: 20,
+                                offset: Offset(0, 8)),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundColor: kNyqAccent,
+                              backgroundImage: (_data!['shop_logo'] ?? '')
+                                      .toString()
+                                      .isNotEmpty
+                                  ? NetworkImage(
+                                      _data!['shop_logo'].toString())
+                                  : null,
+                              child: (_data!['shop_logo'] ?? '')
+                                      .toString()
+                                      .isNotEmpty
+                                  ? null
+                                  : Text(
+                                      ((_data!['seller_name'] ?? '?')
+                                              .toString())[0]
+                                          .toUpperCase(),
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(_data!['seller_name'] ?? 'Shop',
+                                      style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800)),
+                                  const SizedBox(height: 2),
+                                  Text(_data!['reference'] ?? '',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600)),
+                                  Text(_fmt(_data!['created_at'] as String?),
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text('Items',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 8),
                       ...(_data!['orders'] as List).map((o) {
+                        final item =
+                            (o['item_sle'] as num?)?.toDouble() ?? 0.0;
+                        final del =
+                            (o['delivery_sle'] as num?)?.toDouble() ?? 0.0;
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 4),
                           child: ListTile(
-                            title: Text('#${o['order_id']} - ${o['product_title']}'),
-                            subtitle: Text('Commission SLE ${(o['commission_sle'] as num).toStringAsFixed(2)} | Delivery SLE ${(o['delivery_cut_sle'] as num).toStringAsFixed(2)}'),
-                            trailing: Text('SLE ${(o['total_sle'] as num).toStringAsFixed(2)}',
-                                style: const TextStyle(fontWeight: FontWeight.bold)),
+                            title: Text(o['product_title'].toString()),
+                            subtitle: Text(
+                                'Item SLE ${item.toStringAsFixed(2)} - Delivery SLE ${del.toStringAsFixed(2)}',
+                                style: const TextStyle(fontSize: 12)),
+                            trailing: Text(
+                                'SLE ${(item + del).toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold)),
                           ),
                         );
                       }).toList(),
-                      const Divider(height: 32),
-                      Text('Seller marked paid: ${_fmt(_data!['seller_paid_at'])}'),
-                      Text('NYG confirmed receipt: ${_fmt(_data!['nyg_received_at'])}'),
-                      const SizedBox(height: 24),
-                      if (!widget.isAdmin && _data!['seller_paid_at'] == null)
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1B5E20),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: _working ? null : _sellerMarkPaid,
-                            child: const Text("I've paid this invoice"),
-                          ),
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: const [
+                            BoxShadow(
+                                color: Color(0x14000000),
+                                blurRadius: 20,
+                                offset: Offset(0, 8)),
+                          ],
                         ),
-                      if (widget.isAdmin && _data!['seller_paid_at'] != null && _data!['nyg_received_at'] == null)
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1B5E20),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: _working ? null : _nygReceived,
-                            child: const Text('Confirm receipt'),
-                          ),
-                        ),
+                        child: Builder(builder: (context) {
+                          var items = 0.0;
+                          var delivery = 0.0;
+                          for (final o in (_data!['orders'] as List)) {
+                            items +=
+                                (o['item_sle'] as num?)?.toDouble() ?? 0;
+                            delivery +=
+                                (o['delivery_sle'] as num?)?.toDouble() ?? 0;
+                          }
+                          return Column(
+                            children: [
+                              _moneyRow('Subtotal', items, kNyqInk),
+                              _moneyRow('Delivery', delivery, kNyqInk),
+                              const Divider(height: 20),
+                              _moneyRow('Total paid', items + delivery,
+                                  kNyqInk,
+                                  bold: true),
+                              _moneyRow('Your net', items, kNyqGreen,
+                                  bold: true),
+                            ],
+                          );
+                        }),
+                      ),
                     ],
                   ),
                 ),
@@ -4165,6 +4297,43 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       _invoices = data;
       _loading = false;
     });
+  }
+
+  Future<void> _generateReceipt() async {
+    final user = await UserSession.load();
+    final token = user?['token'];
+    if (token == null) return;
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/invoices/generate'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 12));
+      if (!mounted) return;
+      final ok = res.statusCode >= 200 && res.statusCode < 300;
+      var msg = 'Could not create receipt';
+      if (ok) {
+        final data = jsonDecode(res.body);
+        msg = 'Receipt ${data['reference']} created';
+      } else {
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+        } catch (_) {}
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: ok ? kNyqGreen : Colors.red.shade800,
+      ));
+      if (ok) _load();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error. Please try again.')),
+        );
+      }
+    }
   }
 
   Future<void> _showGenerateDialog() async {
@@ -4230,7 +4399,11 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _invoices.isEmpty
-              ? const Center(child: Text('No invoices yet.'))
+              ? const EmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'No receipts yet',
+                  message: 'Receipts appear here once customers have paid.',
+                )
               : ListView.builder(
                   itemCount: _invoices.length,
                   itemBuilder: (ctx, i) {
@@ -4259,13 +4432,19 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 ),
       floatingActionButton: widget.isAdmin
           ? FloatingActionButton.extended(
-              backgroundColor: const Color(0xFF1B5E20),
+              backgroundColor: kNyqAccent,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.add),
               label: const Text('Generate Invoice'),
               onPressed: _showGenerateDialog,
             )
-          : null,
+          : FloatingActionButton.extended(
+              backgroundColor: kNyqGreen,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.receipt_long),
+              label: const Text('New Receipt'),
+              onPressed: _generateReceipt,
+            ),
     );
   }
 }
