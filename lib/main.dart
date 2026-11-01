@@ -5185,18 +5185,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
 
     final canTakeJobs = isRunner(_currentUser);
+    final canSell = isSeller(_currentUser);
 
     final screens = <Widget>[
       MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
-      ShopsBrowseScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
+      if (canSell)
+        ShopsBrowseScreen(
+            currentUser: _currentUser, onUserChanged: _refreshUser),
       MarketplaceLocationsScreen(
           currentUser: _currentUser, onUserChanged: _refreshUser),
       if (canTakeJobs)
         RunnerDashboardScreen(
-            currentUser: _currentUser, onUserChanged: _refreshUser)
-      else
-        ProfileScreen(
             currentUser: _currentUser, onUserChanged: _refreshUser),
+      ProfileScreen(
+          currentUser: _currentUser, onUserChanged: _refreshUser),
     ];
 
     // Clamp in case someone loses the worker role while on the Jobs tab.
@@ -5223,10 +5225,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               icon: Icon(Icons.shopping_bag_outlined),
               selectedIcon: Icon(Icons.shopping_bag),
               label: 'Shopping'),
-          const NavigationDestination(
-              icon: Icon(Icons.store_outlined),
-              selectedIcon: Icon(Icons.store),
-              label: 'Shops'),
+          if (canSell)
+            const NavigationDestination(
+                icon: Icon(Icons.store_outlined),
+                selectedIcon: Icon(Icons.store),
+                label: 'Shops'),
           const NavigationDestination(
               icon: Icon(Icons.location_on_outlined),
               selectedIcon: Icon(Icons.location_on),
@@ -5235,12 +5238,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             const NavigationDestination(
                 icon: Icon(Icons.work_outline),
                 selectedIcon: Icon(Icons.work),
-                label: 'Jobs')
-          else
-            const NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: 'Profile'),
+                label: 'Jobs'),
+          const NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'Profile'),
         ],
           ),
         ),
