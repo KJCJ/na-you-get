@@ -1809,24 +1809,16 @@ void showAccountSheet(
                 ListTile(
                   leading: const Icon(Icons.directions_run, color: Color(0xFF0D47A1)),
                   title: const Text('Become a Job Worker'),
-                  subtitle: const Text('Deliver items and earn'),
+                  subtitle: const Text('Apply to start taking jobs'),
                   trailing: const Icon(Icons.chevron_right,
                       size: 18, color: Color(0xFFB0A89F)),
-                  onTap: () async {
+                  onTap: () {
                     Navigator.pop(ctx);
-                    final err = await UserSession.becomeRunner();
-                    if (!context.mounted) return;
-                    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
-                    if (err == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('You can now deliver on NYG')),
-                      );
-                      onUserChanged();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(err)),
-                      );
-                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const BecomeJobWorkerScreen()),
+                    );
                   },
                 ),
               if (isRunner(currentUser))
@@ -2344,12 +2336,14 @@ class ChatScreen extends StatefulWidget {
   final String otherUserName;
   final int? shopId;
   final int? orderId;
+  final String? initialMessage;
   const ChatScreen({
     super.key,
     required this.otherUserId,
     required this.otherUserName,
     this.shopId,
     this.orderId,
+    this.initialMessage,
   });
 
   @override
@@ -2374,6 +2368,19 @@ class _ChatScreenState extends State<ChatScreen> {
     final user = await UserSession.load();
     _myId = user?['id'];
     await _load();
+    final opening = widget.initialMessage;
+    if (opening != null &&
+        opening.isNotEmpty &&
+        _messages.isEmpty &&
+        widget.otherUserId != _myId) {
+      final sent = await MessageSession.send(
+        widget.otherUserId,
+        opening,
+        shopId: widget.shopId,
+        orderId: widget.orderId,
+      );
+      if (sent) await _load();
+    }
     await MessageSession.markRead(widget.otherUserId);
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _load());
   }
@@ -5044,20 +5051,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final screens = [
+    final canTakeJobs = isRunner(_currentUser);
+
+    final screens = <Widget>[
       MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
       ShopsBrowseScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
       MarketplaceLocationsScreen(
           currentUser: _currentUser, onUserChanged: _refreshUser),
-      RunnerDashboardScreen(
-          currentUser: _currentUser, onUserChanged: _refreshUser),
+      if (canTakeJobs)
+        RunnerDashboardScreen(
+            currentUser: _currentUser, onUserChanged: _refreshUser)
+      else
+        ProfileScreen(
+            currentUser: _currentUser, onUserChanged: _refreshUser),
     ];
+
+    // Clamp in case someone loses the worker role while on the Jobs tab.
+    final safeIndex = _currentIndex >= screens.length ? 0 : _currentIndex;
 
     return Stack(
       children: [
         Scaffold(
       body: KenteBackground(
-        child: IndexedStack(index: _currentIndex, children: screens),
+        child: IndexedStack(index: safeIndex, children: screens),
       ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -5067,25 +5083,31 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             elevation: 8,
             backgroundColor: Colors.white,
             shadowColor: const Color(0x33000000),
-        selectedIndex: _currentIndex,
+        selectedIndex: safeIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
               icon: Icon(Icons.shopping_bag_outlined),
               selectedIcon: Icon(Icons.shopping_bag),
               label: 'Shopping'),
-          NavigationDestination(
+          const NavigationDestination(
               icon: Icon(Icons.store_outlined),
               selectedIcon: Icon(Icons.store),
               label: 'Shops'),
-          NavigationDestination(
+          const NavigationDestination(
               icon: Icon(Icons.location_on_outlined),
               selectedIcon: Icon(Icons.location_on),
               label: 'Marketplace'),
-          NavigationDestination(
-              icon: Icon(Icons.work_outline),
-              selectedIcon: Icon(Icons.work),
-              label: 'Jobs'),
+          if (canTakeJobs)
+            const NavigationDestination(
+                icon: Icon(Icons.work_outline),
+                selectedIcon: Icon(Icons.work),
+                label: 'Jobs')
+          else
+            const NavigationDestination(
+                icon: Icon(Icons.person_outline),
+                selectedIcon: Icon(Icons.person),
+                label: 'Profile'),
         ],
           ),
         ),
@@ -8921,6 +8943,52 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 // ==========================================
 // RUNNER DASHBOARD
 // ==========================================
+class BecomeJobWorkerScreen extends StatelessWidget {
+  const BecomeJobWorkerScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(title: const Text('Become a Job Worker')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 96,
+                height: 96,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F7F1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.work_outline,
+                    size: 44, color: kNyqAccent),
+              ),
+              const SizedBox(height: 20),
+              const Text('Coming soon',
+                  style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              Text(
+                'Applications to become a Job Worker are being set up. '
+                'Check back shortly.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 14,
+                    height: 1.4,
+                    color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class RunnerDashboardScreen extends StatefulWidget {
   final Map<String, dynamic>? currentUser;
   final VoidCallback onUserChanged;
@@ -9039,7 +9107,7 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
       ),
       body: Column(
         children: [
-          if (widget.currentUser != null)
+          if (isRunner(widget.currentUser))
             Container(
               margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
               padding: const EdgeInsets.fromLTRB(16, 6, 10, 6),
@@ -9204,6 +9272,8 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
                                                             .toInt(),
                                                         otherUserName:
                                                             'Customer',
+                                                        initialMessage:
+                                                            'Hi, I would like to negotiate the delivery fee for this job.',
                                                         orderId: job['id'],
                                                       ),
                                                     ),
