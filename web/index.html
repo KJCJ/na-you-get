@@ -14,9 +14,13 @@
       position: fixed;
       left: 0; right: 0; bottom: 0;
       z-index: 2147483647;
-      display: none;
+      display: flex;
       align-items: center;
       gap: 12px;
+      transform: translateY(120%);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.35s ease, opacity 0.35s ease;
       padding: 12px 14px calc(12px + env(safe-area-inset-bottom)) 14px;
       background: linear-gradient(135deg, #0D47A1 0%, #072E66 100%);
       color: #fff;
@@ -24,7 +28,11 @@
       border-radius: 18px 18px 0 0;
       box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.28);
     }
-    #nyg-banner.nyg-show { display: flex; }
+    #nyg-banner.nyg-show {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
     #nyg-banner .nyg-icon { font-size: 22px; line-height: 1; }
     #nyg-banner .nyg-text { flex: 1; font-size: 14px; font-weight: 600; }
     #nyg-banner .nyg-sub {
@@ -69,7 +77,12 @@
       if (!isAndroid || dismissed) return;
       banner.classList.add('nyg-show');
 
+      var hideTimer = setTimeout(function () {
+        banner.classList.remove('nyg-show');
+      }, 8000);
+
       document.getElementById('nyg-close').addEventListener('click', function () {
+        clearTimeout(hideTimer);
         banner.classList.remove('nyg-show');
         try { localStorage.setItem(KEY, '1'); } catch (e) {}
       });
