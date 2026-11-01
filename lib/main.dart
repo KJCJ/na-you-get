@@ -4560,85 +4560,111 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final photo = user?['photo_url']?.toString() ?? '';
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: kNyqSand,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Profile'),
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
+        title: const Text('My Profile'),
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
+        foregroundColor: Colors.white,
       ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          padding: EdgeInsets.zero,
           children: [
-            const SizedBox(height: 8),
-            Center(
-              child: CircleAvatar(
-                radius: 48,
-                backgroundColor: const Color(0xFF1B5E20),
-                backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
-                child: photo.isEmpty
-                    ? Text(
-                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.fromLTRB(
+                  20,
+                  MediaQuery.of(context).padding.top + kToolbarHeight + 12,
+                  20,
+                  24),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [kNyqAccent, kNyqAccentDeep],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius:
+                    BorderRadius.vertical(bottom: Radius.circular(28)),
+              ),
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 46,
+                    backgroundColor: Colors.white24,
+                    backgroundImage:
+                        photo.isNotEmpty ? NetworkImage(photo) : null,
+                    child: photo.isEmpty
+                        ? Text(
+                            name.isNotEmpty ? name[0].toUpperCase() : '?',
+                            style: const TextStyle(
+                                fontSize: 34,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700),
+                          )
+                        : null,
+                  ),
+                  const SizedBox(height: 14),
+                  Text(name,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white)),
+                  if (phone.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(phone,
                         style: const TextStyle(
-                          fontSize: 36,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
+                            fontSize: 13, color: Colors.white70)),
+                  ],
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white54),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999)),
+                    ),
+                    onPressed: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => EditProfileScreen(
+                            currentUser: user!,
+                            onUserChanged: widget.onUserChanged,
+                          ),
                         ),
-                      )
-                    : null,
+                      );
+                      widget.onUserChanged();
+                      _load();
+                    },
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('Edit Profile'),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            Center(
-              child: Text(
-                name,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-            ),
-            if (phone.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Center(
-                child: Text(
-                  phone,
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+            if (_isSellerUser) ...[
+              Row(
+                children: [
+                  _statCard('${_shops.length}', 'My Shops', kNyqAccent),
+                  const SizedBox(width: 10),
+                  _statCard('$_totalProducts', 'Products', kNyqGreen),
+                  const SizedBox(width: 10),
+                  _statCard('SLE $_earned', 'Earnings', kNyqOchre),
+                ],
               ),
             ],
-            const SizedBox(height: 20),
-            if (user != null)
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.black87,
-                    side: BorderSide(color: Colors.grey.shade300),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => EditProfileScreen(
-                          currentUser: user,
-                          onUserChanged: widget.onUserChanged,
-                        ),
-                      ),
-                    );
-                    widget.onUserChanged();
-                    _load();
-                  },
-                  child: const Text('Edit Profile'),
-                ),
-              ),
             if (!_isSellerUser && !_isRunnerUser) ...[
               const SizedBox(height: 24),
               Container(
@@ -4661,6 +4687,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const Icon(Icons.waving_hand_outlined,
+                        color: Colors.white, size: 26),
+                    const SizedBox(height: 8),
                     const Text('Welcome to Na You Get',
                         style: TextStyle(
                             color: Colors.white,
@@ -4774,11 +4803,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Text('My Shops',
                       style: TextStyle(
                           fontSize: 16, fontWeight: FontWeight.w800)),
-                  TextButton.icon(
-                    onPressed: _createShop,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add New Shop'),
-                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -4876,7 +4900,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   );
                 }),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: kNyqAccent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: _createShop,
+                  icon: const Icon(Icons.add_business_outlined, size: 18),
+                  label: const Text('Add New Shop'),
+                ),
+              ),
             ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -5002,6 +5045,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await _loadShops();
     }
   }
+  int get _totalProducts => _shops.fold<int>(
+      0,
+      (sum, s) =>
+          sum +
+          (((Map<String, dynamic>.from(s as Map))['product_count'] as num?)
+                      ?.toInt() ??
+              0));
+
+  Widget _statCard(String value, String label, Color colour) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 18,
+                offset: Offset(0, 6)),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+                width: 22,
+                height: 3,
+                decoration: BoxDecoration(
+                    color: colour,
+                    borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 8),
+            Text(value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: kNyqInk)),
+            const SizedBox(height: 2),
+            Text(label,
+                style:
+                    TextStyle(fontSize: 10.5, color: Colors.grey.shade600)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _statBox(String value, String label) {
     return Expanded(
       child: Container(
