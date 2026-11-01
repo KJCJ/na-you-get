@@ -5643,14 +5643,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
 
     final canTakeJobs = isRunner(_currentUser);
-    final canSell = isSeller(_currentUser);
     final isLoggedIn = _currentUser != null;
 
     final screens = <Widget>[
       MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
-      if (canSell)
-        ShopsBrowseScreen(
-            currentUser: _currentUser, onUserChanged: _refreshUser),
       MarketplaceLocationsScreen(
           currentUser: _currentUser, onUserChanged: _refreshUser),
       if (canTakeJobs)
@@ -5661,7 +5657,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             currentUser: _currentUser,
             onUserChanged: _refreshUser,
             onOpenJobs: canTakeJobs
-                ? () => setState(() => _currentIndex = 3)
+                ? () => setState(() => _currentIndex = 2)
                 : null),
     ];
 
@@ -5689,11 +5685,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               icon: Icon(Icons.shopping_bag_outlined),
               selectedIcon: Icon(Icons.shopping_bag),
               label: 'Shopping'),
-          if (canSell)
-            const NavigationDestination(
-                icon: Icon(Icons.store_outlined),
-                selectedIcon: Icon(Icons.store),
-                label: 'Shops'),
+
           const NavigationDestination(
               icon: Icon(Icons.location_on_outlined),
               selectedIcon: Icon(Icons.location_on),
