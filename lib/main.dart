@@ -8938,10 +8938,13 @@ class RunnerDashboardScreen extends StatefulWidget {
 class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
   List<dynamic> jobs = [];
   bool _loadingJobs = false;
+  bool _isOnline = false;
 
   @override
   void initState() {
     super.initState();
+    final u = widget.currentUser;
+    _isOnline = u != null && (u['is_online'] == 1 || u['is_online'] == true);
     fetchJobs();
   }
 
@@ -8960,6 +8963,20 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
       return true;
     }
     return false;
+  }
+
+  Future<void> _setOnline(bool v) async {
+    setState(() => _isOnline = v);
+    final ok = await UserSession.update({'is_online': v ? 1 : 0});
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not change your status')),
+      );
+      setState(() => _isOnline = !v);
+      return;
+    }
+    await fetchJobs();
   }
 
   Future<void> fetchJobs() async {
@@ -9022,6 +9039,43 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
       ),
       body: Column(
         children: [
+          if (widget.currentUser != null)
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              padding: const EdgeInsets.fromLTRB(16, 6, 10, 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: const [
+                  BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 18,
+                      offset: Offset(0, 6)),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Icon(_isOnline ? Icons.bolt : Icons.bolt_outlined,
+                      color: _isOnline ? kNyqGreen : Colors.grey.shade500),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _isOnline ? 'You are online' : 'You are offline',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color:
+                            _isOnline ? kNyqGreen : Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                  Switch(
+                    value: _isOnline,
+                    onChanged: (v) => _setOnline(v),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: _loadingJobs
                 ? const Center(child: CircularProgressIndicator())
@@ -9034,11 +9088,14 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
                                 size: 80, color: Colors.grey.shade400),
                             const SizedBox(height: 16),
                             Text(
-                              'No jobs available right now.',
+                              _isOnline
+                                  ? 'No jobs available right now.'
+                                  : 'You are offline. Go online to see available jobs.',
                               style: TextStyle(
                                 fontSize: 16,
                                 color: Colors.grey.shade700,
                               ),
+                              textAlign: TextAlign.center,
                             ),
                           ],
                         ),
