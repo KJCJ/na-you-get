@@ -1600,24 +1600,23 @@ void showAccountSheet(
                 ),
               ),
               const Divider(height: 24),
-              if (user != null)
-                ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: const Text('My Profile'),
-                  subtitle: Text(_profileRoleLabel(currentUser)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProfileScreen(
-                          currentUser: user,
-                          onUserChanged: onUserChanged,
-                        ),
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: const Text('My Profile'),
+                subtitle: Text(_profileRoleLabel(currentUser)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ProfileScreen(
+                        currentUser: user,
+                        onUserChanged: onUserChanged,
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
+              ),
               const Divider(height: 8),
               sectionHeader('ACTIVITY'),
               ListTile(
@@ -4046,7 +4045,6 @@ class InvoiceDetailScreen extends StatefulWidget {
 class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Map<String, dynamic>? _data;
   bool _loading = true;
-  bool _working = false;
 
   @override
   void initState() {
@@ -4071,34 +4069,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     } catch (_) {
       return iso;
-    }
-  }
-
-  Future<void> _sellerMarkPaid() async {
-    setState(() => _working = true);
-    final err = await UserSession.markInvoiceSellerPaid(widget.invoiceId);
-    if (!mounted) return;
-    setState(() => _working = false);
-    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
-    if (err == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marked as paid')));
-      _load();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
-    }
-  }
-
-  Future<void> _nygReceived() async {
-    setState(() => _working = true);
-    final err = await UserSession.markInvoiceNygReceived(widget.invoiceId);
-    if (!mounted) return;
-    setState(() => _working = false);
-    if (err == 'SESSION_EXPIRED') { handleSessionExpired(context); return; }
-    if (err == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Receipt confirmed')));
-      _load();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
     }
   }
 
@@ -4464,9 +4434,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  List<dynamic> _products = [];
   List<dynamic> _deliveries = [];
-  bool _loading = true;
   String _vehicleType = 'Motorbike';
   bool _isOnline = false;
 
@@ -4513,25 +4481,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
-    await _loadProducts();
     await _loadDeliveries();
     await _loadShops();
-    if (mounted) setState(() => _loading = false);
-  }
-
-  Future<void> _loadProducts() async {
-    if (!_isSellerUser) return;
-    try {
-      final shop = await ShopSession.load();
-      if (shop == null) return;
-      final res = await http.get(
-        Uri.parse('$baseUrl/merchants/${shop['id']}/products/'),
-      ).timeout(const Duration(seconds: 8));
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        _products = jsonDecode(res.body) as List;
-      }
-    } catch (_) {}
   }
 
   Future<void> _loadShops() async {
@@ -5209,9 +5160,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               selectedIcon: Icon(Icons.location_on),
               label: 'Marketplace'),
           NavigationDestination(
-              icon: Icon(Icons.directions_run_outlined),
-              selectedIcon: Icon(Icons.directions_run),
-              label: 'Runner'),
+              icon: Icon(Icons.work_outline),
+              selectedIcon: Icon(Icons.work),
+              label: 'Jobs'),
         ],
           ),
         ),
@@ -5279,11 +5230,6 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
   Widget build(BuildContext context) {
     final item = widget.product;
     final photos = productPhotos(item);
-    final accent = widget.accentColour ?? const Color(0xFF1B5E20);
-    final onAccent =
-        ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
-            ? Colors.white
-            : Colors.black87;
     final description = (item['description'] ?? '').toString().trim();
 
     return Container(
@@ -7564,207 +7510,6 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
     return false;
   }
 
-  Future<void> _showCreateShopDialog() async {
-    final loggedIn = await _ensureLoggedIn(suggestedRole: 'merchant');
-    if (!loggedIn) return;
-    if (!mounted) return;
-
-    final shopNameController = TextEditingController();
-    final ownerNameController =
-        TextEditingController(text: widget.currentUser?['name'] ?? '');
-    final phoneController = TextEditingController(
-        text: widget.currentUser?['phone_number'] ?? '+232');
-    final cityController = TextEditingController(text: 'Freetown');
-    String selectedCategory = 'Fashion';
-    String? uploadedLogoUrl;
-
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Create Your Shop Page'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: shopNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Shop Name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: ownerNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Your Full Name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: phoneController,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: cityController,
-                  decoration: const InputDecoration(
-                    labelText: 'City in Sierra Leone',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final url = await pickAndUploadImage(context);
-                      if (url != null) {
-                        setDialogState(() => uploadedLogoUrl = url);
-                      }
-                    },
-                    icon: const Icon(Icons.photo_camera),
-                    label: Text(uploadedLogoUrl == null
-                        ? 'Pick Shop Logo'
-                        : 'Logo Uploaded'),
-                  ),
-                ),
-                if (uploadedLogoUrl != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        uploadedLogoUrl!,
-                        height: 100,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Shop Category',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
-                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
-                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
-                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
-                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
-                    DropdownMenuItem(value: 'Services', child: Text('Services')),
-                    DropdownMenuItem(value: 'Other', child: Text('Other')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() => selectedCategory = value);
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (shopNameController.text.isEmpty ||
-                    ownerNameController.text.isEmpty) return;
-
-                final user = await UserSession.load();
-                final response = await http.post(
-                  Uri.parse('$baseUrl/merchants/'),
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
-                  },
-                  body: jsonEncode({
-                    'shop_name': shopNameController.text,
-                    'owner_name': ownerNameController.text,
-                    'phone_number': phoneController.text,
-                    'city': cityController.text,
-                    'category': selectedCategory,
-                    'logo_url': uploadedLogoUrl,
-                  }),
-                );
-
-                if (response.statusCode >= 200 && response.statusCode < 300) {
-                  final merchantData = jsonDecode(response.body)['merchant'];
-
-                  // Creating a shop auto-enables seller status on the backend,
-                  // so refresh the user or the account sheet stays stale.
-                  final meRes = await http.get(
-                    Uri.parse('$baseUrl/auth/me'),
-                    headers: {
-                      'x-api-key': apiKey,
-                      'Authorization': 'Bearer ${user?['token'] ?? ''}',
-                    },
-                  ).timeout(const Duration(seconds: 8));
-                  if (meRes.statusCode >= 200 && meRes.statusCode < 300) {
-                    final meData = jsonDecode(meRes.body);
-                    await UserSession.save({
-                      'id': meData['id'],
-                      'phone_number': meData['phone_number'],
-                      'name': meData['name'],
-                      'role': meData['role'] ?? 'customer',
-                      'is_seller': meData['is_seller'] ?? 0,
-                      'is_runner': meData['is_runner'] ?? 0,
-                      'is_admin': meData['is_admin'] ?? 0,
-                      'photo_url': meData['photo_url'],
-                    }, user?['token'] ?? '');
-                  }
-
-                  await ShopSession.save(merchantData);
-                  if (mounted) {
-                    Navigator.pop(ctx);
-                    setState(() => myShop = merchantData);
-                    _openShopProfilePage(merchantData);
-                  }
-                } else {
-                  if (mounted) {
-                    showApiError(context, response.statusCode, response.body,
-                        fallback: 'Failed to create shop. Try a different name.');
-                  }
-                }
-              },
-              child: const Text('Create Shop'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _openShopProfilePage(Map<String, dynamic> merchantData) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (pageContext) => ShopPageScreen(
-          shop: merchantData,
-          currentUser: widget.currentUser,
-          onUserChanged: widget.onUserChanged,
-        ),
-      ),
-    ).then((_) {
-      _fetchShops();
-      _loadMyShop();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -8583,207 +8328,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       return true;
     }
     return false;
-  }
-
-  Future<void> _showCreateShopDialog() async {
-    final loggedIn = await _ensureLoggedIn(suggestedRole: 'merchant');
-    if (!loggedIn) return;
-    if (!mounted) return;
-
-    final shopNameController = TextEditingController();
-    final ownerNameController =
-        TextEditingController(text: widget.currentUser?['name'] ?? '');
-    final phoneController = TextEditingController(
-        text: widget.currentUser?['phone_number'] ?? '+232');
-    final cityController = TextEditingController(text: 'Freetown');
-    String selectedCategory = 'Fashion';
-    String? uploadedLogoUrl;
-
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Create Your Shop Page'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: shopNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Shop Name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: ownerNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Your Full Name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: phoneController,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: cityController,
-                  decoration: const InputDecoration(
-                    labelText: 'City in Sierra Leone',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final url = await pickAndUploadImage(context);
-                      if (url != null) {
-                        setDialogState(() => uploadedLogoUrl = url);
-                      }
-                    },
-                    icon: const Icon(Icons.photo_camera),
-                    label: Text(uploadedLogoUrl == null
-                        ? 'Pick Shop Logo'
-                        : 'Logo Uploaded'),
-                  ),
-                ),
-                if (uploadedLogoUrl != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        uploadedLogoUrl!,
-                        height: 100,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Shop Category',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Fashion', child: Text('Fashion')),
-                    DropdownMenuItem(value: 'Food', child: Text('Food & Groceries')),
-                    DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
-                    DropdownMenuItem(value: 'Home', child: Text('Home & Furniture')),
-                    DropdownMenuItem(value: 'Beauty', child: Text('Beauty & Health')),
-                    DropdownMenuItem(value: 'Services', child: Text('Services')),
-                    DropdownMenuItem(value: 'Other', child: Text('Other')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() => selectedCategory = value);
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (shopNameController.text.isEmpty ||
-                    ownerNameController.text.isEmpty) return;
-
-                final user = await UserSession.load();
-                final response = await http.post(
-                  Uri.parse('$baseUrl/merchants/'),
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'Authorization': 'Bearer ${user?['token'] ?? ''}',
-                  },
-                  body: jsonEncode({
-                    'shop_name': shopNameController.text,
-                    'owner_name': ownerNameController.text,
-                    'phone_number': normalisePhone(phoneController.text),
-                    'city': cityController.text,
-                    'category': selectedCategory,
-                    'logo_url': uploadedLogoUrl,
-                  }),
-                );
-
-                if (response.statusCode >= 200 && response.statusCode < 300) {
-                  final merchantData = jsonDecode(response.body)['merchant'];
-
-                  // Creating a shop auto-enables seller status on the backend,
-                  // so refresh the user or the account sheet stays stale.
-                  final meRes = await http.get(
-                    Uri.parse('$baseUrl/auth/me'),
-                    headers: {
-                      'x-api-key': apiKey,
-                      'Authorization': 'Bearer ${user?['token'] ?? ''}',
-                    },
-                  ).timeout(const Duration(seconds: 8));
-                  if (meRes.statusCode >= 200 && meRes.statusCode < 300) {
-                    final meData = jsonDecode(meRes.body);
-                    await UserSession.save({
-                      'id': meData['id'],
-                      'phone_number': meData['phone_number'],
-                      'name': meData['name'],
-                      'role': meData['role'] ?? 'customer',
-                      'is_seller': meData['is_seller'] ?? 0,
-                      'is_runner': meData['is_runner'] ?? 0,
-                      'is_admin': meData['is_admin'] ?? 0,
-                      'photo_url': meData['photo_url'],
-                    }, user?['token'] ?? '');
-                  }
-
-                  await ShopSession.save(merchantData);
-                  if (mounted) {
-                    Navigator.pop(ctx);
-                    setState(() => myShop = merchantData);
-                    _openShopProfilePage(merchantData);
-                  }
-                } else {
-                  if (mounted) {
-                    showApiError(context, response.statusCode, response.body,
-                        fallback: 'Failed to create shop. Try a different name.');
-                  }
-                }
-              },
-              child: const Text('Create Shop'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _openShopProfilePage(Map<String, dynamic> merchantData) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ShopPageScreen(
-          shop: merchantData,
-          currentUser: widget.currentUser,
-          onUserChanged: widget.onUserChanged,
-        ),
-      ),
-    ).then((_) {
-      fetchProducts();
-      _loadEverything();
-    });
   }
 
   Future<void> _showCheckout(dynamic product) async {
