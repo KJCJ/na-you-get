@@ -1473,7 +1473,7 @@ String _profileRoleLabel(Map<String, dynamic>? user) {
   if (user == null) return 'Guest';
   final admin = user['is_admin'] == 1 || user['is_admin'] == true;
   if (admin) return 'Admin';
-  if (isRunner(user)) return 'Runner';
+  if (isRunner(user)) return 'Job Worker';
   if (isSeller(user)) return 'Seller';
   return 'Customer';
 }
@@ -1633,11 +1633,11 @@ void showAccountSheet(
                       ),
                       child: Text(
                         isSeller(user) && isRunner(user)
-                            ? 'SELLER + RUNNER'
+                            ? 'SELLER + WORKER'
                             : isSeller(user)
                                 ? 'SELLER'
                                 : isRunner(user)
-                                    ? 'RUNNER'
+                                    ? 'WORKER'
                                     : 'CUSTOMER',
                         style: const TextStyle(
                             fontSize: 10.5,
@@ -1808,7 +1808,7 @@ void showAccountSheet(
               if (!isRunner(currentUser))
                 ListTile(
                   leading: const Icon(Icons.directions_run, color: Color(0xFF0D47A1)),
-                  title: const Text('Become a Runner'),
+                  title: const Text('Become a Job Worker'),
                   subtitle: const Text('Deliver items and earn'),
                   trailing: const Icon(Icons.chevron_right,
                       size: 18, color: Color(0xFFB0A89F)),
@@ -1832,7 +1832,7 @@ void showAccountSheet(
               if (isRunner(currentUser))
                 ListTile(
                   leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
-                  title: const Text('Stop Running'),
+                  title: const Text('Stop Taking Jobs'),
                   subtitle: const Text('Pause deliveries temporarily'),
                   trailing: const Icon(Icons.chevron_right,
                       size: 18, color: Color(0xFFB0A89F)),
@@ -1840,7 +1840,7 @@ void showAccountSheet(
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (dctx) => AlertDialog(
-                        title: const Text('Stop running?'),
+                        title: const Text('Stop taking jobs?'),
                         content: const Text(
                           'You will not see delivery jobs or be able to accept them until you turn running back on. Past deliveries stay in your history.',
                         ),
@@ -1855,7 +1855,7 @@ void showAccountSheet(
                               foregroundColor: Colors.white,
                             ),
                             onPressed: () => Navigator.pop(dctx, true),
-                            child: const Text('Stop Running'),
+                            child: const Text('Stop Taking Jobs'),
                           ),
                         ],
                       ),
@@ -2992,7 +2992,7 @@ class _MerchantOrdersScreenState extends State<MerchantOrdersScreen> {
                                   const Icon(Icons.directions_run, size: 14, color: Colors.blue),
                                   const SizedBox(width: 6),
                                   Text(
-                                    'Runner: ${o['driver_name'] ?? 'Unknown'} • ${o['driver_phone'] ?? ''}',
+                                    'Worker: ${o['driver_name'] ?? 'Unknown'} • ${o['driver_phone'] ?? ''}',
                                     style: const TextStyle(fontSize: 12, color: Colors.blue),
                                   ),
                                 ],
@@ -3068,13 +3068,13 @@ class _MerchantOrdersScreenState extends State<MerchantOrdersScreen> {
                                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     ),
                                     icon: const Icon(Icons.chat_bubble_outline, size: 16),
-                                    label: const Text('Message Runner', style: TextStyle(fontSize: 12)),
+                                    label: const Text('Message Worker', style: TextStyle(fontSize: 12)),
                                     onPressed: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
                                         builder: (_) => ChatScreen(
                                           otherUserId: (o['driver_id'] as num).toInt(),
-                                          otherUserName: o['driver_name'] ?? 'Runner',
+                                          otherUserName: o['driver_name'] ?? 'Job Worker',
                                           orderId: o['id'],
                                         ),
                                       ),
@@ -3095,260 +3095,6 @@ class _MerchantOrdersScreenState extends State<MerchantOrdersScreen> {
 // ==========================================
 // RUNNER DELIVERIES SCREEN
 // ==========================================
-class RunnerDeliveriesScreen extends StatefulWidget {
-  final Map<String, dynamic> currentUser;
-  const RunnerDeliveriesScreen({super.key, required this.currentUser});
-
-  @override
-  State<RunnerDeliveriesScreen> createState() => _RunnerDeliveriesScreenState();
-}
-
-class _RunnerDeliveriesScreenState extends State<RunnerDeliveriesScreen> {
-  List<dynamic> _jobs = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    final user = await UserSession.load();
-    if (user == null) {
-      if (mounted) setState(() => _loading = false);
-      return;
-    }
-    try {
-      final res = await http.get(
-        Uri.parse('$baseUrl/deliveries/mine/${widget.currentUser['id']}'),
-        headers: {
-          'x-api-key': apiKey,
-          'Authorization': 'Bearer ${user['token']}',
-        },
-      ).timeout(const Duration(seconds: 8));
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final all = jsonDecode(res.body) as List;
-        if (mounted) {
-          setState(() {
-            _jobs = all;
-            _loading = false;
-          });
-        }
-        return;
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _loading = false);
-  }
-
-  String _formatDate(String? iso) {
-    if (iso == null) return '';
-    try {
-      final dt = DateTime.parse(iso);
-      return '${dt.day}/${dt.month} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return '';
-    }
-  }
-
-  Future<void> _completeDelivery(int orderId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Mark as delivered?'),
-        content: const Text('Confirm you have delivered this order.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1B5E20),
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Yes, delivered'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    final user = await UserSession.load();
-    if (user == null) return;
-
-    try {
-      final res = await http.put(
-        Uri.parse('$baseUrl/deliveries/$orderId/complete'),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'Authorization': 'Bearer ${user['token'] ?? ''}',
-        },
-        body: jsonEncode({
-          'status': 'delivered',
-          'cash_collected': false,
-        }),
-      ).timeout(const Duration(seconds: 8));
-
-      if (!mounted) return;
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Delivery completed')),
-        );
-        _load();
-      } else {
-        showApiError(context, res.statusCode, res.body,
-            fallback: 'Could not complete delivery');
-      }
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot reach server')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Deliveries'),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _jobs.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.delivery_dining, size: 80, color: Colors.grey.shade400),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No deliveries assigned to you yet.',
-                        style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(10),
-                  itemCount: _jobs.length,
-                  itemBuilder: (ctx, i) {
-                    final job = _jobs[i];
-                    final status = (job['delivery_status'] ?? 'pending').toString();
-                    final isDelivered = status == 'delivered' || status == 'completed';
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    job['product_title'] ?? 'Order',
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: isDelivered ? Colors.green.shade100 : Colors.orange.shade100,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    status.toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: isDelivered ? Colors.green.shade800 : Colors.orange.shade800,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    job['delivery_address'] ?? '',
-                                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Fee: SLE ${job['delivery_fee_sle'] ?? 0}',
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20)),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Payment: ${job['payment_method'] ?? ''} • ${job['payment_status'] ?? ''}',
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _formatDate(job['created_at']),
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                            ),
-                            const SizedBox(height: 10),
-                            if (!isDelivered)
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF1B5E20),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                  ),
-                                  icon: const Icon(Icons.check_circle_outline),
-                                  label: const Text('Mark as Delivered'),
-                                  onPressed: () => _completeDelivery((job['id'] as num).toInt()),
-                                ),
-                              )
-                            else
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Center(
-                                  child: Text(
-                                    'Delivered ✓',
-                                    style: TextStyle(
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-    );
-  }
-}
-
 // ==========================================
 // MAIN NAVIGATION — 4 TABS
 // ==========================================
@@ -3487,19 +3233,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             _stepRow('Seller received payment', s['seller_received'] as String?,
               step: role == 'seller' ? 'seller-received' : null, buttonLabel: "I've received",
               enabled: s['buyer_paid'] != null),
-            _stepRow('Seller paid runner fee', s['seller_paid_runner'] as String?,
-              step: role == 'seller' ? 'seller-paid-runner' : null, buttonLabel: "I've paid runner",
+            _stepRow('Seller paid worker fee', s['seller_paid_runner'] as String?,
+              step: role == 'seller' ? 'seller-paid-runner' : null, buttonLabel: "I've paid worker",
               enabled: s['seller_received'] != null),
-            _stepRow('Runner received fee', s['runner_received_fee'] as String?,
+            _stepRow('Worker received fee', s['runner_received_fee'] as String?,
               step: role == 'runner' ? 'runner-received-fee' : null, buttonLabel: "I've received",
               enabled: s['seller_paid_runner'] != null),
-            _stepRow('Seller handed goods to runner', s['seller_handed_goods'] as String?,
+            _stepRow('Seller handed goods to worker', s['seller_handed_goods'] as String?,
               step: role == 'seller' ? 'seller-handed' : null, buttonLabel: "I've handed goods",
               enabled: s['runner_received_fee'] != null),
-            _stepRow('Runner picked up', s['runner_picked_up'] as String?,
+            _stepRow('Worker picked up', s['runner_picked_up'] as String?,
               step: role == 'runner' ? 'runner-picked-up' : null, buttonLabel: "I've picked up",
               enabled: s['seller_handed_goods'] != null),
-            _stepRow('Runner delivered', s['runner_delivered'] as String?,
+            _stepRow('Worker delivered', s['runner_delivered'] as String?,
               step: role == 'runner' ? 'runner-delivered' : null, buttonLabel: "I've delivered",
               enabled: s['runner_picked_up'] != null),
             _stepRow('Buyer received goods', s['buyer_received_goods'] as String?,
@@ -3512,7 +3258,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             const Divider(height: 16),
             _moneyRow('Seller receives', _data!['seller_payout_sle'], bold: true),
             const Divider(height: 16),
-            _moneyRow('Runner delivery fee', _data!['runner_fee_sle']),
+            _moneyRow('Worker delivery fee', _data!['runner_fee_sle']),
           ],
         ),
       ),
@@ -3698,7 +3444,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.directions_run),
-              title: Text(isRunner ? 'Remove Runner' : 'Make Runner'),
+              title: Text(isRunner ? 'Remove Job Worker' : 'Make Job Worker'),
               onTap: () async {
                 Navigator.pop(ctx);
                 final done = await _send('PUT', '/admin/users/$id/roles',
@@ -3833,7 +3579,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Runner'),
+                  title: const Text('Job Worker'),
                   value: runner,
                   onChanged: (v) => setDialogState(() => runner = v),
                 ),
@@ -4802,7 +4548,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-              const Text('Runner Settings',
+              const Text('Job Settings',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               Container(
@@ -7031,7 +6777,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   Icons.payments_outlined,
                   collectInStore
                       ? 'Pay the seller when you collect'
-                      : 'Pay the runner on delivery',
+                      : 'Pay the worker on delivery',
                   (v) => setDialogState(() => paymentMethod = v)),
               _payCard(
                   paymentMethod,
@@ -7117,7 +6863,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                           content:
-                              Text('Order placed! Runner will be assigned.')),
+                              Text('Order placed! A job worker will be assigned.')),
                     );
                   }
                 }
@@ -8709,7 +8455,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   Icons.payments_outlined,
                   collectInStore
                       ? 'Pay the seller when you collect'
-                      : 'Pay the runner on delivery',
+                      : 'Pay the worker on delivery',
                   (v) => setDialogState(() => paymentMethod = v)),
               _payCard(
                   paymentMethod,
@@ -8795,7 +8541,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                           content:
-                              Text('Order placed! Runner will be assigned.')),
+                              Text('Order placed! A job worker will be assigned.')),
                     );
                   }
                 }
@@ -9016,7 +8762,7 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
       if (isRunner(widget.currentUser)) return true;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Only Runners can accept delivery jobs.')),
+            content: Text('Only job workers can accept jobs.')),
       );
       return false;
     }
@@ -9058,11 +8804,11 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.delivery_dining,
+                            Icon(Icons.work_off,
                                 size: 80, color: Colors.grey.shade400),
                             const SizedBox(height: 16),
                             Text(
-                              'No delivery jobs available right now.',
+                              'No jobs available right now.',
                               style: TextStyle(
                                 fontSize: 16,
                                 color: Colors.grey.shade700,
@@ -9078,9 +8824,9 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
                           return Card(
                             margin: const EdgeInsets.all(8),
                             child: ListTile(
-                              leading: const Icon(Icons.delivery_dining,
+                              leading: const Icon(Icons.work_outline,
                                   size: 36, color: Colors.blue),
-                              title: Text('Dropoff: ${job['delivery_address']}'),
+                              title: Text('Address: ${job['delivery_address']}'),
                               subtitle: Text(
                                   'Fee: SLE ${job['delivery_fee_sle']} | Payment: ${job['payment_method']}'),
                               trailing: ElevatedButton(
@@ -9335,13 +9081,13 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                                           foregroundColor: const Color(0xFF1B5E20),
                                         ),
                                         icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                                        label: const Text('Message Runner'),
+                                        label: const Text('Message Worker'),
                                         onPressed: () => Navigator.push(
                                           context,
                                           MaterialPageRoute(
                                             builder: (_) => ChatScreen(
                                               otherUserId: (order['driver_id'] as num).toInt(),
-                                              otherUserName: 'Runner',
+                                              otherUserName: 'Job Worker',
                                               orderId: order['id'],
                                             ),
                                           ),
