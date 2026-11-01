@@ -1852,18 +1852,12 @@ void showAccountSheet(
                 ),
                 child: Column(
                   children: [
-                    CircleAvatar(
+                    EditableAvatar(
+                      photoUrl: user['photo_url']?.toString(),
+                      name: user['name']?.toString() ?? '',
                       radius: 34,
                       backgroundColor: Colors.white24,
-                      child: Text(
-                        user['name'].toString().isNotEmpty
-                            ? user['name'][0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                            fontSize: 28,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold),
-                      ),
+                      onChanged: onUserChanged,
                     ),
                     const SizedBox(height: 12),
                     Text(user['name'] ?? 'User',
@@ -1984,7 +1978,7 @@ void showAccountSheet(
                     );
                   },
                 ),
-              sectionHeader('SELLER TOOLS'),
+              if (isSeller(currentUser)) sectionHeader('SELLER TOOLS'),
               if (isSeller(currentUser) && shop != null)
                 ListTile(
                   leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
@@ -2054,18 +2048,7 @@ void showAccountSheet(
                     );
                   },
                 )
-              else
-                ListTile(
-                  leading: const Icon(Icons.storefront, color: Color(0xFF1B5E20)),
-                  title: const Text('Apply to be a Seller'),
-                  subtitle: const Text('Tell us about your business'),
-                  trailing: const Icon(Icons.chevron_right,
-                      size: 18, color: Color(0xFFB0A89F)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    showSellerApplicationDialog(context, currentUser!);
-                  },
-                ),
+
               if (isRunner(currentUser)) ...[
                 sectionHeader('DELIVERIES'),
                 ListTile(
@@ -4586,6 +4569,111 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 }
 
+class EditableAvatar extends StatefulWidget {
+  final String? photoUrl;
+  final String name;
+  final double radius;
+  final Color backgroundColor;
+  final VoidCallback? onChanged;
+
+  const EditableAvatar({
+    super.key,
+    required this.photoUrl,
+    required this.name,
+    this.radius = 32,
+    this.backgroundColor = Colors.white24,
+    this.onChanged,
+  });
+
+  @override
+  State<EditableAvatar> createState() => _EditableAvatarState();
+}
+
+class _EditableAvatarState extends State<EditableAvatar> {
+  String? _photo;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _photo = widget.photoUrl;
+  }
+
+  @override
+  void didUpdateWidget(covariant EditableAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.photoUrl != oldWidget.photoUrl) _photo = widget.photoUrl;
+  }
+
+  Future<void> _pick() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final url = await pickAndUploadImage(context);
+    if (url != null) {
+      final ok = await UserSession.update({'photo_url': url});
+      if (ok && mounted) setState(() => _photo = url);
+      if (ok) widget.onChanged?.call();
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPhoto = _photo != null && _photo!.isNotEmpty;
+    final initial = widget.name.trim().isEmpty
+        ? '?'
+        : widget.name.trim()[0].toUpperCase();
+    return GestureDetector(
+      onTap: _pick,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CircleAvatar(
+            radius: widget.radius,
+            backgroundColor: widget.backgroundColor,
+            backgroundImage: hasPhoto ? NetworkImage(_photo!) : null,
+            child: hasPhoto
+                ? null
+                : Text(initial,
+                    style: TextStyle(
+                        fontSize: widget.radius * 0.62,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold)),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withAlpha(40), blurRadius: 4),
+                ],
+              ),
+              child: Icon(Icons.photo_camera,
+                  size: widget.radius * 0.32, color: kNyqAccent),
+            ),
+          ),
+          if (_busy)
+            Positioned.fill(
+              child: CircleAvatar(
+                backgroundColor: Colors.black38,
+                child: const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic>? currentUser;
   final VoidCallback onUserChanged;
@@ -4766,20 +4854,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: Column(
                 children: [
-                  CircleAvatar(
+                  EditableAvatar(
+                    photoUrl: photo,
+                    name: name,
                     radius: 46,
                     backgroundColor: Colors.white24,
-                    backgroundImage:
-                        photo.isNotEmpty ? NetworkImage(photo) : null,
-                    child: photo.isEmpty
-                        ? Text(
-                            name.isNotEmpty ? name[0].toUpperCase() : '?',
-                            style: const TextStyle(
-                                fontSize: 34,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700),
-                          )
-                        : null,
+                    onChanged: widget.onUserChanged,
                   ),
                   const SizedBox(height: 14),
                   Text(name,
@@ -4929,6 +5009,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onTap: () => showWorkerApplicationDialog(
                             context, widget.currentUser!),
                       ),
+              ),
+            ],
+            if (widget.currentUser != null && !_isSellerUser) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 24,
+                        offset: Offset(0, 10)),
+                  ],
+                ),
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.storefront, color: kNyqGreen),
+                  title: const Text('Apply to be a Seller'),
+                  subtitle: const Text('Tell us about your business'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 18, color: Color(0xFFB0A89F)),
+                  onTap: () => showSellerApplicationDialog(
+                      context, widget.currentUser!),
+                ),
               ),
             ],
             if (_isRunnerUser) ...[
