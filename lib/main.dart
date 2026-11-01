@@ -6721,6 +6721,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     if (!mounted) return;
 
     String paymentMethod = 'cash_on_delivery';
+    String shopPaymentMethod = 'orange_money';
+    String workerPaymentMethod = 'cash_on_delivery';
     bool collectInStore = false;
     final deliveryController = TextEditingController();
     final offerController = TextEditingController(text: '25');
@@ -6797,30 +6799,104 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 ),
               ],
               const SizedBox(height: 10),
-              _payCard(
-                  paymentMethod,
-                  'cash_on_delivery',
-                  collectInStore ? 'Cash at Shop' : 'Cash on Delivery',
-                  Icons.payments_outlined,
-                  collectInStore
-                      ? 'Pay the seller when you collect'
-                      : 'Pay the Job Worker SLE '
-                          '${(double.tryParse(offerController.text.trim()) ?? 25).toStringAsFixed(0)} on delivery',
-                  (v) => setDialogState(() => paymentMethod = v)),
-              _payCard(
-                  paymentMethod,
-                  'orange_money',
-                  'Orange Money',
-                  Icons.smartphone,
-                  '*144#',
-                  (v) => setDialogState(() => paymentMethod = v)),
-              _payCard(
-                  paymentMethod,
-                  'africell_money',
-                  'Afrimoney',
-                  Icons.phone_android,
-                  '*161#',
-                  (v) => setDialogState(() => paymentMethod = v)),
+              if (!collectInStore) ...[
+                Row(
+                  children: [
+                    const Text('Item Price', style: TextStyle(fontSize: 13)),
+                    const Spacer(),
+                    Text('SLE ${product['price_sle']}',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Text('Delivery Offer',
+                        style: TextStyle(fontSize: 13)),
+                    const Spacer(),
+                    Text(
+                        'SLE ${(double.tryParse(offerController.text.trim()) ?? 25).toStringAsFixed(0)}',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text('Pay Shop (SLE ${product['price_sle']})',
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                _payCard(
+                    shopPaymentMethod,
+                    'orange_money',
+                    'Orange Money',
+                    Icons.smartphone,
+                    '*144#',
+                    (v) => setDialogState(() => shopPaymentMethod = v)),
+                _payCard(
+                    shopPaymentMethod,
+                    'africell_money',
+                    'Afrimoney',
+                    Icons.phone_android,
+                    '*161#',
+                    (v) => setDialogState(() => shopPaymentMethod = v)),
+                _payCard(
+                    shopPaymentMethod,
+                    'shop_on_pickup',
+                    'Shop is paid on pickup',
+                    Icons.handshake_outlined,
+                    'Worker pays the shop and collects the total from you',
+                    (v) => setDialogState(() => shopPaymentMethod = v)),
+                const SizedBox(height: 16),
+                Text(
+                    'Pay Job Worker (SLE ${(double.tryParse(offerController.text.trim()) ?? 25).toStringAsFixed(0)})',
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                _payCard(
+                    workerPaymentMethod,
+                    'cash_on_delivery',
+                    'Cash on Delivery',
+                    Icons.payments_outlined,
+                    'Pay the worker when the goods arrive',
+                    (v) => setDialogState(() => workerPaymentMethod = v)),
+                _payCard(
+                    workerPaymentMethod,
+                    'orange_money',
+                    'Orange Money',
+                    Icons.smartphone,
+                    '*144#',
+                    (v) => setDialogState(() => workerPaymentMethod = v)),
+                _payCard(
+                    workerPaymentMethod,
+                    'africell_money',
+                    'Afrimoney',
+                    Icons.phone_android,
+                    '*161#',
+                    (v) => setDialogState(() => workerPaymentMethod = v)),
+              ] else ...[
+                _payCard(
+                    paymentMethod,
+                    'cash_on_delivery',
+                    'Cash at Shop',
+                    Icons.payments_outlined,
+                    'Pay the seller when you collect',
+                    (v) => setDialogState(() => paymentMethod = v)),
+                _payCard(
+                    paymentMethod,
+                    'orange_money',
+                    'Orange Money',
+                    Icons.smartphone,
+                    '*144#',
+                    (v) => setDialogState(() => paymentMethod = v)),
+                _payCard(
+                    paymentMethod,
+                    'africell_money',
+                    'Afrimoney',
+                    Icons.phone_android,
+                    '*161#',
+                    (v) => setDialogState(() => paymentMethod = v)),
+              ],
             ],
           ),
           actions: [
@@ -6863,7 +6939,10 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                         ? null
                         : (double.tryParse(offerController.text.trim()) ?? 25.0),
                     'requires_delivery': !collectInStore,
-                    'payment_method': paymentMethod,
+                    'payment_method':
+                        collectInStore ? paymentMethod : shopPaymentMethod,
+                    'worker_payment_method':
+                        collectInStore ? null : workerPaymentMethod,
                   }),
                 );
                 var newOrderId = '';
@@ -6880,16 +6959,17 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 } catch (_) {}
                 if (mounted) {
                   Navigator.pop(ctx);
-                  if (paymentMethod == 'orange_money' ||
-                      paymentMethod == 'africell_money') {
+                  final shopMethod =
+                      collectInStore ? paymentMethod : shopPaymentMethod;
+                  if (shopMethod == 'orange_money' ||
+                      shopMethod == 'africell_money') {
                     final shopPhone =
                         (product['shop_phone'] ?? '+232 78 839002').toString();
                     showMobileMoneyInstructions(
                       context,
-                      method: paymentMethod,
+                      method: shopMethod,
                       shopPhone: shopPhone,
-                      total:
-                          '${(product['price_sle'] ?? 0) + (collectInStore ? 0.0 : (double.tryParse(offerController.text.trim()) ?? 25.0))}',
+                      total: '${product['price_sle'] ?? 0}',
                       orderRef: 'NYG-$newOrderId',
                     );
                   } else {
@@ -8432,6 +8512,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     if (!mounted) return;
 
     String paymentMethod = 'cash_on_delivery';
+    String shopPaymentMethod = 'orange_money';
+    String workerPaymentMethod = 'cash_on_delivery';
     bool collectInStore = false;
     final deliveryController = TextEditingController();
     final offerController = TextEditingController(text: '25');
@@ -8508,30 +8590,104 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 ),
               ],
               const SizedBox(height: 10),
-              _payCard(
-                  paymentMethod,
-                  'cash_on_delivery',
-                  collectInStore ? 'Cash at Shop' : 'Cash on Delivery',
-                  Icons.payments_outlined,
-                  collectInStore
-                      ? 'Pay the seller when you collect'
-                      : 'Pay the Job Worker SLE '
-                          '${(double.tryParse(offerController.text.trim()) ?? 25).toStringAsFixed(0)} on delivery',
-                  (v) => setDialogState(() => paymentMethod = v)),
-              _payCard(
-                  paymentMethod,
-                  'orange_money',
-                  'Orange Money',
-                  Icons.smartphone,
-                  '*144#',
-                  (v) => setDialogState(() => paymentMethod = v)),
-              _payCard(
-                  paymentMethod,
-                  'africell_money',
-                  'Afrimoney',
-                  Icons.phone_android,
-                  '*161#',
-                  (v) => setDialogState(() => paymentMethod = v)),
+              if (!collectInStore) ...[
+                Row(
+                  children: [
+                    const Text('Item Price', style: TextStyle(fontSize: 13)),
+                    const Spacer(),
+                    Text('SLE ${product['price_sle']}',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Text('Delivery Offer',
+                        style: TextStyle(fontSize: 13)),
+                    const Spacer(),
+                    Text(
+                        'SLE ${(double.tryParse(offerController.text.trim()) ?? 25).toStringAsFixed(0)}',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text('Pay Shop (SLE ${product['price_sle']})',
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                _payCard(
+                    shopPaymentMethod,
+                    'orange_money',
+                    'Orange Money',
+                    Icons.smartphone,
+                    '*144#',
+                    (v) => setDialogState(() => shopPaymentMethod = v)),
+                _payCard(
+                    shopPaymentMethod,
+                    'africell_money',
+                    'Afrimoney',
+                    Icons.phone_android,
+                    '*161#',
+                    (v) => setDialogState(() => shopPaymentMethod = v)),
+                _payCard(
+                    shopPaymentMethod,
+                    'shop_on_pickup',
+                    'Shop is paid on pickup',
+                    Icons.handshake_outlined,
+                    'Worker pays the shop and collects the total from you',
+                    (v) => setDialogState(() => shopPaymentMethod = v)),
+                const SizedBox(height: 16),
+                Text(
+                    'Pay Job Worker (SLE ${(double.tryParse(offerController.text.trim()) ?? 25).toStringAsFixed(0)})',
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                _payCard(
+                    workerPaymentMethod,
+                    'cash_on_delivery',
+                    'Cash on Delivery',
+                    Icons.payments_outlined,
+                    'Pay the worker when the goods arrive',
+                    (v) => setDialogState(() => workerPaymentMethod = v)),
+                _payCard(
+                    workerPaymentMethod,
+                    'orange_money',
+                    'Orange Money',
+                    Icons.smartphone,
+                    '*144#',
+                    (v) => setDialogState(() => workerPaymentMethod = v)),
+                _payCard(
+                    workerPaymentMethod,
+                    'africell_money',
+                    'Afrimoney',
+                    Icons.phone_android,
+                    '*161#',
+                    (v) => setDialogState(() => workerPaymentMethod = v)),
+              ] else ...[
+                _payCard(
+                    paymentMethod,
+                    'cash_on_delivery',
+                    'Cash at Shop',
+                    Icons.payments_outlined,
+                    'Pay the seller when you collect',
+                    (v) => setDialogState(() => paymentMethod = v)),
+                _payCard(
+                    paymentMethod,
+                    'orange_money',
+                    'Orange Money',
+                    Icons.smartphone,
+                    '*144#',
+                    (v) => setDialogState(() => paymentMethod = v)),
+                _payCard(
+                    paymentMethod,
+                    'africell_money',
+                    'Afrimoney',
+                    Icons.phone_android,
+                    '*161#',
+                    (v) => setDialogState(() => paymentMethod = v)),
+              ],
             ],
           ),
           actions: [
@@ -8574,7 +8730,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         ? null
                         : (double.tryParse(offerController.text.trim()) ?? 25.0),
                     'requires_delivery': !collectInStore,
-                    'payment_method': paymentMethod,
+                    'payment_method':
+                        collectInStore ? paymentMethod : shopPaymentMethod,
+                    'worker_payment_method':
+                        collectInStore ? null : workerPaymentMethod,
                   }),
                 );
                 var newOrderId = '';
@@ -8591,16 +8750,17 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 } catch (_) {}
                 if (mounted) {
                   Navigator.pop(ctx);
-                  if (paymentMethod == 'orange_money' ||
-                      paymentMethod == 'africell_money') {
+                  final shopMethod =
+                      collectInStore ? paymentMethod : shopPaymentMethod;
+                  if (shopMethod == 'orange_money' ||
+                      shopMethod == 'africell_money') {
                     final shopPhone =
                         (product['shop_phone'] ?? '+232 78 839002').toString();
                     showMobileMoneyInstructions(
                       context,
-                      method: paymentMethod,
+                      method: shopMethod,
                       shopPhone: shopPhone,
-                      total:
-                          '${(product['price_sle'] ?? 0) + (collectInStore ? 0.0 : (double.tryParse(offerController.text.trim()) ?? 25.0))}',
+                      total: '${product['price_sle'] ?? 0}',
                       orderRef: 'NYG-$newOrderId',
                     );
                   } else {
@@ -8925,6 +9085,16 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
                                         fontSize: 12,
                                         color: Colors.grey.shade600),
                                   ),
+                                  if (job['payment_method'] == 'shop_on_pickup') ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Collect SLE ${(job['product_price_sle'] ?? 0) + (job['delivery_offer'] ?? job['delivery_fee_sle'] ?? 0)} from customer, pay shop SLE ${job['product_price_sle'] ?? 0}',
+                                      style: const TextStyle(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: kNyqAccent),
+                                    ),
+                                  ],
                                   const SizedBox(height: 12),
                                   Row(
                                     children: [
