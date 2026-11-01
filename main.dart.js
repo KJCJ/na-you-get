@@ -101286,17 +101286,21 @@ $1(a){var s=this
 return new A.fB(new A.aDi(s.a,s.b,s.c,s.d,a),null)},
 $S:35}
 A.aDi.prototype={
-$2(a,b){var s,r,q=this,p=null,o=A.ba(24),n=q.c,m=J.aV(n),l=A.T("Buy "+A.k(m.h(n,"title")),p,p,p,p,p,p,p),k=q.a,j=t.p
-m=A.b([A.T("Price: SLE "+A.k(m.h(n,"price_sle")),p,p,p,p,p,p,p),A.Th(B.a0,new A.aDc(k,b),B.DM,B.DN,k.b),B.dm],j)
-if(!k.b)m.push(A.c0(B.P,!1,q.d,A.m9(p,new A.dv(4,A.ba(14),B.q),p,p,p,p,p,p,!0,new A.dv(4,A.ba(14),B.q),p,p,p,p,p,B.er,!0,p,p,p,p,new A.dv(4,A.ba(14),B.ol),p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,"Delivery Address",!0,!0,!1,p,p,p,p,p,p,p,p,p,p,p,p,p,p),p,p,p,1,!1,p,p,p,p,B.a_,p))
-m.push(B.a9)
-s=q.b
-m.push(s.pq(k.a,"cash_on_delivery","Cash on Delivery",B.qW,"Pay the runner on delivery",new A.aDd(k,b)))
-m.push(s.pq(k.a,"orange_money","Orange Money",B.qU,"*144#",new A.aDe(k,b)))
-m.push(s.pq(k.a,"africell_money","Afrimoney",B.qP,"*161#",new A.aDf(k,b)))
-m=A.bf(m,B.n,B.l,B.af)
-r=q.e
-return A.ex(A.b([A.dY(B.b6,new A.aDg(r),p),A.co(A.qK(B.DR,new A.aDh(k,s,q.d,n,r,a),A.Oq(B.E,B.f,B.q_,new A.cB(A.ba(14),B.q),p)),p,1/0)],j),B.q5,B.f,m,B.q4,B.q3,new A.cB(o,B.q),l)},
+$2(a,b){var s,r,q,p,o=this,n=null,m=A.ba(24),l=o.c,k=J.aV(l),j=A.T("Buy "+A.k(k.h(l,"title")),n,n,n,n,n,n,n),i=o.a,h=t.p
+k=A.b([A.T("Price: SLE "+A.k(k.h(l,"price_sle")),n,n,n,n,n,n,n),A.Th(B.a0,new A.aDc(i,b),B.DM,B.DN,i.b),B.dm],h)
+if(!i.b)k.push(A.c0(B.P,!1,o.d,A.m9(n,new A.dv(4,A.ba(14),B.q),n,n,n,n,n,n,!0,new A.dv(4,A.ba(14),B.q),n,n,n,n,n,B.er,!0,n,n,n,n,new A.dv(4,A.ba(14),B.ol),n,n,n,n,n,n,n,n,n,n,n,n,n,n,n,n,n,n,"Delivery Address",!0,!0,!1,n,n,n,n,n,n,n,n,n,n,n,n,n,n),n,n,n,1,!1,n,n,n,n,B.a_,n))
+k.push(B.a9)
+s=o.b
+r=i.a
+q=i.b
+p=q?"Cash at Shop":"Cash on Delivery"
+q=q?"Pay the seller when you collect":"Pay the runner on delivery"
+k.push(s.pq(r,"cash_on_delivery",p,B.qW,q,new A.aDd(i,b)))
+k.push(s.pq(i.a,"orange_money","Orange Money",B.qU,"*144#",new A.aDe(i,b)))
+k.push(s.pq(i.a,"africell_money","Afrimoney",B.qP,"*161#",new A.aDf(i,b)))
+k=A.bf(k,B.n,B.l,B.af)
+q=o.e
+return A.ex(A.b([A.dY(B.b6,new A.aDg(q),n),A.co(A.qK(B.DR,new A.aDh(i,s,o.d,l,q,a),A.Oq(B.E,B.f,B.q_,new A.cB(A.ba(14),B.q),n)),n,1/0)],h),B.q5,B.f,k,B.q4,B.q3,new A.cB(m,B.q),j)},
 $S:36}
 A.aDc.prototype={
 $1(a){return this.b.$1(new A.aDb(this.a,a))},
@@ -102096,17 +102100,21 @@ $1(a){var s=this
 return new A.fB(new A.axj(s.a,s.b,s.c,s.d,a),null)},
 $S:35}
 A.axj.prototype={
-$2(a,b){var s,r,q=this,p=null,o=A.ba(24),n=q.c,m=J.aV(n),l=A.T("Buy "+A.k(m.h(n,"title")),p,p,p,p,p,p,p),k=q.a,j=t.p
-m=A.b([A.T("Price: SLE "+A.k(m.h(n,"price_sle")),p,p,p,p,p,p,p),A.Th(B.a0,new A.axd(k,b),B.DM,B.DN,k.c),B.dm],j)
-if(!k.c)m.push(A.c0(B.P,!1,q.d,A.m9(p,new A.dv(4,A.ba(14),B.q),p,p,p,p,p,p,!0,new A.dv(4,A.ba(14),B.q),p,p,p,p,p,B.er,!0,p,p,p,p,new A.dv(4,A.ba(14),B.ol),p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,"Delivery Address",!0,!0,!1,p,p,p,p,p,p,p,p,p,p,p,p,p,p),p,p,p,1,!1,p,p,p,p,B.a_,p))
-m.push(B.a9)
-s=q.b
-m.push(s.pq(k.b,"cash_on_delivery","Cash on Delivery",B.qW,"Pay the runner on delivery",new A.axe(k,b)))
-m.push(s.pq(k.b,"orange_money","Orange Money",B.qU,"*144#",new A.axf(k,b)))
-m.push(s.pq(k.b,"africell_money","Afrimoney",B.qP,"*161#",new A.axg(k,b)))
-m=A.bf(m,B.n,B.l,B.af)
-r=q.e
-return A.ex(A.b([A.dY(B.b6,new A.axh(r),p),A.co(A.qK(B.DR,new A.axi(k,s,q.d,n,r,a),A.Oq(B.E,B.f,B.q_,new A.cB(A.ba(14),B.q),p)),p,1/0)],j),B.q5,B.f,m,B.q4,B.q3,new A.cB(o,B.q),l)},
+$2(a,b){var s,r,q,p,o=this,n=null,m=A.ba(24),l=o.c,k=J.aV(l),j=A.T("Buy "+A.k(k.h(l,"title")),n,n,n,n,n,n,n),i=o.a,h=t.p
+k=A.b([A.T("Price: SLE "+A.k(k.h(l,"price_sle")),n,n,n,n,n,n,n),A.Th(B.a0,new A.axd(i,b),B.DM,B.DN,i.c),B.dm],h)
+if(!i.c)k.push(A.c0(B.P,!1,o.d,A.m9(n,new A.dv(4,A.ba(14),B.q),n,n,n,n,n,n,!0,new A.dv(4,A.ba(14),B.q),n,n,n,n,n,B.er,!0,n,n,n,n,new A.dv(4,A.ba(14),B.ol),n,n,n,n,n,n,n,n,n,n,n,n,n,n,n,n,n,n,"Delivery Address",!0,!0,!1,n,n,n,n,n,n,n,n,n,n,n,n,n,n),n,n,n,1,!1,n,n,n,n,B.a_,n))
+k.push(B.a9)
+s=o.b
+r=i.b
+q=i.c
+p=q?"Cash at Shop":"Cash on Delivery"
+q=q?"Pay the seller when you collect":"Pay the runner on delivery"
+k.push(s.pq(r,"cash_on_delivery",p,B.qW,q,new A.axe(i,b)))
+k.push(s.pq(i.b,"orange_money","Orange Money",B.qU,"*144#",new A.axf(i,b)))
+k.push(s.pq(i.b,"africell_money","Afrimoney",B.qP,"*161#",new A.axg(i,b)))
+k=A.bf(k,B.n,B.l,B.af)
+q=o.e
+return A.ex(A.b([A.dY(B.b6,new A.axh(q),n),A.co(A.qK(B.DR,new A.axi(i,s,o.d,l,q,a),A.Oq(B.E,B.f,B.q_,new A.cB(A.ba(14),B.q),n)),n,1/0)],h),B.q5,B.f,k,B.q4,B.q3,new A.cB(m,B.q),j)},
 $S:36}
 A.axd.prototype={
 $1(a){return this.b.$1(new A.axc(this.a,a))},
