@@ -6876,15 +6876,16 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: Colors.white,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
           actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24)),
           title: Text('Buy ${product['title']}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               Text('Price: SLE ${product['price_sle']}'),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -7067,6 +7068,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     (v) => setDialogState(() => paymentMethod = v)),
               ],
             ],
+            ),
           ),
           actions: [
             TextButton(
@@ -8703,15 +8705,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: Colors.white,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
           actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24)),
           title: Text('Buy ${product['title']}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               Text('Price: SLE ${product['price_sle']}'),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -8894,6 +8897,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     (v) => setDialogState(() => paymentMethod = v)),
               ],
             ],
+            ),
           ),
           actions: [
             TextButton(
