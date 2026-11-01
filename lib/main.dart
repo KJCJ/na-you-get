@@ -1658,40 +1658,14 @@ void showAccountSheet(
               ),
               if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
                 ListTile(
-                  leading: const Icon(Icons.attach_money, color: Color(0xFF1B5E20)),
-                  title: const Text('My Earnings'),
-                  subtitle: const Text('Admin only'),
+                  leading: const Icon(Icons.admin_panel_settings, color: kNyqGreen),
+                  title: const Text('Admin Dashboard'),
+                  subtitle: const Text('Users, invoices and earnings'),
                   onTap: () {
                     Navigator.pop(ctx);
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const AdminEarningsScreen()),
-                    );
-                  },
-                ),
-              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
-                ListTile(
-                  leading: const Icon(Icons.receipt, color: Color(0xFF1B5E20)),
-                  title: const Text('All Invoices'),
-                  subtitle: const Text('Admin - generate and confirm'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: true)),
-                    );
-                  },
-                ),
-              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
-                ListTile(
-                  leading: const Icon(Icons.manage_accounts, color: kNyqGreen),
-                  title: const Text('Manage Users'),
-                  subtitle: const Text('Admin - roles, passwords, suspension'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AdminUsersScreen()),
+                      MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
                     );
                   },
                 ),
@@ -3466,8 +3440,40 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 }
 
+class AdminDashboardScreen extends StatelessWidget {
+  const AdminDashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Admin Dashboard'),
+          bottom: const TabBar(
+            labelColor: kNyqGreen,
+            indicatorColor: kNyqGreen,
+            tabs: [
+              Tab(text: 'Users', icon: Icon(Icons.people_outline)),
+              Tab(text: 'Invoices', icon: Icon(Icons.receipt_long)),
+              Tab(text: 'Earnings', icon: Icon(Icons.payments_outlined)),
+            ],
+          ),
+        ),
+        body: const TabBarView(
+          children: [
+            AdminUsersScreen(embedded: true),
+            InvoicesScreen(isAdmin: true, embedded: true),
+            AdminEarningsScreen(embedded: true),
+          ],
+        ),
+      ),
+    );
+  }
+}
 class AdminUsersScreen extends StatefulWidget {
-  const AdminUsersScreen({super.key});
+  final bool embedded;
+  const AdminUsersScreen({super.key, this.embedded = false});
 
   @override
   State<AdminUsersScreen> createState() => _AdminUsersScreenState();
@@ -3786,6 +3792,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scaffold = _buildInner(context);
+    if (!widget.embedded) return scaffold;
+    return scaffold.body ?? const SizedBox.shrink();
+  }
+
+  Scaffold _buildInner(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Manage Users')),
       floatingActionButton: FloatingActionButton.extended(
@@ -3888,7 +3900,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 }
 class AdminEarningsScreen extends StatefulWidget {
-  const AdminEarningsScreen({super.key});
+  final bool embedded;
+  const AdminEarningsScreen({super.key, this.embedded = false});
 
   @override
   State<AdminEarningsScreen> createState() => _AdminEarningsScreenState();
@@ -3929,6 +3942,12 @@ class _AdminEarningsScreenState extends State<AdminEarningsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scaffold = _buildInner(context);
+    if (!widget.embedded) return scaffold;
+    return scaffold.body ?? const SizedBox.shrink();
+  }
+
+  Scaffold _buildInner(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Earnings'),
@@ -4117,7 +4136,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
 class InvoicesScreen extends StatefulWidget {
   final bool isAdmin;
-  const InvoicesScreen({super.key, required this.isAdmin});
+  final bool embedded;
+  const InvoicesScreen({super.key, required this.isAdmin, this.embedded = false});
 
   @override
   State<InvoicesScreen> createState() => _InvoicesScreenState();
@@ -4194,6 +4214,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scaffold = _buildInner(context);
+    if (!widget.embedded) return scaffold;
+    return scaffold.body ?? const SizedBox.shrink();
+  }
+
+  Scaffold _buildInner(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.isAdmin ? 'All Invoices' : 'My Invoices'),
