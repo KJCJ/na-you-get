@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show Random;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -9,6 +10,14 @@ import 'package:image_picker/image_picker.dart';
 const String baseUrl = 'https://random.taila91e03.ts.net';
 const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785acabfd295';
 const String appVersion = '1.0.0';
+const Color kNyqBlue = Color(0xFF1A5AD7);
+const Color kNyqBlueDeep = Color(0xFF0D47A1);
+const Color kNyqAccent = Color(0xFF0D47A1);
+const Color kNyqOchre = Color(0xFFD4A017);
+const Color kNyqSand = Color(0xFFFAF7F2);
+const Color kNyqInk = Color(0xFF231F1C);
+const Color kNyqAccentDeep = Color(0xFF072E66);
+const Color kNyqGreen = Color(0xFF1B5E20);
 const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk';
 
 // ==========================================
@@ -245,53 +254,78 @@ class NaYouGetApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: Colors.white,
+        scaffoldBackgroundColor: kNyqSand,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1B5E20),
-          primary: const Color(0xFF1B5E20),
-          secondary: const Color(0xFF0D47A1),
-          surface: Colors.white,
+          seedColor: kNyqAccent,
+          primary: kNyqAccent,
+          secondary: kNyqOchre,
+          tertiary: kNyqBlueDeep,
+          surface: kNyqSand,
+        ),
+        textTheme: const TextTheme(
+          headlineSmall: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: kNyqInk,
+              letterSpacing: -0.5),
+          titleLarge: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: kNyqInk,
+              letterSpacing: -0.2),
+          titleMedium:
+              TextStyle(fontWeight: FontWeight.w600, color: kNyqInk),
+          bodyMedium: TextStyle(
+              height: 1.5, fontWeight: FontWeight.w400, color: kNyqInk),
+          bodySmall: TextStyle(height: 1.4, color: Color(0xFF6B615A)),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.white,
-          foregroundColor: Color(0xFF1C1C1E),
-          elevation: 1.5,
-          scrolledUnderElevation: 1.5,
-          shadowColor: Color(0x12000000),
+          backgroundColor: kNyqSand,
+          surfaceTintColor: kNyqSand,
+          foregroundColor: kNyqInk,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          shadowColor: Color(0x0F5A3A28),
           centerTitle: false,
           titleTextStyle: TextStyle(
-            color: Color(0xFF1C1C1E),
+            color: kNyqInk,
             fontSize: 18,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w800,
           ),
-          iconTheme: IconThemeData(color: Color(0xFF1C1C1E)),
+          iconTheme: IconThemeData(color: kNyqInk),
         ),
         navigationBarTheme: NavigationBarThemeData(
-          backgroundColor: Colors.white,
+          backgroundColor: kNyqSand,
           surfaceTintColor: Colors.transparent,
-          elevation: 3,
+          elevation: 6,
           height: 68,
-          indicatorColor: const Color(0x1F1B5E20),
+          indicatorColor: kNyqGreen.withAlpha(38),
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           iconTheme: WidgetStateProperty.resolveWith((states) {
             final on = states.contains(WidgetState.selected);
             return IconThemeData(
-              size: 24,
-              color: on ? const Color(0xFF1B5E20) : const Color(0xFF9E9E9E),
-            );
+                size: 24,
+                color: on ? kNyqGreen : const Color(0xFF9A9088));
           }),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final on = states.contains(WidgetState.selected);
             return TextStyle(
               fontSize: 11,
               fontWeight: on ? FontWeight.w700 : FontWeight.w500,
-              color: on ? const Color(0xFF1B5E20) : const Color(0xFF9E9E9E),
+              color: on ? kNyqGreen : const Color(0xFF9A9088),
             );
           }),
         ),
+        switchTheme: SwitchThemeData(
+          thumbColor: WidgetStateProperty.resolveWith((states) {
+            final on = states.contains(WidgetState.selected);
+            return on ? kNyqGreen : Colors.grey.shade400;
+          }),
+          trackColor: WidgetStateProperty.resolveWith((states) {
+            final on = states.contains(WidgetState.selected);
+            return on ? kNyqGreen.withAlpha(90) : Colors.grey.shade300;
+          }),
+        ),
         dividerTheme: const DividerThemeData(
-          color: Color(0xFFEDEDED),
+          color: Color(0xFFE8E0D5),
           thickness: 1,
           space: 1,
         ),
@@ -1066,6 +1100,148 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _loading = false;
   String? _error;
 
+  Future<void> _showRecoveryDialog() async {
+    bool byPhone = true;
+    final inputCtl = TextEditingController();
+    bool busy = false;
+    String? error;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Future<void> submit() async {
+            final value = inputCtl.text.trim();
+            if (value.isEmpty) {
+              setDialogState(() => error = byPhone
+                  ? 'Enter your phone number.'
+                  : 'Enter your full name.');
+              return;
+            }
+            setDialogState(() {
+              busy = true;
+              error = null;
+            });
+            try {
+              final res = await http
+                  .post(
+                    Uri.parse('$baseUrl/support/recovery'),
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-api-key': apiKey,
+                    },
+                    body: jsonEncode({
+                      'request_type': byPhone ? 'password' : 'phone',
+                      'detail': value,
+                    }),
+                  )
+                  .timeout(const Duration(seconds: 12));
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'Your request has been sent to the Admin. We will contact you shortly.'),
+                      backgroundColor: kNyqGreen,
+                    ),
+                  );
+                }
+                return;
+              }
+              final data = jsonDecode(res.body);
+              setDialogState(() {
+                busy = false;
+                error =
+                    (data['detail'] ?? 'Could not send request.').toString();
+              });
+            } catch (_) {
+              setDialogState(() {
+                busy = false;
+                error = 'Network error. Please try again.';
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Account Recovery'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    byPhone
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    color: kNyqAccent,
+                  ),
+                  title: const Text('I know my phone number'),
+                  onTap: () => setDialogState(() {
+                    byPhone = true;
+                    inputCtl.clear();
+                    error = null;
+                  }),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    !byPhone
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    color: kNyqAccent,
+                  ),
+                  title: const Text('I forgot my phone number'),
+                  onTap: () => setDialogState(() {
+                    byPhone = false;
+                    inputCtl.clear();
+                    error = null;
+                  }),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: inputCtl,
+                  keyboardType:
+                      byPhone ? TextInputType.phone : TextInputType.name,
+                  decoration: InputDecoration(
+                    labelText: byPhone ? 'Phone Number' : 'Full Name',
+                    hintText:
+                        byPhone ? '+232 78 839002' : 'e.g. Mohamed Kamara',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(error!,
+                      style:
+                          const TextStyle(color: Colors.red, fontSize: 12)),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: busy ? null : submit,
+                child: busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Send Request'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    inputCtl.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1233,6 +1409,11 @@ class _AuthScreenState extends State<AuthScreen> {
                     ? 'New here? Create an account'
                     : 'Already have an account? Sign in'),
               ),
+              TextButton.icon(
+                onPressed: _showRecoveryDialog,
+                icon: const Icon(Icons.help_outline, size: 16),
+                label: const Text('Forgot password or phone number?'),
+              ),
             ],
           ),
         ),
@@ -1276,6 +1457,15 @@ const Map<String, String> kShopPalette = {
   '#9C27B0': 'Purple',
   '#F5F5F5': 'Light Grey',
 };
+
+String _profileRoleLabel(Map<String, dynamic>? user) {
+  if (user == null) return 'Guest';
+  final admin = user['is_admin'] == 1 || user['is_admin'] == true;
+  if (admin) return 'Admin';
+  if (isRunner(user)) return 'Runner';
+  if (isSeller(user)) return 'Seller';
+  return 'Customer';
+}
 
 void showAccountSheet(
   BuildContext context,
@@ -1410,27 +1600,20 @@ void showAccountSheet(
                 ),
               ),
               const Divider(height: 24),
-              if (user != null && (isSeller(currentUser) || isAdmin))
+              if (user != null)
                 ListTile(
-                  leading: Icon(
-                      shop != null ? Icons.storefront : Icons.person_outline),
-                  title: const Text('My Storefront'),
-                  subtitle: shop != null ? Text(shop['shop_name'] ?? '') : null,
+                  leading: const Icon(Icons.person_outline),
+                  title: const Text('My Profile'),
+                  subtitle: Text(_profileRoleLabel(currentUser)),
                   onTap: () {
                     Navigator.pop(ctx);
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => shop != null
-                            ? ShopPageScreen(
-                                shop: shop,
-                                currentUser: currentUser,
-                                onUserChanged: onUserChanged,
-                              )
-                            : ProfileScreen(
-                                currentUser: user,
-                                onUserChanged: onUserChanged,
-                              ),
+                        builder: (_) => ProfileScreen(
+                          currentUser: user,
+                          onUserChanged: onUserChanged,
+                        ),
                       ),
                     );
                   },
@@ -1477,27 +1660,14 @@ void showAccountSheet(
               ),
               if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
                 ListTile(
-                  leading: const Icon(Icons.attach_money, color: Color(0xFF1B5E20)),
-                  title: const Text('My Earnings'),
-                  subtitle: const Text('Admin only'),
+                  leading: const Icon(Icons.admin_panel_settings, color: kNyqGreen),
+                  title: const Text('Admin Dashboard'),
+                  subtitle: const Text('Users, invoices and earnings'),
                   onTap: () {
                     Navigator.pop(ctx);
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const AdminEarningsScreen()),
-                    );
-                  },
-                ),
-              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
-                ListTile(
-                  leading: const Icon(Icons.receipt, color: Color(0xFF1B5E20)),
-                  title: const Text('All Invoices'),
-                  subtitle: const Text('Admin - generate and confirm'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const InvoicesScreen(isAdmin: true)),
+                      MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
                     );
                   },
                 ),
@@ -2322,7 +2492,7 @@ class _ChatBubbleState extends State<ChatBubble> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: const Color(0xFF1B5E20),
+                color: kNyqBlue,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 3)),
@@ -3250,21 +3420,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             _stepRow('Buyer received goods', s['buyer_received_goods'] as String?,
               step: role == 'customer' ? 'buyer-received-goods' : null, buttonLabel: "I've received",
               enabled: s['runner_delivered'] != null),
-            _stepRow('Seller paid NYG commission', s['seller_paid_nyg'] as String?,
-              step: role == 'seller' ? 'seller-paid-nyg' : null, buttonLabel: "I've paid NYG",
-              enabled: s['buyer_received_goods'] != null),
-            _stepRow('NYG confirmed commission', s['nyg_received'] as String?,
-              step: null, buttonLabel: null),
             const Divider(height: 32),
             const Text('Money breakdown', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             _moneyRow('Product price', _data!['product_price_sle']),
-            _moneyRow('NYG commission (5%)', _data!['commission_sle']),
-            _moneyRow('Seller receives', _data!['seller_payout_sle']),
             const Divider(height: 16),
-            _moneyRow('Runner fee (80% delivery)', _data!['runner_fee_sle']),
+            _moneyRow('Seller receives', _data!['seller_payout_sle'], bold: true),
             const Divider(height: 16),
-            _moneyRow('NYG total on this order', _data!['nyg_total_sle'], bold: true),
+            _moneyRow('Runner delivery fee', _data!['runner_fee_sle']),
           ],
         ),
       ),
@@ -3272,8 +3435,468 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 }
 
+class AdminDashboardScreen extends StatelessWidget {
+  const AdminDashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Admin Dashboard'),
+          bottom: const TabBar(
+            labelColor: kNyqGreen,
+            indicatorColor: kNyqGreen,
+            tabs: [
+              Tab(text: 'Users', icon: Icon(Icons.people_outline)),
+              Tab(text: 'Invoices', icon: Icon(Icons.receipt_long)),
+              Tab(text: 'Overview', icon: Icon(Icons.insights_outlined)),
+            ],
+          ),
+        ),
+        body: const TabBarView(
+          children: [
+            AdminUsersScreen(embedded: true),
+            InvoicesScreen(isAdmin: true, embedded: true),
+            AdminEarningsScreen(embedded: true),
+          ],
+        ),
+      ),
+    );
+  }
+}
+class AdminUsersScreen extends StatefulWidget {
+  final bool embedded;
+  const AdminUsersScreen({super.key, this.embedded = false});
+
+  @override
+  State<AdminUsersScreen> createState() => _AdminUsersScreenState();
+}
+
+class _AdminUsersScreenState extends State<AdminUsersScreen> {
+  final _searchCtl = TextEditingController();
+  List<dynamic> _users = [];
+  bool _loading = true;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtl.dispose();
+    super.dispose();
+  }
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    final token = user?['token'];
+    return {
+      'x-api-key': apiKey,
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
+
+  Future<void> _fetch() async {
+    setState(() => _loading = true);
+    var result = <dynamic>[];
+    try {
+      final q = _searchCtl.text.trim();
+      final uri = Uri.parse('$baseUrl/admin/users${q.isEmpty ? '' : '?q=${Uri.encodeComponent(q)}'}');
+      final res = await http
+          .get(uri, headers: await _headers())
+          .timeout(const Duration(seconds: 12));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        result = jsonDecode(res.body) as List;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _users = result;
+      _loading = false;
+    });
+  }
+
+  void _onSearchChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), _fetch);
+  }
+
+  Future<bool> _send(String method, String path,
+      [Map<String, dynamic>? body]) async {
+    var ok = false;
+    var msg = 'Network error. Please try again.';
+    try {
+      final headers = {...await _headers(), 'Content-Type': 'application/json'};
+      final uri = Uri.parse('$baseUrl$path');
+      http.Response res;
+      if (method == 'POST') {
+        res = await http
+            .post(uri, headers: headers, body: jsonEncode(body ?? {}))
+            .timeout(const Duration(seconds: 12));
+      } else if (method == 'PUT') {
+        res = await http
+            .put(uri, headers: headers, body: jsonEncode(body ?? {}))
+            .timeout(const Duration(seconds: 12));
+      } else {
+        res = await http
+            .delete(uri, headers: headers)
+            .timeout(const Duration(seconds: 12));
+      }
+      ok = res.statusCode >= 200 && res.statusCode < 300;
+      if (ok) {
+        msg = 'Done';
+      } else {
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? 'Action failed').toString();
+        } catch (_) {
+          msg = 'Action failed';
+        }
+      }
+    } catch (_) {
+      ok = false;
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: ok ? kNyqGreen : Colors.red.shade800,
+      ));
+    }
+    return ok;
+  }
+
+  Future<void> _showUserSheet(Map<String, dynamic> u) async {
+    final id = u['id'] as int;
+    final isSeller = u['is_seller'] == 1;
+    final isRunner = u['is_runner'] == 1;
+    final isSuspended = u['is_suspended'] == 1;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(u['name'].toString(),
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w800)),
+            Text(u['phone_number'].toString(),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.lock_reset),
+              title: const Text('Reset Password'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _resetPassword(id);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.storefront),
+              title: Text(isSeller ? 'Remove Seller' : 'Make Seller'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final done = await _send('PUT', '/admin/users/$id/roles',
+                    {'is_seller': isSeller ? 0 : 1});
+                if (done) await _fetch();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.directions_run),
+              title: Text(isRunner ? 'Remove Runner' : 'Make Runner'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final done = await _send('PUT', '/admin/users/$id/roles',
+                    {'is_runner': isRunner ? 0 : 1});
+                if (done) await _fetch();
+              },
+            ),
+            ListTile(
+              leading: Icon(isSuspended
+                  ? Icons.play_circle_outline
+                  : Icons.pause_circle_outline),
+              title: Text(isSuspended ? 'Unsuspend' : 'Suspend'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final done = await _send('PUT', '/admin/users/$id/suspend',
+                    {'suspended': !isSuspended});
+                if (done) await _fetch();
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.delete_forever, color: Colors.red),
+              title: const Text('Delete Account',
+                  style: TextStyle(
+                      color: Colors.red, fontWeight: FontWeight.w700)),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: const Text('Delete Account?'),
+                    content: Text('Permanently remove ${u['name']}?'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(c, false),
+                          child: const Text('Cancel')),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: Colors.red.shade900),
+                        onPressed: () => Navigator.pop(c, true),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  final done = await _send('DELETE', '/admin/users/$id');
+                  if (done) await _fetch();
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _resetPassword(int id) async {
+    final ctl = TextEditingController();
+    final pw = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: TextField(
+          controller: ctl,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'New password',
+            helperText: 'At least 6 characters',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctl.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    ctl.dispose();
+    if (pw == null || pw.length < 6) return;
+    await _send('PUT', '/admin/users/$id/password', {'new_password': pw});
+  }
+
+  Future<void> _createUser() async {
+    final nameCtl = TextEditingController();
+    final phoneCtl = TextEditingController(text: '+232');
+    final passCtl = TextEditingController();
+    var seller = false;
+    var runner = false;
+
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Create User'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtl,
+                  decoration: const InputDecoration(
+                      labelText: 'Name', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneCtl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                      labelText: 'Phone Number',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: passCtl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                      labelText: 'Password',
+                      helperText: 'At least 6 characters',
+                      border: OutlineInputBorder()),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Seller'),
+                  value: seller,
+                  onChanged: (v) => setDialogState(() => seller = v),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Runner'),
+                  value: runner,
+                  onChanged: (v) => setDialogState(() => runner = v),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                if (nameCtl.text.trim().isEmpty || passCtl.text.length < 6) {
+                  return;
+                }
+                final ok = await _send('POST', '/admin/users', {
+                  'name': nameCtl.text.trim(),
+                  'phone_number': phoneCtl.text.trim(),
+                  'password': passCtl.text,
+                  'is_seller': seller ? 1 : 0,
+                  'is_runner': runner ? 1 : 0,
+                });
+                if (ok && ctx.mounted) Navigator.pop(ctx, true);
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameCtl.dispose();
+    phoneCtl.dispose();
+    passCtl.dispose();
+    if (created == true) await _fetch();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scaffold = _buildInner(context);
+    if (!widget.embedded) return scaffold;
+    return scaffold.body ?? const SizedBox.shrink();
+  }
+
+  Scaffold _buildInner(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Manage Users')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _createUser,
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.person_add_alt_1),
+        label: const Text('Create User'),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: TextField(
+              controller: _searchCtl,
+              onChanged: _onSearchChanged,
+              decoration: InputDecoration(
+                hintText: 'Search by name or phone',
+                prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: const Color(0xFFF5F5F5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _users.isEmpty
+                    ? const EmptyState(
+                        icon: Icons.people_outline,
+                        title: 'No users found',
+                        message: 'Try a different search.',
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _fetch,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 90),
+                          itemCount: _users.length,
+                          itemBuilder: (ctx, i) {
+                            final u =
+                                Map<String, dynamic>.from(_users[i] as Map);
+                            final suspended = u['is_suspended'] == 1;
+                            final roles = <String>[
+                              if (u['is_admin'] == 1) 'Admin',
+                              if (u['is_seller'] == 1) 'Seller',
+                              if (u['is_runner'] == 1) 'Runner',
+                            ];
+                            final name = (u['name'] ?? '?').toString().trim();
+                            return Card(
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: suspended
+                                      ? Colors.grey.shade400
+                                      : kNyqAccent,
+                                  child: Text(
+                                    name.isEmpty
+                                        ? '?'
+                                        : name[0].toUpperCase(),
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                title: Text(
+                                  name.isEmpty ? 'Unnamed' : name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700),
+                                ),
+                                subtitle: Text(
+                                  '${u['phone_number']}${roles.isEmpty ? '' : ' - ${roles.join(', ')}'}${suspended ? ' - SUSPENDED' : ''}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: suspended
+                                        ? Colors.red.shade700
+                                        : Colors.grey.shade600,
+                                  ),
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () => _showUserSheet(u),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 class AdminEarningsScreen extends StatefulWidget {
-  const AdminEarningsScreen({super.key});
+  final bool embedded;
+  const AdminEarningsScreen({super.key, this.embedded = false});
 
   @override
   State<AdminEarningsScreen> createState() => _AdminEarningsScreenState();
@@ -3299,14 +3922,50 @@ class _AdminEarningsScreenState extends State<AdminEarningsScreen> {
     });
   }
 
-  Widget _row(String label, dynamic value, {bool bold = false}) {
-    final v = (value is num) ? value.toStringAsFixed(2) : '0.00';
+  Widget _statCard(String label, dynamic value, Color colour) {
+    final v = (value is num) ? value.toStringAsFixed(2) : '0';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x14000000), blurRadius: 20, offset: Offset(0, 8)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 40,
+            decoration: BoxDecoration(
+                color: colour, borderRadius: BorderRadius.circular(4)),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(label,
+                style: const TextStyle(fontSize: 14, color: kNyqInk)),
+          ),
+          Text(v,
+              style: const TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w800, color: kNyqInk)),
+        ],
+      ),
+    );
+  }
+
+  Widget _countRow(String label, dynamic value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: 15))),
-          Text('SLE $v', style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: 15)),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
+          Text('${value ?? 0}',
+              style:
+                  const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -3314,49 +3973,65 @@ class _AdminEarningsScreenState extends State<AdminEarningsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scaffold = _buildInner(context);
+    if (!widget.embedded) return scaffold;
+    return scaffold.body ?? const SizedBox.shrink();
+  }
+
+  Scaffold _buildInner(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Earnings'),
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+        title: const Text('Platform Overview'),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load)
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _data == null
-              ? const Center(child: Text('Could not load earnings'))
+              ? const Center(child: Text('Could not load platform stats'))
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Totals', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text('Platform growth',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 12),
-                      _row('Commission earned (5%)', _data!['total_commission_earned']),
-                      _row('Delivery cut earned (20%)', _data!['total_delivery_cut_earned']),
-                      const Divider(height: 24),
-                      _row('Settled', _data!['total_settled']),
-                      _row('Still owed to you', _data!['total_still_owed'], bold: true),
-                      const SizedBox(height: 24),
-                      const Text('Unsettled orders', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      _statCard('Total sales volume (SLE)',
+                          _data!['total_sales_volume'], kNyqAccent),
+                      _statCard('Items sold (SLE)',
+                          _data!['total_items_value'], kNyqGreen),
+                      _statCard('Delivery value (SLE)',
+                          _data!['total_delivery_value'], kNyqOchre),
+                      const SizedBox(height: 20),
+                      const Text('Activity',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 8),
-                      if ((_data!['unsettled_orders'] as List?)?.isEmpty ?? true)
-                        const Text('Nothing outstanding. All settled.')
-                      else
-                        ...(_data!['unsettled_orders'] as List).map((o) {
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            child: ListTile(
-                              title: Text('Order #${o['order_id']}'),
-                              subtitle: Text('Merchant ID ${o['merchant_id']}'),
-                              trailing: Text('SLE ${(o['amount_owed'] as num).toStringAsFixed(2)}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B5E20))),
-                            ),
-                          );
-                        }).toList(),
+                      _countRow('Orders paid', _data!['paid_orders']),
+                      _countRow('All orders', _data!['total_orders']),
+                      const SizedBox(height: 20),
+                      const Text('Ecosystem',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      _countRow('Sellers', _data!['total_sellers']),
+                      _countRow('Shops', _data!['total_shops']),
+                      _countRow('Products', _data!['total_products']),
+                      _countRow('Users', _data!['total_users']),
+                      const SizedBox(height: 24),
+                      Text(
+                          'NYG takes no commission. These figures measure platform activity.',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600)),
                     ],
                   ),
                 ),
     );
   }
+
 }
 
 class InvoiceDetailScreen extends StatefulWidget {
@@ -3427,6 +4102,29 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     }
   }
 
+  Widget _moneyRow(String label, double value, Color colour,
+      {bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label,
+                style: TextStyle(
+                    fontSize: bold ? 15 : 14,
+                    fontWeight: bold ? FontWeight.w800 : FontWeight.w400,
+                    color: colour)),
+          ),
+          Text('SLE ${value.toStringAsFixed(2)}',
+              style: TextStyle(
+                  fontSize: bold ? 15 : 14,
+                  fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+                  color: colour)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -3443,56 +4141,126 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Seller: ${_data!['seller_name'] ?? '?'}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text('Phone: ${_data!['seller_phone'] ?? '?'}'),
-                      Text('Status: ${_data!['status'] ?? '?'}'),
-                      const SizedBox(height: 8),
-                      Text('Total: SLE ${(_data!['total_sle'] as num).toStringAsFixed(2)}',
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20))),
-                      const Divider(height: 32),
-                      const Text('Orders covered', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: const [
+                            BoxShadow(
+                                color: Color(0x14000000),
+                                blurRadius: 20,
+                                offset: Offset(0, 8)),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundColor: kNyqAccent,
+                              backgroundImage: (_data!['shop_logo'] ?? '')
+                                      .toString()
+                                      .isNotEmpty
+                                  ? NetworkImage(
+                                      _data!['shop_logo'].toString())
+                                  : null,
+                              child: (_data!['shop_logo'] ?? '')
+                                      .toString()
+                                      .isNotEmpty
+                                  ? null
+                                  : Text(
+                                      ((_data!['seller_name'] ?? '?')
+                                              .toString())[0]
+                                          .toUpperCase(),
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(_data!['seller_name'] ?? 'Shop',
+                                      style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800)),
+                                  const SizedBox(height: 2),
+                                  Text(_data!['reference'] ?? '',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600)),
+                                  Text(_fmt(_data!['created_at'] as String?),
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text('Items',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 8),
                       ...(_data!['orders'] as List).map((o) {
+                        final item =
+                            (o['item_sle'] as num?)?.toDouble() ?? 0.0;
+                        final del =
+                            (o['delivery_sle'] as num?)?.toDouble() ?? 0.0;
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 4),
                           child: ListTile(
-                            title: Text('#${o['order_id']} - ${o['product_title']}'),
-                            subtitle: Text('Commission SLE ${(o['commission_sle'] as num).toStringAsFixed(2)} | Delivery SLE ${(o['delivery_cut_sle'] as num).toStringAsFixed(2)}'),
-                            trailing: Text('SLE ${(o['total_sle'] as num).toStringAsFixed(2)}',
-                                style: const TextStyle(fontWeight: FontWeight.bold)),
+                            title: Text(o['product_title'].toString()),
+                            subtitle: Text(
+                                'Item SLE ${item.toStringAsFixed(2)} - Delivery SLE ${del.toStringAsFixed(2)}',
+                                style: const TextStyle(fontSize: 12)),
+                            trailing: Text(
+                                'SLE ${(item + del).toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold)),
                           ),
                         );
                       }).toList(),
-                      const Divider(height: 32),
-                      Text('Seller marked paid: ${_fmt(_data!['seller_paid_at'])}'),
-                      Text('NYG confirmed receipt: ${_fmt(_data!['nyg_received_at'])}'),
-                      const SizedBox(height: 24),
-                      if (!widget.isAdmin && _data!['seller_paid_at'] == null)
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1B5E20),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: _working ? null : _sellerMarkPaid,
-                            child: const Text("I've paid this invoice"),
-                          ),
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: const [
+                            BoxShadow(
+                                color: Color(0x14000000),
+                                blurRadius: 20,
+                                offset: Offset(0, 8)),
+                          ],
                         ),
-                      if (widget.isAdmin && _data!['seller_paid_at'] != null && _data!['nyg_received_at'] == null)
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1B5E20),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: _working ? null : _nygReceived,
-                            child: const Text('Confirm receipt'),
-                          ),
-                        ),
+                        child: Builder(builder: (context) {
+                          var items = 0.0;
+                          var delivery = 0.0;
+                          for (final o in (_data!['orders'] as List)) {
+                            items +=
+                                (o['item_sle'] as num?)?.toDouble() ?? 0;
+                            delivery +=
+                                (o['delivery_sle'] as num?)?.toDouble() ?? 0;
+                          }
+                          return Column(
+                            children: [
+                              _moneyRow('Subtotal', items, kNyqInk),
+                              _moneyRow('Delivery', delivery, kNyqInk),
+                              const Divider(height: 20),
+                              _moneyRow('Total paid', items + delivery,
+                                  kNyqInk,
+                                  bold: true),
+                              _moneyRow('Your net', items, kNyqGreen,
+                                  bold: true),
+                            ],
+                          );
+                        }),
+                      ),
                     ],
                   ),
                 ),
@@ -3502,7 +4270,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
 class InvoicesScreen extends StatefulWidget {
   final bool isAdmin;
-  const InvoicesScreen({super.key, required this.isAdmin});
+  final bool embedded;
+  const InvoicesScreen({super.key, required this.isAdmin, this.embedded = false});
 
   @override
   State<InvoicesScreen> createState() => _InvoicesScreenState();
@@ -3528,6 +4297,43 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       _invoices = data;
       _loading = false;
     });
+  }
+
+  Future<void> _generateReceipt() async {
+    final user = await UserSession.load();
+    final token = user?['token'];
+    if (token == null) return;
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/invoices/generate'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 12));
+      if (!mounted) return;
+      final ok = res.statusCode >= 200 && res.statusCode < 300;
+      var msg = 'Could not create receipt';
+      if (ok) {
+        final data = jsonDecode(res.body);
+        msg = 'Receipt ${data['reference']} created';
+      } else {
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+        } catch (_) {}
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: ok ? kNyqGreen : Colors.red.shade800,
+      ));
+      if (ok) _load();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error. Please try again.')),
+        );
+      }
+    }
   }
 
   Future<void> _showGenerateDialog() async {
@@ -3579,6 +4385,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scaffold = _buildInner(context);
+    if (!widget.embedded) return scaffold;
+    return scaffold.body ?? const SizedBox.shrink();
+  }
+
+  Scaffold _buildInner(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.isAdmin ? 'All Invoices' : 'My Invoices'),
@@ -3587,7 +4399,11 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _invoices.isEmpty
-              ? const Center(child: Text('No invoices yet.'))
+              ? const EmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'No receipts yet',
+                  message: 'Receipts appear here once customers have paid.',
+                )
               : ListView.builder(
                   itemCount: _invoices.length,
                   itemBuilder: (ctx, i) {
@@ -3616,13 +4432,19 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 ),
       floatingActionButton: widget.isAdmin
           ? FloatingActionButton.extended(
-              backgroundColor: const Color(0xFF1B5E20),
+              backgroundColor: kNyqAccent,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.add),
               label: const Text('Generate Invoice'),
               onPressed: _showGenerateDialog,
             )
-          : null,
+          : FloatingActionButton.extended(
+              backgroundColor: kNyqGreen,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.receipt_long),
+              label: const Text('New Receipt'),
+              onPressed: _generateReceipt,
+            ),
     );
   }
 }
@@ -3651,6 +4473,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool get _isSellerUser => isSeller(widget.currentUser);
   bool get _isRunnerUser => isRunner(widget.currentUser);
 
+  List<dynamic> _shops = [];
+
   @override
   void initState() {
     super.initState();
@@ -3670,7 +4494,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(successMessage),
-          backgroundColor: const Color(0xFF1B5E20),
+          backgroundColor: kNyqGreen,
           duration: const Duration(seconds: 2),
         ),
       );
@@ -3692,6 +4516,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _loading = true);
     await _loadProducts();
     await _loadDeliveries();
+    await _loadShops();
     if (mounted) setState(() => _loading = false);
   }
 
@@ -3707,6 +4532,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _products = jsonDecode(res.body) as List;
       }
     } catch (_) {}
+  }
+
+  Future<void> _loadShops() async {
+    if (!_isSellerUser) return;
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/shops/'))
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final all = jsonDecode(res.body) as List;
+        final phone = normalisePhone(
+            (widget.currentUser?['phone_number'] ?? '').toString());
+        final mine = all
+            .where((s) =>
+                normalisePhone((s['phone_number'] ?? '').toString()) == phone)
+            .toList();
+        if (mounted) setState(() => _shops = mine);
+        return;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _shops = []);
   }
 
   Future<void> _loadDeliveries() async {
@@ -3831,6 +4677,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: const Text('Edit Profile'),
                 ),
               ),
+            if (!_isSellerUser && !_isRunnerUser) ...[
+              const SizedBox(height: 24),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [kNyqAccent, kNyqAccentDeep],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                        color: kNyqAccent.withAlpha(70),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Welcome to Na You Get',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    const Text(
+                        'Discover shops and products across Sierra Leone.',
+                        style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: kNyqAccent),
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.shopping_bag_outlined, size: 18),
+                      label: const Text('Start Shopping'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (_isRunnerUser) ...[
               const SizedBox(height: 32),
               const Text('Delivery stats',
@@ -3915,68 +4805,115 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
             if (_isSellerUser) ...[
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('My Products',
+                  const Text('My Shops',
                       style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold)),
-                  Text('${_products.length}',
-                      style: TextStyle(color: Colors.grey.shade600)),
+                          fontSize: 16, fontWeight: FontWeight.w800)),
+                  TextButton.icon(
+                    onPressed: _createShop,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add New Shop'),
+                  ),
                 ],
               ),
-              const SizedBox(height: 12),
-              if (_loading)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: CircularProgressIndicator(),
+              const SizedBox(height: 8),
+              if (_shops.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(
+                          color: Color(0x14000000),
+                          blurRadius: 20,
+                          offset: Offset(0, 8)),
+                    ],
                   ),
-                )
-              else if (_products.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Center(
-                    child: Text('No products listed yet',
-                        style: TextStyle(color: Colors.grey.shade600)),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.storefront_outlined,
+                          size: 40, color: kNyqAccent),
+                      const SizedBox(height: 10),
+                      const Text('No shops yet',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      Text('Tap "Add New Shop" to open your first storefront.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 13, color: Colors.grey.shade600)),
+                    ],
                   ),
                 )
               else
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _products.length,
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 6,
-                    mainAxisSpacing: 6,
-                    childAspectRatio: 1,
-                  ),
-                  itemBuilder: (ctx, i) {
-                    final photos =
-                        productPhotos(_products[i] as Map<String, dynamic>);
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: photos.isEmpty
-                          ? Container(
-                              color: Colors.grey.shade200,
-                              child: Icon(Icons.image_outlined,
-                                  color: Colors.grey.shade400),
-                            )
-                          : Image.network(
-                              photos.first,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                color: Colors.grey.shade200,
-                                child: Icon(Icons.broken_image_outlined,
-                                    color: Colors.grey.shade400),
+                ..._shops.map((s) {
+                  final shopMap = Map<String, dynamic>.from(s as Map);
+                  final theme =
+                      parseThemeColour(shopMap['theme_colour']?.toString());
+                  final dark =
+                      ThemeData.estimateBrightnessForColor(theme) ==
+                          Brightness.dark;
+                  final logo = shopMap['logo_url']?.toString() ?? '';
+                  final title = (shopMap['shop_name'] ?? 'Shop').toString();
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: theme,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: const [
+                        BoxShadow(
+                            color: Color(0x1A5A3A28),
+                            blurRadius: 16,
+                            offset: Offset(0, 6)),
+                      ],
+                    ),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.white24,
+                        backgroundImage:
+                            logo.isNotEmpty ? NetworkImage(logo) : null,
+                        child: logo.isNotEmpty
+                            ? null
+                            : Text(
+                                title.isEmpty
+                                    ? '?'
+                                    : title[0].toUpperCase(),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold),
                               ),
-                            ),
-                    );
-                  },
-                ),
+                      ),
+                      title: Text(
+                        title,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: dark ? Colors.white : Colors.black87),
+                      ),
+                      subtitle: Text(
+                        '${shopMap['product_count'] ?? 0} products',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: dark ? Colors.white70 : Colors.black54),
+                      ),
+                      trailing: Icon(Icons.edit_outlined,
+                          color: dark ? Colors.white : Colors.black87),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ShopPageScreen(
+                            shop: shopMap,
+                            currentUser: widget.currentUser,
+                            onUserChanged: widget.onUserChanged,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
             ],
           ],
         ),
@@ -3984,6 +4921,125 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _createShop() async {
+    final nameCtl = TextEditingController();
+    final ownerCtl = TextEditingController(
+        text: (widget.currentUser?['name'] ?? '').toString());
+    final phoneCtl = TextEditingController(
+        text: (widget.currentUser?['phone_number'] ?? '+232').toString());
+    final cityCtl = TextEditingController(text: 'Freetown');
+    var category = 'Fashion';
+    const categories = [
+      'Fashion',
+      'Food',
+      'Electronics',
+      'Home',
+      'Beauty',
+      'Services',
+      'Other',
+    ];
+
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Create New Shop'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtl,
+                  decoration: const InputDecoration(
+                      labelText: 'Shop Name', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: ownerCtl,
+                  decoration: const InputDecoration(
+                      labelText: 'Owner Name', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneCtl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                      labelText: 'Phone Number',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: cityCtl,
+                  decoration: const InputDecoration(
+                      labelText: 'City', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: category,
+                  decoration: const InputDecoration(
+                      labelText: 'Category', border: OutlineInputBorder()),
+                  items: categories
+                      .map((c) =>
+                          DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => category = v);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                if (nameCtl.text.trim().isEmpty) return;
+                final user = await UserSession.load();
+                final token = user?['token'];
+                if (token == null) return;
+                var ok = false;
+                try {
+                  final res = await http
+                      .post(
+                        Uri.parse('$baseUrl/merchants/'),
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-api-key': apiKey,
+                          'Authorization': 'Bearer $token',
+                        },
+                        body: jsonEncode({
+                          'shop_name': nameCtl.text.trim(),
+                          'owner_name': ownerCtl.text.trim(),
+                          'phone_number': phoneCtl.text.trim(),
+                          'city': cityCtl.text.trim(),
+                          'category': category,
+                          'theme_colour': '#0D47A1',
+                          'background_colour': '#FFFFFF',
+                        }),
+                      )
+                      .timeout(const Duration(seconds: 12));
+                  ok = res.statusCode >= 200 && res.statusCode < 300;
+                } catch (_) {
+                  ok = false;
+                }
+                if (ctx.mounted) Navigator.pop(ctx, ok);
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameCtl.dispose();
+    ownerCtl.dispose();
+    phoneCtl.dispose();
+    cityCtl.dispose();
+    if (created == true) {
+      await _loadShops();
+    }
+  }
   Widget _statBox(String value, String label) {
     return Expanded(
       child: Container(
@@ -4126,8 +5182,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return Stack(
       children: [
         Scaffold(
-      body: IndexedStack(index: _currentIndex, children: screens),
-      bottomNavigationBar: NavigationBar(
+      body: KenteBackground(
+        child: IndexedStack(index: _currentIndex, children: screens),
+      ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: NavigationBar(
+            elevation: 8,
+            backgroundColor: Colors.white,
+            shadowColor: const Color(0x33000000),
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
         destinations: const [
@@ -4148,11 +5213,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               selectedIcon: Icon(Icons.directions_run),
               label: 'Runner'),
         ],
-      ),
+          ),
+        ),
+        ),
         ),
         Positioned(
           right: 16,
-          bottom: 90,
+          bottom: 108,
           child: ChatBubble(currentUser: _currentUser),
         ),
       ],
@@ -4223,13 +5290,14 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
       margin: const EdgeInsets.only(bottom: 14),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: widget.cardColour ?? Colors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFEFE9E0)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 24,
-            offset: Offset(0, 10),
+            color: Color(0x1A5A3A28),
+            blurRadius: 20,
+            offset: Offset(0, 8),
           ),
         ],
       ),
@@ -4238,6 +5306,7 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const KenteStripe(),
             SizedBox(
               height: 260,
               width: double.infinity,
@@ -4295,24 +5364,29 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     item['title'] ?? '',
                     style: const TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.bold),
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
+                      color: kNyqInk,
+                      height: 1.2,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'SLE ${item['price_sle']}',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: accent,
+                      color: kNyqAccent,
                     ),
                   ),
                   if (description.isNotEmpty) ...[
@@ -4333,20 +5407,17 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                       Expanded(
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                accent,
-                                Color.lerp(accent, Colors.white, 0.18)!,
-                              ],
+                            gradient: const LinearGradient(
+                              colors: [kNyqAccent, kNyqAccentDeep],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: accent.withAlpha(70),
-                                blurRadius: 12,
-                                offset: const Offset(0, 5),
+                                color: kNyqAccent.withAlpha(85),
+                                blurRadius: 14,
+                                offset: const Offset(0, 6),
                               ),
                             ],
                           ),
@@ -4357,16 +5428,16 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                               onTap: () => widget.onBuy(item),
                               child: Padding(
                                 padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
+                                    const EdgeInsets.symmetric(vertical: 14),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.shopping_cart,
-                                        size: 18, color: onAccent),
+                                    const Icon(Icons.shopping_cart,
+                                        size: 18, color: Colors.white),
                                     const SizedBox(width: 8),
-                                    Text('Buy Now',
+                                    const Text('Buy Now',
                                         style: TextStyle(
-                                            color: onAccent,
+                                            color: Colors.white,
                                             fontWeight: FontWeight.w600)),
                                   ],
                                 ),
@@ -4400,6 +5471,98 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class KentePainter extends CustomPainter {
+  final Color colour;
+  final Color accent;
+  const KentePainter({this.colour = kNyqAccent, this.accent = kNyqOchre});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = Paint()
+      ..color = colour.withAlpha(17)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3;
+    final accentStroke = Paint()
+      ..color = accent.withAlpha(22)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3;
+    final bead = Paint()..color = colour.withAlpha(28);
+
+    const step = 56.0;
+    int row = 0;
+    for (double y = 0; y < size.height + step; y += step) {
+      final shift = row.isEven ? 0.0 : step / 2;
+      for (double x = -step; x < size.width + step; x += step) {
+        final cx = x + shift;
+        final diamond = Path()
+          ..moveTo(cx, y - 9)
+          ..lineTo(cx + 9, y)
+          ..lineTo(cx, y + 9)
+          ..lineTo(cx - 9, y)
+          ..close();
+        canvas.drawPath(diamond, row.isEven ? stroke : accentStroke);
+
+        final mx = cx + step / 2;
+        final my = y + step / 2;
+        canvas.drawLine(Offset(mx - 4, my), Offset(mx + 4, my), accentStroke);
+        canvas.drawLine(Offset(mx, my - 4), Offset(mx, my + 4), accentStroke);
+
+        canvas.drawCircle(Offset(cx, my), 1.7, bead);
+      }
+      row++;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant KentePainter old) =>
+      old.colour != colour || old.accent != accent;
+}
+
+class KenteStripe extends StatelessWidget {
+  final double height;
+  const KenteStripe({super.key, this.height = 7});
+
+  @override
+  Widget build(BuildContext context) {
+    const colours = [
+      kNyqGreen,
+      Colors.white,
+      kNyqAccent,
+      kNyqOchre,
+      kNyqAccent,
+      Colors.white,
+      kNyqGreen,
+    ];
+    return SizedBox(
+      height: height,
+      child: Row(
+        children: colours
+            .map((c) => Expanded(child: Container(color: c)))
+            .toList(),
+      ),
+    );
+  }
+}
+
+class KenteBackground extends StatelessWidget {
+  final Widget child;
+  const KenteBackground({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(painter: KentePainter()),
+          ),
+        ),
+        Positioned.fill(child: child),
+      ],
     );
   }
 }
@@ -4453,6 +5616,72 @@ class EmptyState extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class HexColourField extends StatefulWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const HexColourField(
+      {super.key, required this.value, required this.onChanged});
+
+  @override
+  State<HexColourField> createState() => _HexColourFieldState();
+}
+
+class _HexColourFieldState extends State<HexColourField> {
+  late final TextEditingController _c =
+      TextEditingController(text: widget.value);
+
+  @override
+  void didUpdateWidget(covariant HexColourField old) {
+    super.didUpdateWidget(old);
+    if (widget.value.toUpperCase() != _c.text.toUpperCase()) {
+      _c.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  void _submit(String raw) {
+    var v = raw.trim().toUpperCase();
+    if (!v.startsWith('#')) v = '#$v';
+    if (RegExp(r'^#[0-9A-F]{6}$').hasMatch(v)) {
+      widget.onChanged(v);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _c,
+      onSubmitted: _submit,
+      onEditingComplete: () => _submit(_c.text),
+      textCapitalization: TextCapitalization.characters,
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: 'Hex',
+        hintText: '#C35A3D',
+        border: const OutlineInputBorder(),
+        prefixIcon: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Container(
+            width: 24,
+            decoration: BoxDecoration(
+              color: parseThemeColour(widget.value,
+                  fallback: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+          ),
         ),
       ),
     );
@@ -4646,30 +5875,95 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
     final name = (shop['shop_name'] ?? 'Shop').toString();
     final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: ListTile(
-        leading: (logoUrl != null && logoUrl.toString().isNotEmpty)
-            ? CircleAvatar(
-                backgroundImage: NetworkImage(logoUrl.toString()),
-                child: Text(initial),
-              )
-            : CircleAvatar(
-                backgroundColor: const Color(0xFF1B5E20),
-                child: Text(
-                  initial,
-                  style: const TextStyle(color: Colors.white),
+    final header = parseThemeColour(shop['theme_colour']?.toString());
+    final body = parseThemeColour(
+      shop['background_colour']?.toString(),
+      fallback: Colors.white,
+    );
+    final headerDark =
+        ThemeData.estimateBrightnessForColor(header) == Brightness.dark;
+    final bodyDark =
+        ThemeData.estimateBrightnessForColor(body) == Brightness.dark;
+    final onHeader = headerDark ? Colors.white : Colors.black87;
+    final subBody = bodyDark ? Colors.white70 : Colors.black54;
+    final hasLogo = logoUrl != null && logoUrl.toString().isNotEmpty;
+
+    return GestureDetector(
+      onTap: () => _openShop(shop),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: header,
+          borderRadius: BorderRadius.circular(16),
+          border: const Border(
+            top: BorderSide(color: kNyqAccent, width: 3),
+            left: BorderSide(color: Color(0xFFEFE9E0)),
+            right: BorderSide(color: Color(0xFFEFE9E0)),
+            bottom: BorderSide(color: Color(0xFFEFE9E0)),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x1A5A3A28),
+              blurRadius: 18,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(13),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                color: header,
+                padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor:
+                          headerDark ? Colors.white24 : Colors.black12,
+                      backgroundImage:
+                          hasLogo ? NetworkImage(logoUrl.toString()) : null,
+                      child: hasLogo
+                          ? null
+                          : Text(
+                              initial,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: onHeader,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: onHeader,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: onHeader),
+                  ],
                 ),
               ),
-        title: Text(
-          name,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+              Container(
+                color: body,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Text(
+                  '${shop['city'] ?? ''} • ${shop['category'] ?? ''}',
+                  style: TextStyle(fontSize: 13, color: subBody),
+                ),
+              ),
+            ],
+          ),
         ),
-        subtitle: Text(
-          '${shop['city'] ?? ''} • ${shop['category'] ?? ''}',
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => _openShop(shop),
       ),
     );
   }
@@ -4758,6 +6052,7 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
@@ -4844,6 +6139,93 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
           ? Colors.white
           : Colors.black87;
 
+  String _toHex(Color c) {
+    final argb = c.toARGB32();
+    return '#${argb.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+  }
+
+  Widget _buildModeToggle({
+    required String selectedBg,
+    required ValueChanged<String> onBg,
+    required ValueChanged<String> onHeader,
+  }) {
+    final isDark =
+        parseThemeColour(selectedBg, fallback: Colors.white) == Colors.black;
+    return Row(
+      children: [
+        const Text('Theme mode',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        const Spacer(),
+        ChoiceChip(
+          label: const Text('Light'),
+          selected: !isDark,
+          onSelected: (_) {
+            onBg('#FFFFFF');
+            onHeader('#FFFFFF');
+          },
+        ),
+        const SizedBox(width: 8),
+        ChoiceChip(
+          label: const Text('Dark'),
+          selected: isDark,
+          onSelected: (_) {
+            onBg('#000000');
+            onHeader('#000000');
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHueSlider(String selectedHex, ValueChanged<String> onPick) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        void pick(Offset local) {
+          final hue = (local.dx.clamp(0.0, width) / width) * 359.9;
+          final base =
+              parseThemeColour(selectedHex, fallback: kNyqAccent);
+          final hsv = HSVColor.fromColor(base);
+          final colour = HSVColor.fromAHSV(
+            1,
+            hue,
+            hsv.saturation < 0.05 ? 0.72 : hsv.saturation,
+            hsv.value < 0.05 ? 0.88 : hsv.value,
+          ).toColor();
+          onPick(_toHex(colour));
+        }
+
+        return GestureDetector(
+          onTapDown: (d) => pick(d.localPosition),
+          onPanUpdate: (d) => pick(d.localPosition),
+          child: Container(
+            height: 34,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(17),
+              gradient: LinearGradient(
+                colors: [
+                  for (int i = 0; i <= 6; i++)
+                    HSVColor.fromAHSV(1, (i * 60) % 360, 0.72, 0.88)
+                        .toColor(),
+                ],
+              ),
+            ),
+            child: Align(
+              alignment: Alignment.center,
+              child: Text(
+                'Tap or drag to pick any colour',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black.withAlpha(90),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
   Widget _buildColourPicker({
     required String label,
     required String selectedHex,
@@ -4858,6 +6240,13 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 fontWeight: FontWeight.w600,
                 color: Colors.grey.shade700)),
         const SizedBox(height: 8),
+        _buildHueSlider(selectedHex, onPick),
+        const SizedBox(height: 10),
+        HexColourField(value: selectedHex, onChanged: onPick),
+        const SizedBox(height: 10),
+        Text('Quick picks',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+        const SizedBox(height: 6),
         Wrap(
           spacing: 10,
           runSpacing: 10,
@@ -4876,7 +6265,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: isSelected
-                        ? const Color(0xFF1B5E20)
+                        ? kNyqAccent
                         : Colors.grey.shade300,
                     width: isSelected ? 3 : 1,
                   ),
@@ -5404,15 +6793,10 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
 
   Future<void> _showCheckout(dynamic product) async {
     if (_currentUser == null) {
-      final ok = await Navigator.push<bool>(
-        context,
-        MaterialPageRoute(builder: (_) => const AuthScreen()),
-      );
-      if (ok == true) {
-        widget.onUserChanged?.call();
-        await _loadUser();
-      }
-      if (ok != true || !mounted) return;
+      final guest = await guestSignupFlow(context);
+      if (guest == null || !mounted) return;
+      widget.onUserChanged?.call();
+      await _loadUser();
     }
 
     if (!mounted) return;
@@ -5722,6 +7106,12 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     ),
                   ),
                 const SizedBox(height: 10),
+                _buildModeToggle(
+                  selectedBg: selectedBg,
+                  onBg: (hex) => setDialogState(() => selectedBg = hex),
+                  onHeader: (hex) => setDialogState(() => selectedTheme = hex),
+                ),
+                const SizedBox(height: 12),
                 _buildColourPicker(
                   label: 'Header Colour',
                   selectedHex: selectedTheme,
@@ -6378,6 +7768,7 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
@@ -6466,11 +7857,17 @@ class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
                             decoration: BoxDecoration(
                               color: bg,
                               borderRadius: BorderRadius.circular(16),
+                              border: const Border(
+                                top: BorderSide(color: kNyqAccent, width: 3),
+                                left: BorderSide(color: Color(0xFFEFE9E0)),
+                                right: BorderSide(color: Color(0xFFEFE9E0)),
+                                bottom: BorderSide(color: Color(0xFFEFE9E0)),
+                              ),
                               boxShadow: const [
                                 BoxShadow(
-                                  color: Colors.black12,
-                                  blurRadius: 10,
-                                  offset: Offset(0, 4),
+                                  color: Color(0x1A5A3A28),
+                                  blurRadius: 18,
+                                  offset: Offset(0, 6),
                                 ),
                               ],
                             ),
@@ -6684,6 +8081,177 @@ class _ShopBannerState extends State<_ShopBanner> {
   }
 }
 
+String generateGuestPassword() {
+  final rnd = Random.secure();
+  return List.generate(32, (_) => rnd.nextInt(16).toRadixString(16)).join();
+}
+
+Future<Map<String, dynamic>?> guestSignupFlow(BuildContext context) async {
+  final nameCtl = TextEditingController();
+  final phoneCtl = TextEditingController();
+  final passCtl = TextEditingController();
+  bool busy = false;
+  bool loginMode = false;
+  String? error;
+
+  final result = await showDialog<Map<String, dynamic>>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        Future<void> submit() async {
+          final name = nameCtl.text.trim();
+          final phone = normalisePhone(phoneCtl.text);
+          if (phone.isEmpty) {
+            setDialogState(() => error = 'Enter your phone number.');
+            return;
+          }
+          if (!loginMode && name.isEmpty) {
+            setDialogState(() => error = 'Enter your name.');
+            return;
+          }
+          if (loginMode && passCtl.text.isEmpty) {
+            setDialogState(() => error = 'Enter your password.');
+            return;
+          }
+          setDialogState(() {
+            busy = true;
+            error = null;
+          });
+          try {
+            final url =
+                loginMode ? '$baseUrl/auth/login' : '$baseUrl/auth/signup';
+            final body = loginMode
+                ? {'phone_number': phone, 'password': passCtl.text}
+                : {
+                    'phone_number': phone,
+                    'name': name,
+                    'password': generateGuestPassword(),
+                    'role': 'customer',
+                  };
+            final res = await http
+                .post(
+                  Uri.parse(url),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                  },
+                  body: jsonEncode(body),
+                )
+                .timeout(const Duration(seconds: 12));
+            final data = jsonDecode(res.body);
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              final user = {
+                ...Map<String, dynamic>.from(data['user'] as Map),
+                'token': data['token'],
+              };
+              await UserSession.save(user, data['token'] as String);
+              if (context.mounted) Navigator.pop(ctx, user);
+              return;
+            }
+            final detail =
+                (data['detail'] ?? 'Could not continue.').toString();
+            final already = detail.toLowerCase().contains('already');
+            setDialogState(() {
+              busy = false;
+              if (already && !loginMode) {
+                loginMode = true;
+                error =
+                    'This number already has an account. Enter your password to log in.';
+              } else {
+                error = detail;
+              }
+            });
+          } catch (_) {
+            setDialogState(() {
+              busy = false;
+              error = 'Network error. Please try again.';
+            });
+          }
+        }
+
+        return AlertDialog(
+          title: Text(loginMode ? 'Log In to Buy' : 'Continue as Guest'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                loginMode
+                    ? 'Your number is already registered. Enter your password.'
+                    : 'Just your name and phone number to buy.',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              if (!loginMode) ...[
+                TextField(
+                  controller: nameCtl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              TextField(
+                controller: phoneCtl,
+                keyboardType: TextInputType.phone,
+                enabled: !loginMode,
+                decoration: const InputDecoration(
+                  labelText: 'Phone Number',
+                  hintText: '+232 78 839002',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (loginMode) ...[
+                const SizedBox(height: 10),
+                TextField(
+                  controller: passCtl,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+              if (error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  error!,
+                  style:
+                      const TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: busy ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: busy ? null : submit,
+              child: busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(loginMode ? 'Log In' : 'Continue'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  nameCtl.dispose();
+  phoneCtl.dispose();
+  passCtl.dispose();
+  return result;
+}
 class ProductDetailScreen extends StatelessWidget {
   final Map<String, dynamic> product;
   final void Function(Map<String, dynamic> product) onBuy;
@@ -6877,17 +8445,46 @@ class ProductDetailScreen extends StatelessWidget {
                 const SizedBox(width: 8),
               ],
               Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _accent,
-                    foregroundColor: _onAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [kNyqAccent, kNyqAccentDeep],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: kNyqAccent.withAlpha(85),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
-                  icon: const Icon(Icons.shopping_cart),
-                  label: const Text('Buy Now'),
-                  onPressed: () {
-                    onBuy(product);
-                  },
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        onBuy(product);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(Icons.shopping_cart,
+                                size: 18, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text('Buy Now',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -7190,8 +8787,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   Future<void> _showCheckout(dynamic product) async {
-    final loggedIn = await _ensureLoggedIn();
-    if (!loggedIn) return;
+    var buyer = widget.currentUser;
+    if (buyer == null) {
+      final guest = await guestSignupFlow(context);
+      if (guest == null || !mounted) return;
+      widget.onUserChanged();
+      buyer = guest;
+    }
     if (!mounted) return;
 
     String paymentMethod = 'cash_on_delivery';
@@ -7261,7 +8863,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     'x-api-key': apiKey,
                   },
                   body: jsonEncode({
-                    'customer_id': widget.currentUser!['id'],
+                    'customer_id': buyer!['id'],
                     'merchant_id': product['merchant_id'],
                     'product_id': product['id'],
                     'pickup_address': 'Freetown Central Market',
@@ -7321,6 +8923,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     final visible = filteredProducts;
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
@@ -7544,6 +9147,7 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Image.asset('assets/logo.png', height: 60),
         actions: [
