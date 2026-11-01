@@ -1458,6 +1458,15 @@ const Map<String, String> kShopPalette = {
   '#F5F5F5': 'Light Grey',
 };
 
+String _profileRoleLabel(Map<String, dynamic>? user) {
+  if (user == null) return 'Guest';
+  final admin = user['is_admin'] == 1 || user['is_admin'] == true;
+  if (admin) return 'Admin';
+  if (isRunner(user)) return 'Runner';
+  if (isSeller(user)) return 'Seller';
+  return 'Customer';
+}
+
 void showAccountSheet(
   BuildContext context,
   Map<String, dynamic>? currentUser,
@@ -1591,27 +1600,20 @@ void showAccountSheet(
                 ),
               ),
               const Divider(height: 24),
-              if (user != null && (isSeller(currentUser) || isAdmin))
+              if (user != null)
                 ListTile(
-                  leading: Icon(
-                      shop != null ? Icons.storefront : Icons.person_outline),
-                  title: const Text('My Storefront'),
-                  subtitle: shop != null ? Text(shop['shop_name'] ?? '') : null,
+                  leading: const Icon(Icons.person_outline),
+                  title: const Text('My Profile'),
+                  subtitle: Text(_profileRoleLabel(currentUser)),
                   onTap: () {
                     Navigator.pop(ctx);
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => shop != null
-                            ? ShopPageScreen(
-                                shop: shop,
-                                currentUser: currentUser,
-                                onUserChanged: onUserChanged,
-                              )
-                            : ProfileScreen(
-                                currentUser: user,
-                                onUserChanged: onUserChanged,
-                              ),
+                        builder: (_) => ProfileScreen(
+                          currentUser: user,
+                          onUserChanged: onUserChanged,
+                        ),
                       ),
                     );
                   },
@@ -4292,6 +4294,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool get _isSellerUser => isSeller(widget.currentUser);
   bool get _isRunnerUser => isRunner(widget.currentUser);
 
+  List<dynamic> _shops = [];
+
   @override
   void initState() {
     super.initState();
@@ -4333,6 +4337,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _loading = true);
     await _loadProducts();
     await _loadDeliveries();
+    await _loadShops();
     if (mounted) setState(() => _loading = false);
   }
 
@@ -4348,6 +4353,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _products = jsonDecode(res.body) as List;
       }
     } catch (_) {}
+  }
+
+  Future<void> _loadShops() async {
+    if (!_isSellerUser) return;
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/shops/'))
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final all = jsonDecode(res.body) as List;
+        final phone = normalisePhone(
+            (widget.currentUser?['phone_number'] ?? '').toString());
+        final mine = all
+            .where((s) =>
+                normalisePhone((s['phone_number'] ?? '').toString()) == phone)
+            .toList();
+        if (mounted) setState(() => _shops = mine);
+        return;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _shops = []);
   }
 
   Future<void> _loadDeliveries() async {
@@ -4472,6 +4498,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: const Text('Edit Profile'),
                 ),
               ),
+            if (!_isSellerUser && !_isRunnerUser) ...[
+              const SizedBox(height: 24),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [kNyqAccent, kNyqAccentDeep],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                        color: kNyqAccent.withAlpha(70),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Welcome to Na You Get',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    const Text(
+                        'Discover shops and products across Sierra Leone.',
+                        style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: kNyqAccent),
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.shopping_bag_outlined, size: 18),
+                      label: const Text('Start Shopping'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (_isRunnerUser) ...[
               const SizedBox(height: 32),
               const Text('Delivery stats',
@@ -4556,68 +4626,115 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
             if (_isSellerUser) ...[
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('My Products',
+                  const Text('My Shops',
                       style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold)),
-                  Text('${_products.length}',
-                      style: TextStyle(color: Colors.grey.shade600)),
+                          fontSize: 16, fontWeight: FontWeight.w800)),
+                  TextButton.icon(
+                    onPressed: _createShop,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add New Shop'),
+                  ),
                 ],
               ),
-              const SizedBox(height: 12),
-              if (_loading)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: CircularProgressIndicator(),
+              const SizedBox(height: 8),
+              if (_shops.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(
+                          color: Color(0x14000000),
+                          blurRadius: 20,
+                          offset: Offset(0, 8)),
+                    ],
                   ),
-                )
-              else if (_products.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Center(
-                    child: Text('No products listed yet',
-                        style: TextStyle(color: Colors.grey.shade600)),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.storefront_outlined,
+                          size: 40, color: kNyqAccent),
+                      const SizedBox(height: 10),
+                      const Text('No shops yet',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      Text('Tap "Add New Shop" to open your first storefront.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 13, color: Colors.grey.shade600)),
+                    ],
                   ),
                 )
               else
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _products.length,
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 6,
-                    mainAxisSpacing: 6,
-                    childAspectRatio: 1,
-                  ),
-                  itemBuilder: (ctx, i) {
-                    final photos =
-                        productPhotos(_products[i] as Map<String, dynamic>);
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: photos.isEmpty
-                          ? Container(
-                              color: Colors.grey.shade200,
-                              child: Icon(Icons.image_outlined,
-                                  color: Colors.grey.shade400),
-                            )
-                          : Image.network(
-                              photos.first,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                color: Colors.grey.shade200,
-                                child: Icon(Icons.broken_image_outlined,
-                                    color: Colors.grey.shade400),
+                ..._shops.map((s) {
+                  final shopMap = Map<String, dynamic>.from(s as Map);
+                  final theme =
+                      parseThemeColour(shopMap['theme_colour']?.toString());
+                  final dark =
+                      ThemeData.estimateBrightnessForColor(theme) ==
+                          Brightness.dark;
+                  final logo = shopMap['logo_url']?.toString() ?? '';
+                  final title = (shopMap['shop_name'] ?? 'Shop').toString();
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: theme,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: const [
+                        BoxShadow(
+                            color: Color(0x1A5A3A28),
+                            blurRadius: 16,
+                            offset: Offset(0, 6)),
+                      ],
+                    ),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.white24,
+                        backgroundImage:
+                            logo.isNotEmpty ? NetworkImage(logo) : null,
+                        child: logo.isNotEmpty
+                            ? null
+                            : Text(
+                                title.isEmpty
+                                    ? '?'
+                                    : title[0].toUpperCase(),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold),
                               ),
-                            ),
-                    );
-                  },
-                ),
+                      ),
+                      title: Text(
+                        title,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: dark ? Colors.white : Colors.black87),
+                      ),
+                      subtitle: Text(
+                        '${shopMap['product_count'] ?? 0} products',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: dark ? Colors.white70 : Colors.black54),
+                      ),
+                      trailing: Icon(Icons.edit_outlined,
+                          color: dark ? Colors.white : Colors.black87),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ShopPageScreen(
+                            shop: shopMap,
+                            currentUser: widget.currentUser,
+                            onUserChanged: widget.onUserChanged,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
             ],
           ],
         ),
@@ -4625,6 +4742,125 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _createShop() async {
+    final nameCtl = TextEditingController();
+    final ownerCtl = TextEditingController(
+        text: (widget.currentUser?['name'] ?? '').toString());
+    final phoneCtl = TextEditingController(
+        text: (widget.currentUser?['phone_number'] ?? '+232').toString());
+    final cityCtl = TextEditingController(text: 'Freetown');
+    var category = 'Fashion';
+    const categories = [
+      'Fashion',
+      'Food',
+      'Electronics',
+      'Home',
+      'Beauty',
+      'Services',
+      'Other',
+    ];
+
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Create New Shop'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtl,
+                  decoration: const InputDecoration(
+                      labelText: 'Shop Name', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: ownerCtl,
+                  decoration: const InputDecoration(
+                      labelText: 'Owner Name', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneCtl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                      labelText: 'Phone Number',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: cityCtl,
+                  decoration: const InputDecoration(
+                      labelText: 'City', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: category,
+                  decoration: const InputDecoration(
+                      labelText: 'Category', border: OutlineInputBorder()),
+                  items: categories
+                      .map((c) =>
+                          DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => category = v);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                if (nameCtl.text.trim().isEmpty) return;
+                final user = await UserSession.load();
+                final token = user?['token'];
+                if (token == null) return;
+                var ok = false;
+                try {
+                  final res = await http
+                      .post(
+                        Uri.parse('$baseUrl/merchants/'),
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-api-key': apiKey,
+                          'Authorization': 'Bearer $token',
+                        },
+                        body: jsonEncode({
+                          'shop_name': nameCtl.text.trim(),
+                          'owner_name': ownerCtl.text.trim(),
+                          'phone_number': phoneCtl.text.trim(),
+                          'city': cityCtl.text.trim(),
+                          'category': category,
+                          'theme_colour': '#0D47A1',
+                          'background_colour': '#FFFFFF',
+                        }),
+                      )
+                      .timeout(const Duration(seconds: 12));
+                  ok = res.statusCode >= 200 && res.statusCode < 300;
+                } catch (_) {
+                  ok = false;
+                }
+                if (ctx.mounted) Navigator.pop(ctx, ok);
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameCtl.dispose();
+    ownerCtl.dispose();
+    phoneCtl.dispose();
+    cityCtl.dispose();
+    if (created == true) {
+      await _loadShops();
+    }
+  }
   Widget _statBox(String value, String label) {
     return Expanded(
       child: Container(
