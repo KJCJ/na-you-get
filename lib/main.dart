@@ -2047,7 +2047,7 @@ void showAccountSheet(
                       ),
                     );
                   },
-                )
+                ),
 
               if (isRunner(currentUser)) ...[
                 sectionHeader('DELIVERIES'),
@@ -5290,6 +5290,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onPressed: _createShop,
                   icon: const Icon(Icons.add_business_outlined, size: 18),
                   label: const Text('Add New Shop'),
+                ),
+              ),
+            ],
+            if (widget.currentUser != null) ...[
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red.shade700,
+                    side: BorderSide(color: Colors.red.shade200),
+                    backgroundColor: Colors.red.shade50,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.logout, size: 18),
+                  label: const Text('Sign Out',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  onPressed: () async {
+                    await UserSession.clear();
+                    await ShopSession.clear();
+                    widget.onUserChanged();
+                  },
                 ),
               ),
             ],
