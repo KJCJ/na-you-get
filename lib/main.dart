@@ -1804,24 +1804,8 @@ void showAccountSheet(
                     }
                   },
                 ),
-              sectionHeader('DELIVERIES'),
-              if (!isRunner(currentUser))
-                ListTile(
-                  leading: const Icon(Icons.directions_run, color: Color(0xFF0D47A1)),
-                  title: const Text('Become a Job Worker'),
-                  subtitle: const Text('Apply to start taking jobs'),
-                  trailing: const Icon(Icons.chevron_right,
-                      size: 18, color: Color(0xFFB0A89F)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const BecomeJobWorkerScreen()),
-                    );
-                  },
-                ),
-              if (isRunner(currentUser))
+              if (isRunner(currentUser)) ...[
+                sectionHeader('DELIVERIES'),
                 ListTile(
                   leading: const Icon(Icons.pause_circle_outline, color: Colors.orange),
                   title: const Text('Stop Taking Jobs'),
@@ -1870,6 +1854,7 @@ void showAccountSheet(
                     }
                   },
                 ),
+              ],
               sectionHeader('SETTINGS'),
               ListTile(
                 leading: const Icon(Icons.edit),
@@ -2867,6 +2852,38 @@ class _MerchantOrdersScreenState extends State<MerchantOrdersScreen> {
     }
   }
 
+  Future<void> _decidePrice(int orderId, bool accept) async {
+    final user = await UserSession.load();
+    final token = user?['token'];
+    if (token == null) return;
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/orders/$orderId/price-decision'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'accept': accept}),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      final ok = res.statusCode >= 200 && res.statusCode < 300;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok
+            ? (accept ? 'Price accepted' : 'Price declined')
+            : 'Could not update the order'),
+        backgroundColor: ok ? kNyqGreen : Colors.red.shade800,
+      ));
+      if (ok) _load();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error. Please try again.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2967,6 +2984,55 @@ class _MerchantOrdersScreenState extends State<MerchantOrdersScreen> {
                               'Total: SLE ${(o['price_sle'] ?? 0) + (o['delivery_fee_sle'] ?? 0)}',
                               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20)),
                             ),
+                            if (o['price_status'] == 'proposed') ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                      color: Colors.orange.shade200),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Customer offered SLE ${o['agreed_price'] ?? o['price_sle'] ?? 0}',
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.deepOrange),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: FilledButton(
+                                            style: FilledButton.styleFrom(
+                                                backgroundColor: kNyqGreen),
+                                            onPressed: () => _decidePrice(
+                                                (o['id'] as num).toInt(),
+                                                true),
+                                            child: const Text('Accept'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: () => _decidePrice(
+                                                (o['id'] as num).toInt(),
+                                                false),
+                                            child: const Text('Decline'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 4),
                             Text(
                               '${o['payment_method'] ?? ''} • ${o['payment_status'] ?? ''}',
@@ -4276,6 +4342,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<dynamic> _deliveries = [];
   String _vehicleType = 'Motorbike';
   bool _isOnline = false;
+  bool _isWorker = false;
 
   bool get _isSellerUser => isSeller(widget.currentUser);
   bool get _isRunnerUser => isRunner(widget.currentUser);
@@ -4289,8 +4356,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (u != null) {
       _vehicleType = (u['vehicle_type'] ?? 'Motorbike').toString();
       _isOnline = u['is_online'] == 1 || u['is_online'] == true;
+      _isWorker = isRunner(u);
     }
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final u = widget.currentUser;
+    if (u == null) return;
+    setState(() {
+      _isWorker = isRunner(u);
+      _isOnline = u['is_online'] == 1 || u['is_online'] == true;
+      _vehicleType = (u['vehicle_type'] ?? 'Motorbike').toString();
+    });
+    _load();
+  }
+
+  Future<void> _setWorker(bool v) async {
+    setState(() => _isWorker = v);
+    final ok = await UserSession.update({'is_runner': v ? 1 : 0});
+    if (!mounted) return;
+    if (!ok) {
+      setState(() => _isWorker = !v);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update your worker status')),
+      );
+      return;
+    }
+    await _load();
+    widget.onUserChanged();
   }
 
   Future<void> _saveRunnerSetting(
@@ -4598,6 +4694,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           },
                         ),
                       ],
+                    ),
+                    const Divider(height: 24),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Available for Delivery Jobs'),
+                      subtitle: Text(
+                        _isWorker
+                            ? 'Jobs tab is visible'
+                            : 'Turn on to see the Jobs tab',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _isWorker
+                              ? kNyqGreen
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                      value: _isWorker,
+                      onChanged: _setWorker,
                     ),
                     const Divider(height: 24),
                     SwitchListTile(
@@ -6682,6 +6796,12 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     }
   }
 
+  double _agreed(dynamic product, TextEditingController c) {
+    final typed = double.tryParse(c.text.trim());
+    if (typed != null && typed > 0) return typed;
+    return (product['price_sle'] as num? ?? 0).toDouble();
+  }
+
   Widget _payCard(String current, String value, String label, IconData icon,
       String hint, ValueChanged<String> onPick) {
     final selected = current == value;
@@ -6748,6 +6868,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     bool collectInStore = false;
     final deliveryController = TextEditingController();
     final offerController = TextEditingController(text: '25');
+    final agreedController = TextEditingController(
+        text: (product['price_sle'] ?? '').toString());
 
     showDialog(
       context: context,
@@ -6821,12 +6943,37 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 ),
               ],
               const SizedBox(height: 10),
+              TextField(
+                controller: agreedController,
+                keyboardType: TextInputType.number,
+                onChanged: (_) => setDialogState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Agreed Price (SLE)',
+                  helperText: 'Change this if you agreed a deal in chat',
+                  filled: true,
+                  fillColor: const Color(0xFFF5F5F5),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide:
+                        const BorderSide(color: kNyqAccent, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
               if (!collectInStore) ...[
                 Row(
                   children: [
                     const Text('Item Price', style: TextStyle(fontSize: 13)),
                     const Spacer(),
-                    Text('SLE ${product['price_sle']}',
+                    Text('SLE ${_agreed(product, agreedController)}',
                         style: const TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w700)),
                   ],
@@ -6844,7 +6991,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                Text('Pay Shop (SLE ${product['price_sle']})',
+                Text('Pay Shop (SLE ${_agreed(product, agreedController)})',
                     style: const TextStyle(
                         fontSize: 13, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
@@ -6961,6 +7108,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                         ? null
                         : (double.tryParse(offerController.text.trim()) ?? 25.0),
                     'requires_delivery': !collectInStore,
+                    'agreed_price': _agreed(product, agreedController),
                     'payment_method':
                         collectInStore ? paymentMethod : shopPaymentMethod,
                     'worker_payment_method':
@@ -6991,7 +7139,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                       context,
                       method: shopMethod,
                       shopPhone: shopPhone,
-                      total: '${product['price_sle'] ?? 0}',
+                      total: '${_agreed(product, agreedController)}',
                       orderRef: 'NYG-$newOrderId',
                     );
                   } else {
@@ -8318,7 +8466,7 @@ class ProductDetailScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                   ),
                   icon: const Icon(Icons.chat_bubble_outline),
-                  label: const Text('Message'),
+                  label: const Text('Negotiate'),
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -8326,6 +8474,8 @@ class ProductDetailScreen extends StatelessWidget {
                         otherUserId: sellerUserId!,
                         otherUserName: product['shop_name'] ?? 'Seller',
                         shopId: product['merchant_id'],
+                        initialMessage:
+                            'Hi, I would like to negotiate the price of this item.',
                       ),
                     ),
                   ),
@@ -8473,6 +8623,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     return false;
   }
 
+  double _agreed(dynamic product, TextEditingController c) {
+    final typed = double.tryParse(c.text.trim());
+    if (typed != null && typed > 0) return typed;
+    return (product['price_sle'] as num? ?? 0).toDouble();
+  }
+
   Widget _payCard(String current, String value, String label, IconData icon,
       String hint, ValueChanged<String> onPick) {
     final selected = current == value;
@@ -8539,6 +8695,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     bool collectInStore = false;
     final deliveryController = TextEditingController();
     final offerController = TextEditingController(text: '25');
+    final agreedController = TextEditingController(
+        text: (product['price_sle'] ?? '').toString());
 
     showDialog(
       context: context,
@@ -8612,12 +8770,37 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 ),
               ],
               const SizedBox(height: 10),
+              TextField(
+                controller: agreedController,
+                keyboardType: TextInputType.number,
+                onChanged: (_) => setDialogState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Agreed Price (SLE)',
+                  helperText: 'Change this if you agreed a deal in chat',
+                  filled: true,
+                  fillColor: const Color(0xFFF5F5F5),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide:
+                        const BorderSide(color: kNyqAccent, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
               if (!collectInStore) ...[
                 Row(
                   children: [
                     const Text('Item Price', style: TextStyle(fontSize: 13)),
                     const Spacer(),
-                    Text('SLE ${product['price_sle']}',
+                    Text('SLE ${_agreed(product, agreedController)}',
                         style: const TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w700)),
                   ],
@@ -8635,7 +8818,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                Text('Pay Shop (SLE ${product['price_sle']})',
+                Text('Pay Shop (SLE ${_agreed(product, agreedController)})',
                     style: const TextStyle(
                         fontSize: 13, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
@@ -8752,6 +8935,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         ? null
                         : (double.tryParse(offerController.text.trim()) ?? 25.0),
                     'requires_delivery': !collectInStore,
+                    'agreed_price': _agreed(product, agreedController),
                     'payment_method':
                         collectInStore ? paymentMethod : shopPaymentMethod,
                     'worker_payment_method':
@@ -8782,7 +8966,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       context,
                       method: shopMethod,
                       shopPhone: shopPhone,
-                      total: '${product['price_sle'] ?? 0}',
+                      total: '${_agreed(product, agreedController)}',
                       orderRef: 'NYG-$newOrderId',
                     );
                   } else {
