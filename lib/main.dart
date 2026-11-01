@@ -1682,6 +1682,19 @@ void showAccountSheet(
                     );
                   },
                 ),
+              if (currentUser != null && (currentUser['is_admin'] == 1 || currentUser['is_admin'] == true))
+                ListTile(
+                  leading: const Icon(Icons.manage_accounts, color: kNyqGreen),
+                  title: const Text('Manage Users'),
+                  subtitle: const Text('Admin - roles, passwords, suspension'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AdminUsersScreen()),
+                    );
+                  },
+                ),
               sectionHeader('SELLER TOOLS'),
               if (isSeller(currentUser) && shop != null)
                 ListTile(
@@ -3453,6 +3466,427 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 }
 
+class AdminUsersScreen extends StatefulWidget {
+  const AdminUsersScreen({super.key});
+
+  @override
+  State<AdminUsersScreen> createState() => _AdminUsersScreenState();
+}
+
+class _AdminUsersScreenState extends State<AdminUsersScreen> {
+  final _searchCtl = TextEditingController();
+  List<dynamic> _users = [];
+  bool _loading = true;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtl.dispose();
+    super.dispose();
+  }
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    final token = user?['token'];
+    return {
+      'x-api-key': apiKey,
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
+
+  Future<void> _fetch() async {
+    setState(() => _loading = true);
+    var result = <dynamic>[];
+    try {
+      final q = _searchCtl.text.trim();
+      final uri = Uri.parse('$baseUrl/admin/users${q.isEmpty ? '' : '?q=${Uri.encodeComponent(q)}'}');
+      final res = await http
+          .get(uri, headers: await _headers())
+          .timeout(const Duration(seconds: 12));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        result = jsonDecode(res.body) as List;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _users = result;
+      _loading = false;
+    });
+  }
+
+  void _onSearchChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), _fetch);
+  }
+
+  Future<bool> _send(String method, String path,
+      [Map<String, dynamic>? body]) async {
+    var ok = false;
+    var msg = 'Network error. Please try again.';
+    try {
+      final headers = {...await _headers(), 'Content-Type': 'application/json'};
+      final uri = Uri.parse('$baseUrl$path');
+      http.Response res;
+      if (method == 'POST') {
+        res = await http
+            .post(uri, headers: headers, body: jsonEncode(body ?? {}))
+            .timeout(const Duration(seconds: 12));
+      } else if (method == 'PUT') {
+        res = await http
+            .put(uri, headers: headers, body: jsonEncode(body ?? {}))
+            .timeout(const Duration(seconds: 12));
+      } else {
+        res = await http
+            .delete(uri, headers: headers)
+            .timeout(const Duration(seconds: 12));
+      }
+      ok = res.statusCode >= 200 && res.statusCode < 300;
+      if (ok) {
+        msg = 'Done';
+      } else {
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? 'Action failed').toString();
+        } catch (_) {
+          msg = 'Action failed';
+        }
+      }
+    } catch (_) {
+      ok = false;
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: ok ? kNyqGreen : Colors.red.shade800,
+      ));
+    }
+    return ok;
+  }
+
+  Future<void> _showUserSheet(Map<String, dynamic> u) async {
+    final id = u['id'] as int;
+    final isSeller = u['is_seller'] == 1;
+    final isRunner = u['is_runner'] == 1;
+    final isSuspended = u['is_suspended'] == 1;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(u['name'].toString(),
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w800)),
+            Text(u['phone_number'].toString(),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.lock_reset),
+              title: const Text('Reset Password'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _resetPassword(id);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.storefront),
+              title: Text(isSeller ? 'Remove Seller' : 'Make Seller'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final done = await _send('PUT', '/admin/users/$id/roles',
+                    {'is_seller': isSeller ? 0 : 1});
+                if (done) await _fetch();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.directions_run),
+              title: Text(isRunner ? 'Remove Runner' : 'Make Runner'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final done = await _send('PUT', '/admin/users/$id/roles',
+                    {'is_runner': isRunner ? 0 : 1});
+                if (done) await _fetch();
+              },
+            ),
+            ListTile(
+              leading: Icon(isSuspended
+                  ? Icons.play_circle_outline
+                  : Icons.pause_circle_outline),
+              title: Text(isSuspended ? 'Unsuspend' : 'Suspend'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final done = await _send('PUT', '/admin/users/$id/suspend',
+                    {'suspended': !isSuspended});
+                if (done) await _fetch();
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.delete_forever, color: Colors.red),
+              title: const Text('Delete Account',
+                  style: TextStyle(
+                      color: Colors.red, fontWeight: FontWeight.w700)),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: const Text('Delete Account?'),
+                    content: Text('Permanently remove ${u['name']}?'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(c, false),
+                          child: const Text('Cancel')),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: Colors.red.shade900),
+                        onPressed: () => Navigator.pop(c, true),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  final done = await _send('DELETE', '/admin/users/$id');
+                  if (done) await _fetch();
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _resetPassword(int id) async {
+    final ctl = TextEditingController();
+    final pw = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: TextField(
+          controller: ctl,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'New password',
+            helperText: 'At least 6 characters',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctl.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    ctl.dispose();
+    if (pw == null || pw.length < 6) return;
+    await _send('PUT', '/admin/users/$id/password', {'new_password': pw});
+  }
+
+  Future<void> _createUser() async {
+    final nameCtl = TextEditingController();
+    final phoneCtl = TextEditingController(text: '+232');
+    final passCtl = TextEditingController();
+    var seller = false;
+    var runner = false;
+
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Create User'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtl,
+                  decoration: const InputDecoration(
+                      labelText: 'Name', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneCtl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                      labelText: 'Phone Number',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: passCtl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                      labelText: 'Password',
+                      helperText: 'At least 6 characters',
+                      border: OutlineInputBorder()),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Seller'),
+                  value: seller,
+                  onChanged: (v) => setDialogState(() => seller = v),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Runner'),
+                  value: runner,
+                  onChanged: (v) => setDialogState(() => runner = v),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                if (nameCtl.text.trim().isEmpty || passCtl.text.length < 6) {
+                  return;
+                }
+                final ok = await _send('POST', '/admin/users', {
+                  'name': nameCtl.text.trim(),
+                  'phone_number': phoneCtl.text.trim(),
+                  'password': passCtl.text,
+                  'is_seller': seller ? 1 : 0,
+                  'is_runner': runner ? 1 : 0,
+                });
+                if (ok && ctx.mounted) Navigator.pop(ctx, true);
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameCtl.dispose();
+    phoneCtl.dispose();
+    passCtl.dispose();
+    if (created == true) await _fetch();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Manage Users')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _createUser,
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.person_add_alt_1),
+        label: const Text('Create User'),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: TextField(
+              controller: _searchCtl,
+              onChanged: _onSearchChanged,
+              decoration: InputDecoration(
+                hintText: 'Search by name or phone',
+                prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: const Color(0xFFF5F5F5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _users.isEmpty
+                    ? const EmptyState(
+                        icon: Icons.people_outline,
+                        title: 'No users found',
+                        message: 'Try a different search.',
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _fetch,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 90),
+                          itemCount: _users.length,
+                          itemBuilder: (ctx, i) {
+                            final u =
+                                Map<String, dynamic>.from(_users[i] as Map);
+                            final suspended = u['is_suspended'] == 1;
+                            final roles = <String>[
+                              if (u['is_admin'] == 1) 'Admin',
+                              if (u['is_seller'] == 1) 'Seller',
+                              if (u['is_runner'] == 1) 'Runner',
+                            ];
+                            final name = (u['name'] ?? '?').toString().trim();
+                            return Card(
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: suspended
+                                      ? Colors.grey.shade400
+                                      : kNyqAccent,
+                                  child: Text(
+                                    name.isEmpty
+                                        ? '?'
+                                        : name[0].toUpperCase(),
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                title: Text(
+                                  name.isEmpty ? 'Unnamed' : name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700),
+                                ),
+                                subtitle: Text(
+                                  '${u['phone_number']}${roles.isEmpty ? '' : ' - ${roles.join(', ')}'}${suspended ? ' - SUSPENDED' : ''}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: suspended
+                                        ? Colors.red.shade700
+                                        : Colors.grey.shade600,
+                                  ),
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () => _showUserSheet(u),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 class AdminEarningsScreen extends StatefulWidget {
   const AdminEarningsScreen({super.key});
 
