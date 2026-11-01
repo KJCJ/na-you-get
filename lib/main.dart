@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' show Random;
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1297,6 +1298,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (res.statusCode >= 200 && res.statusCode < 300) {
         await UserSession.save(data['user'], data['token']);
+        if (mounted) TextInput.finishAutofillContext();
         if (mounted) Navigator.pop(context, true);
       } else {
         setState(() {
@@ -1325,13 +1327,15 @@ class _AuthScreenState extends State<AuthScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Column(
+          child: AutofillGroup(
+            child: Column(
             children: [
               Image.asset('assets/logo.png', height: 80),
               const SizedBox(height: 24),
               TextField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
+                autofillHints: const [AutofillHints.telephoneNumber],
                 decoration: const InputDecoration(
                   labelText: 'Phone Number (+232...)',
                   border: OutlineInputBorder(),
@@ -1342,6 +1346,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _nameController,
+                  autofillHints: const [AutofillHints.name],
                   decoration: const InputDecoration(
                     labelText: 'Your Full Name',
                     border: OutlineInputBorder(),
@@ -1353,6 +1358,11 @@ class _AuthScreenState extends State<AuthScreen> {
               TextField(
                 controller: _passwordController,
                 obscureText: true,
+                autofillHints: [
+                  _isLogin
+                      ? AutofillHints.password
+                      : AutofillHints.newPassword,
+                ],
                 decoration: const InputDecoration(
                   labelText: 'Password (min 6 characters)',
                   border: OutlineInputBorder(),
@@ -1415,6 +1425,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 label: const Text('Forgot password or phone number?'),
               ),
             ],
+          )
           ),
         ),
       ),
