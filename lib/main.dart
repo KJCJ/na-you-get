@@ -4636,6 +4636,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ],
+            if (widget.currentUser != null) ...[
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 24,
+                        offset: Offset(0, 10)),
+                  ],
+                ),
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Available for Delivery Jobs'),
+                  subtitle: Text(
+                    _isWorker
+                        ? 'Jobs tab is visible'
+                        : 'Turn on to see the Jobs tab',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _isWorker
+                          ? kNyqGreen
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                  value: _isWorker,
+                  onChanged: _setWorker,
+                ),
+              ),
+            ],
             if (_isRunnerUser) ...[
               const SizedBox(height: 32),
               const Text('Delivery stats',
@@ -4694,24 +4728,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           },
                         ),
                       ],
-                    ),
-                    const Divider(height: 24),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Available for Delivery Jobs'),
-                      subtitle: Text(
-                        _isWorker
-                            ? 'Jobs tab is visible'
-                            : 'Turn on to see the Jobs tab',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: _isWorker
-                              ? kNyqGreen
-                              : Colors.grey.shade600,
-                        ),
-                      ),
-                      value: _isWorker,
-                      onChanged: _setWorker,
                     ),
                     const Divider(height: 24),
                     SwitchListTile(
@@ -5186,6 +5202,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     final canTakeJobs = isRunner(_currentUser);
     final canSell = isSeller(_currentUser);
+    final isLoggedIn = _currentUser != null;
 
     final screens = <Widget>[
       MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
@@ -5197,8 +5214,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (canTakeJobs)
         RunnerDashboardScreen(
             currentUser: _currentUser, onUserChanged: _refreshUser),
-      ProfileScreen(
-          currentUser: _currentUser, onUserChanged: _refreshUser),
+      if (isLoggedIn)
+        ProfileScreen(
+            currentUser: _currentUser, onUserChanged: _refreshUser),
     ];
 
     // Clamp in case someone loses the worker role while on the Jobs tab.
@@ -5239,10 +5257,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 icon: Icon(Icons.work_outline),
                 selectedIcon: Icon(Icons.work),
                 label: 'Jobs'),
-          const NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
-              label: 'Profile'),
+          if (isLoggedIn)
+            const NavigationDestination(
+                icon: Icon(Icons.person_outline),
+                selectedIcon: Icon(Icons.person),
+                label: 'Profile'),
         ],
           ),
         ),
