@@ -4939,6 +4939,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final phone = user?['phone_number']?.toString() ?? '';
     final photo = user?['photo_url']?.toString() ?? '';
 
+    if (user == null) {
+      return Scaffold(
+        backgroundColor: kNyqSand,
+        appBar: AppBar(
+          title: const Text('My Profile'),
+          backgroundColor: kNyqSand,
+          surfaceTintColor: kNyqSand,
+          foregroundColor: kNyqInk,
+          elevation: 0,
+        ),
+        body: EmptyState(
+          icon: Icons.person_outline,
+          title: 'Welcome to NYG',
+          message: 'Please sign in to view your profile.',
+          actionLabel: 'Sign In',
+          onAction: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AuthScreen()),
+            );
+            widget.onUserChanged();
+          },
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: kNyqSand,
       extendBodyBehindAppBar: true,
@@ -5007,7 +5033,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         context,
                         MaterialPageRoute(
                           builder: (_) => EditProfileScreen(
-                            currentUser: user!,
+                            currentUser: user,
                             onUserChanged: widget.onUserChanged,
                           ),
                         ),
@@ -5830,23 +5856,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final canTakeJobs = isRunner(_currentUser);
-    final isLoggedIn = _currentUser != null;
 
     final screens = <Widget>[
       MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
       MarketplaceLocationsScreen(
           currentUser: _currentUser, onUserChanged: _refreshUser),
-      if (canTakeJobs)
-        RunnerDashboardScreen(
-            currentUser: _currentUser, onUserChanged: _refreshUser),
-      if (isLoggedIn)
-        ProfileScreen(
-            currentUser: _currentUser,
-            onUserChanged: _refreshUser,
-            onOpenJobs: canTakeJobs
-                ? () => setState(() => _currentIndex = 2)
-                : null),
+      ProfileScreen(
+          currentUser: _currentUser,
+          onUserChanged: _refreshUser,
+          onOpenJobs: null),
     ];
 
     // Clamp in case someone loses the worker role while on the Jobs tab.
@@ -5878,16 +5896,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               icon: Icon(Icons.location_on_outlined),
               selectedIcon: Icon(Icons.location_on),
               label: 'Marketplace'),
-          if (canTakeJobs)
-            const NavigationDestination(
-                icon: Icon(Icons.work_outline),
-                selectedIcon: Icon(Icons.work),
-                label: 'Jobs'),
-          if (isLoggedIn)
-            const NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: 'Profile'),
+          const NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'Profile'),
         ],
           ),
         ),
