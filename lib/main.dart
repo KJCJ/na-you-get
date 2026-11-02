@@ -1757,6 +1757,20 @@ Future<void> requestRoleRemoval(
   );
 }
 
+String formatChatTime(dynamic raw) {
+  if (raw == null) return '';
+  final dt = DateTime.tryParse(raw.toString());
+  if (dt == null) return '';
+  final local = dt.toLocal();
+  final now = DateTime.now();
+  final hh = local.hour.toString().padLeft(2, '0');
+  final mm = local.minute.toString().padLeft(2, '0');
+  final sameDay = local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day;
+  return sameDay ? '$hh:$mm' : '${local.day}/${local.month} $hh:$mm';
+}
+
 String _profileRoleLabel(Map<String, dynamic>? user) {
   if (user == null) return 'Guest';
   final admin = user['is_admin'] == 1 || user['is_admin'] == true;
@@ -2544,6 +2558,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   Timer? _pollTimer;
   int? _myId;
+  int _lastCount = 0;
 
   @override
   void initState() {
@@ -2579,11 +2594,13 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     if (!mounted) return;
+    final grew = msgs.length > _lastCount;
     setState(() {
       _messages = msgs;
       _loading = false;
+      _lastCount = msgs.length;
     });
-    _scrollToBottom();
+    if (grew) _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -2626,7 +2643,16 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.otherUserName)),
+      appBar: AppBar(
+        title: Text(widget.otherUserName),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _load,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
@@ -2651,12 +2677,31 @@ class _ChatScreenState extends State<ChatScreen> {
                                 color: isMine ? const Color(0xFF1B5E20) : Colors.grey.shade200,
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              child: Text(
-                                m['text'] ?? '',
-                                style: TextStyle(
-                                  color: isMine ? Colors.white : Colors.black87,
-                                  fontSize: 15,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: isMine
+                                    ? CrossAxisAlignment.end
+                                    : CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    m['text'] ?? '',
+                                    style: TextStyle(
+                                      color: isMine
+                                          ? Colors.white
+                                          : Colors.black87,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    formatChatTime(m['created_at']),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: isMine
+                                          ? Colors.white70
+                                          : Colors.black45,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           );
