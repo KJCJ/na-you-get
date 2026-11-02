@@ -2456,17 +2456,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _conversations.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.chat_bubble_outline, size: 80, color: Colors.grey.shade400),
-                      const SizedBox(height: 16),
-                      Text('No messages yet.', style: TextStyle(fontSize: 18, color: Colors.grey.shade700)),
-                      const SizedBox(height: 8),
-                      Text('Start a chat from any product page.', style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
-                    ],
-                  ),
+              ? EmptyState(
+                  icon: Icons.chat_bubble_outline,
+                  title: 'No messages',
+                  message: 'Chat with sellers or runners here.',
+                  actionLabel: 'Back to Shopping',
+                  onAction: () => Navigator.pop(context),
                 )
               : ListView.builder(
                   itemCount: _conversations.length,
@@ -5146,33 +5141,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 8),
               if (_shops.isEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: const [
-                      BoxShadow(
-                          color: Color(0x14000000),
-                          blurRadius: 20,
-                          offset: Offset(0, 8)),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.storefront_outlined,
-                          size: 40, color: kNyqAccent),
-                      const SizedBox(height: 10),
-                      const Text('No shops yet',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 4),
-                      Text('Tap "Add New Shop" to open your first storefront.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 13, color: Colors.grey.shade600)),
-                    ],
-                  ),
+                EmptyState(
+                  icon: Icons.storefront_outlined,
+                  title: 'No shops yet',
+                  message:
+                      'Open your first storefront and start selling.',
+                  actionLabel: 'Add New Shop',
+                  onAction: _createShop,
                 )
               else
                 ..._shops.map((s) {
@@ -5240,6 +5215,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   );
                 }),
               const SizedBox(height: 12),
+              if (_shops.isNotEmpty)
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
@@ -5668,11 +5644,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
         ),
         ),
-        Positioned(
-          right: 16,
-          bottom: 108,
-          child: ChatBubble(currentUser: _currentUser),
-        ),
+
       ],
     );
   }
@@ -5871,17 +5843,35 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                             color: Colors.transparent,
                             child: InkWell(
                               borderRadius: BorderRadius.circular(12),
-                              onTap: () => widget.onBuy(item),
+                              onTap: () {
+                                final sid = item['seller_user_id'];
+                                if (sid is num) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ChatScreen(
+                                        otherUserId: sid.toInt(),
+                                        otherUserName:
+                                            (item['shop_name'] ?? 'Seller')
+                                                .toString(),
+                                        shopId: item['merchant_id'],
+                                      ),
+                                    ),
+                                  );
+                                } else if (widget.onOpen != null) {
+                                  widget.onOpen!(item);
+                                }
+                              },
                               child: Padding(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 14),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Icon(Icons.shopping_cart,
+                                    const Icon(Icons.chat_bubble_outline,
                                         size: 18, color: Colors.white),
                                     const SizedBox(width: 8),
-                                    const Text('Buy Now',
+                                    const Text('Message Seller',
                                         style: TextStyle(
                                             color: Colors.white,
                                             fontWeight: FontWeight.w600)),
@@ -6017,12 +6007,16 @@ class EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
   final String? message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   const EmptyState({
     super.key,
     required this.icon,
     required this.title,
     this.message,
+    this.actionLabel,
+    this.onAction,
   });
 
   @override
@@ -6059,6 +6053,22 @@ class EmptyState extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                     fontSize: 14, height: 1.4, color: Colors.grey.shade600),
+              ),
+            ],
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: kNyqGreen,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 22, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: onAction,
+                icon: const Icon(Icons.arrow_forward, size: 18),
+                label: Text(actionLabel!),
               ),
             ],
           ],
@@ -9777,25 +9787,14 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
             child: _loadingJobs
                 ? const Center(child: CircularProgressIndicator())
                 : jobs.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.work_off,
-                                size: 80, color: Colors.grey.shade400),
-                            const SizedBox(height: 16),
-                            Text(
-                              _isOnline
-                                  ? 'No jobs available right now.'
-                                  : 'You are offline. Go online to see available jobs.',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey.shade700,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
+                    ? EmptyState(
+                        icon: Icons.work_off,
+                        title: 'No jobs available',
+                        message: _isOnline
+                            ? 'Check back later - new jobs appear here.'
+                            : 'Check back later or toggle online.',
+                        actionLabel: 'Refresh',
+                        onAction: fetchJobs,
                       )
                     : ListView.builder(
                         itemCount: jobs.length,
@@ -10004,31 +10003,12 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : orders.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.receipt_long_outlined,
-                          size: 80, color: Colors.grey.shade400),
-                      const SizedBox(height: 16),
-                      Text(
-                        'You have no orders yet.',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Browse the marketplace to place your first order.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
+              ? EmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'No orders yet',
+                  message: "Looks like you haven't bought anything!",
+                  actionLabel: 'Start Shopping',
+                  onAction: () => Navigator.pop(context),
                 )
               : ListView.builder(
                   padding: const EdgeInsets.all(10),
