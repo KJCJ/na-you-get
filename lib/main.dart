@@ -1483,7 +1483,8 @@ Future<void> sendApplication(String subject, List<String> lines) async {
 }
 
 Future<void> showSellerApplicationDialog(
-    BuildContext context, Map<String, dynamic> user) async {
+    BuildContext context, Map<String, dynamic> user,
+    {VoidCallback? onDone}) async {
   final business = TextEditingController();
   final city = TextEditingController(text: 'Freetown');
   final about = TextEditingController();
@@ -1588,6 +1589,8 @@ Future<void> showSellerApplicationDialog(
                       'Phone: ' + phone.text.trim(),
                       'Account ID: ${user['id']}',
                     ]);
+                    await UserSession.update({'pending_role': 'seller'});
+                    onDone?.call();
                     if (!dialogCtx.mounted) return;
                     Navigator.pop(dialogCtx);
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -1613,7 +1616,8 @@ Future<void> showSellerApplicationDialog(
 }
 
 Future<void> showWorkerApplicationDialog(
-    BuildContext context, Map<String, dynamic> user) async {
+    BuildContext context, Map<String, dynamic> user,
+    {VoidCallback? onDone}) async {
   final name = TextEditingController(
       text: (user['name'] ?? '').toString());
   final area = TextEditingController(text: 'Freetown');
@@ -1699,6 +1703,8 @@ Future<void> showWorkerApplicationDialog(
                       'Phone: ' + phone.text.trim(),
                       'Account ID: ${user['id']}',
                     ]);
+                    await UserSession.update({'pending_role': 'runner'});
+                    onDone?.call();
                     if (!dialogCtx.mounted) return;
                     Navigator.pop(dialogCtx);
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -4751,6 +4757,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isWorker = false;
 
   bool get _isSellerUser => isSeller(widget.currentUser);
+
+  String? get _pendingRole {
+    final v = (widget.currentUser?['pending_role'] ?? '').toString().trim();
+    return v.isEmpty ? null : v;
+  }
+
+  Widget _pendingCard(String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.hourglass_top, color: Colors.grey.shade500),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: Colors.grey.shade600)),
+                  Text('NYG Support is reviewing your application',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade500)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
   bool get _isRunnerUser => isRunner(widget.currentUser);
 
   List<dynamic> _shops = [];
@@ -5123,7 +5164,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           }
                         },
                       )
-                    : ListTile(
+                    : _pendingRole == 'runner'
+                        ? _pendingCard('Worker Application Pending...')
+                        : ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.work_outline,
                             color: kNyqAccent),
@@ -5133,12 +5176,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         trailing: const Icon(Icons.chevron_right,
                             size: 18, color: Color(0xFFB0A89F)),
                         onTap: () => showWorkerApplicationDialog(
-                            context, widget.currentUser!),
+                            context, widget.currentUser!,
+                            onDone: widget.onUserChanged),
                       ),
               ),
             ],
             if (widget.currentUser != null && !_isSellerUser) ...[
               const SizedBox(height: 12),
+              if (_pendingRole == 'seller')
+                _pendingCard('Seller Application Pending...')
+              else
               Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 16, vertical: 4),
@@ -5160,7 +5207,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   trailing: const Icon(Icons.chevron_right,
                       size: 18, color: Color(0xFFB0A89F)),
                   onTap: () => showSellerApplicationDialog(
-                      context, widget.currentUser!),
+                            context, widget.currentUser!,
+                            onDone: widget.onUserChanged),
                 ),
               ),
             ],
