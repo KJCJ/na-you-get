@@ -1757,6 +1757,57 @@ Future<void> requestRoleRemoval(
   );
 }
 
+Future<void> showOrderDetails(
+    BuildContext context, Map<String, dynamic> order) async {
+  final total = ((order['price_sle'] ?? 0) as num) +
+      ((order['delivery_fee_sle'] ?? 0) as num);
+  Widget row(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+                width: 92,
+                child: Text(label,
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade600))),
+            Expanded(
+                child: Text(value,
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600))),
+          ],
+        ),
+      );
+
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Text('Order #${order['id']}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            row('Item', (order['product_title'] ?? '').toString()),
+            row('Shop', (order['shop_name'] ?? '').toString()),
+            row('Total', 'SLE ${total.toStringAsFixed(0)}'),
+            row('Delivery', (order['delivery_status'] ?? '').toString()),
+            row('Payment', (order['payment_status'] ?? '').toString()),
+            row('Address', (order['delivery_address'] ?? '').toString()),
+            row('Placed', formatChatTime(order['created_at'])),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+      ],
+    ),
+  );
+}
+
 String formatChatTime(dynamic raw) {
   if (raw == null) return '';
   final dt = DateTime.tryParse(raw.toString());
@@ -4694,6 +4745,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   List<dynamic> _deliveries = [];
+  List<dynamic> _orders = [];
   String _vehicleType = 'Motorbike';
   bool _isOnline = false;
   bool _isWorker = false;
@@ -4760,6 +4812,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _load() async {
     await _loadDeliveries();
     await _loadShops();
+    await _loadOrders();
+  }
+
+  Future<void> _loadOrders() async {
+    final user = await UserSession.load();
+    if (user == null) return;
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/orders/customer/${user['id']}'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final list = jsonDecode(res.body) as List;
+        if (mounted) setState(() => _orders = list);
+        return;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _orders = []);
   }
 
   Future<void> _loadShops() async {
@@ -5276,6 +5349,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   label: const Text('Add New Shop'),
                 ),
               ),
+            ],
+            if (widget.currentUser != null &&
+                !_isSellerUser &&
+                !_isRunnerUser) ...[
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  const Icon(Icons.receipt_long, size: 18, color: kNyqAccent),
+                  const SizedBox(width: 6),
+                  const Text('My Orders',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w800)),
+                  const Spacer(),
+                  if (_orders.isNotEmpty)
+                    TextButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => MyOrdersScreen(
+                              currentUser: widget.currentUser!),
+                        ),
+                      ),
+                      child: const Text('See all'),
+                    ),
+                ],
+              ),
+              if (_orders.isEmpty)
+                const EmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'No orders yet',
+                  message: "You haven't placed any orders yet.",
+                )
+              else
+                ..._orders.take(3).map((o) {
+                  final order = Map<String, dynamic>.from(o as Map);
+                  final total = ((order['price_sle'] ?? 0) as num) +
+                      ((order['delivery_fee_sle'] ?? 0) as num);
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFEFE9E0)),
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () => showOrderDetails(context, order),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    (order['product_title'] ?? 'Order')
+                                        .toString(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'SLE ${total.toStringAsFixed(0)} - '
+                                    '${order['delivery_status'] ?? 'pending'}',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right,
+                                size: 18, color: Color(0xFFB0A89F)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
             ],
             if (widget.currentUser != null) ...[
               const SizedBox(height: 24),
