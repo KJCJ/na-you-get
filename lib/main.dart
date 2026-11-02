@@ -6153,6 +6153,8 @@ class ShopProductGrid extends StatelessWidget {
   final Color? cardColour;
   final Color? accentColour;
   final void Function(Map<String, dynamic> product)? onEdit;
+  final String? emptyActionLabel;
+  final VoidCallback? emptyAction;
 
   const ShopProductGrid({
     super.key,
@@ -6164,15 +6166,21 @@ class ShopProductGrid extends StatelessWidget {
     this.cardColour,
     this.accentColour,
     this.onEdit,
+    this.emptyActionLabel,
+    this.emptyAction,
   });
 
   @override
   Widget build(BuildContext context) {
     if (products.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.inventory_2_outlined,
         title: 'No products yet',
-        message: 'Check back soon!',
+        message: emptyActionLabel == null
+            ? 'Check back soon!'
+            : 'Add your first product to start selling.',
+        actionLabel: emptyActionLabel,
+        onAction: emptyAction,
       );
     }
 
@@ -7897,6 +7905,11 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     );
   }
 
+  String get _shopInitial {
+    final n = (shop['shop_name'] ?? '').toString().trim();
+    return n.isEmpty ? '?' : n[0].toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -7952,7 +7965,28 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
               width: double.infinity,
               height: 150,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              errorBuilder: (_, __, ___) => Container(
+                height: 150,
+                width: double.infinity,
+                color: _headerColour,
+                child: Icon(Icons.storefront_outlined,
+                    size: 44, color: _headerTextColour.withAlpha(120)),
+              ),
+              loadingBuilder: (ctx, child, progress) => progress == null
+                  ? child
+                  : Container(
+                      height: 150,
+                      width: double.infinity,
+                      color: _headerColour,
+                      child: const Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white70),
+                        ),
+                      ),
+                    ),
             ),
           Container(
             padding: const EdgeInsets.all(16),
@@ -7965,25 +7999,40 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 children: [
                 Row(
                   children: [
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: _headerTextColour == Colors.white
-                          ? Colors.white24
-                          : const Color(0xFF1B5E20),
-                      backgroundImage: shop['logo_url'] != null &&
-                              shop['logo_url'].toString().isNotEmpty
-                          ? NetworkImage(shop['logo_url'])
-                          : null,
-                      child: shop['logo_url'] != null &&
-                              shop['logo_url'].toString().isNotEmpty
-                          ? null
-                          : Text(
-                              (shop['shop_name'] ?? '?')[0].toUpperCase(),
-                              style: const TextStyle(
-                                  fontSize: 22,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold),
-                            ),
+                    ClipOval(
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        color: _headerTextColour == Colors.white
+                            ? Colors.white24
+                            : const Color(0xFF1B5E20),
+                        child: (shop['logo_url'] ?? '')
+                                .toString()
+                                .trim()
+                                .isEmpty
+                            ? Center(
+                                child: Text(
+                                  _shopInitial,
+                                  style: const TextStyle(
+                                      fontSize: 22,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              )
+                            : Image.network(
+                                shop['logo_url'].toString(),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Center(
+                                  child: Text(
+                                    _shopInitial,
+                                    style: const TextStyle(
+                                        fontSize: 22,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -8120,6 +8169,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     cardColour: Colors.white.withAlpha(230),
                     accentColour: _headerColour,
                     onEdit: _isOwner ? _showEditProductDialog : null,
+                    emptyActionLabel: _isOwner ? 'Add Product' : null,
+                    emptyAction: _isOwner ? _showAddItemDialog : null,
                     onBuy: _showCheckout,
                     onDelete: _isOwner
                         ? (product) => _deleteProduct(
