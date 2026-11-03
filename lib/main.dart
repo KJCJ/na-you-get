@@ -6876,6 +6876,60 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
     }
   }
 
+  Future<void> _deactivateEmployee(Map<String, dynamic> e) async {
+    final name = (e['name'] ?? 'this employee').toString();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Deactivate $name?'),
+        content: const Text(
+            'They will be removed from your active staff list, but their clock history will be saved.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Deactivate'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/shops/${widget.shop['id']}'
+            '/employees/${(e['id'] as num).toInt()}/deactivate'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('$name deactivated'),
+              backgroundColor: kNyqGreen),
+        );
+        await _load();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Could not deactivate employee'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error')),
+        );
+      }
+    }
+  }
+
   Future<void> _addEmployee() async {
     final nameCtl = TextEditingController();
     final phoneCtl = TextEditingController(text: '+232');
@@ -6965,6 +7019,12 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                         if (!dialogCtx.mounted) return;
                         if (res.statusCode >= 200 && res.statusCode < 300) {
                           Navigator.pop(dialogCtx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${nameCtl.text.trim()} added'),
+                              backgroundColor: kNyqGreen,
+                            ),
+                          );
                           await _load();
                         } else {
                           setDialogState(() => saving = false);
@@ -7026,6 +7086,10 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
             Text(
                 '${e['role_title'] ?? 'Staff'} - SLE ${salary.toStringAsFixed(0)}/month',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            if ((e['phone'] ?? '').toString().trim().isNotEmpty)
+              Text((e['phone'] ?? '').toString().trim(),
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey.shade500)),
             const SizedBox(height: 2),
             Text(
               clockedIn
@@ -7041,13 +7105,25 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
             ),
           ],
         ),
-        trailing: TextButton(
-          style: TextButton.styleFrom(
-            foregroundColor: clockedIn ? Colors.orange.shade800 : kNyqGreen,
-          ),
-          onPressed: () => _clock((e['id'] as num).toInt(), !clockedIn),
-          child: Text(clockedIn ? 'Clock Out' : 'Clock In',
-              style: const TextStyle(fontWeight: FontWeight.w700)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor:
+                    clockedIn ? Colors.orange.shade800 : kNyqGreen,
+              ),
+              onPressed: () => _clock((e['id'] as num).toInt(), !clockedIn),
+              child: Text(clockedIn ? 'Clock Out' : 'Clock In',
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+            ),
+            IconButton(
+              tooltip: 'Deactivate employee',
+              icon: const Icon(Icons.person_off_outlined,
+                  size: 20, color: Colors.red),
+              onPressed: () => _deactivateEmployee(e),
+            ),
+          ],
         ),
       ),
     );
