@@ -3653,6 +3653,7 @@ class AdminDashboardScreen extends StatelessWidget {
             tabs: [
               Tab(text: 'Users', icon: Icon(Icons.people_outline)),
               Tab(text: 'Invoices', icon: Icon(Icons.receipt_long)),
+          Tab(text: 'Companies', icon: Icon(Icons.business_outlined)),
               Tab(text: 'Overview', icon: Icon(Icons.insights_outlined)),
             ],
           ),
@@ -3661,6 +3662,7 @@ class AdminDashboardScreen extends StatelessWidget {
           children: [
             AdminUsersScreen(embedded: true),
             InvoicesScreen(isAdmin: true, embedded: true),
+          AdminCompaniesScreen(embedded: true),
             AdminEarningsScreen(embedded: true),
           ],
         ),
@@ -3668,6 +3670,189 @@ class AdminDashboardScreen extends StatelessWidget {
     );
   }
 }
+class AdminCompaniesScreen extends StatefulWidget {
+  final bool embedded;
+  const AdminCompaniesScreen({super.key, this.embedded = false});
+
+  @override
+  State<AdminCompaniesScreen> createState() => _AdminCompaniesScreenState();
+}
+
+class _AdminCompaniesScreenState extends State<AdminCompaniesScreen> {
+  List<dynamic> _companies = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    return {
+      'x-api-key': apiKey,
+      'Authorization': 'Bearer ${user?['token'] ?? ''}',
+    };
+  }
+
+  Future<void> _fetch() async {
+    setState(() => _loading = true);
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/companies'), headers: await _headers())
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final list = jsonDecode(res.body) as List;
+        if (mounted) {
+          setState(() {
+            _companies = list;
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _companies = [];
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _approve(int id) async {
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/admin/companies/$id/approve'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Company approved'), backgroundColor: kNyqGreen),
+        );
+        await _fetch();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Could not approve'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _companies.isEmpty
+            ? EmptyState(
+                icon: Icons.business_outlined,
+                title: 'No companies',
+                message: 'Company applications will appear here.',
+                actionLabel: 'Refresh',
+                onAction: _fetch,
+              )
+            : RefreshIndicator(
+                onRefresh: _fetch,
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(10),
+                  itemCount: _companies.length,
+                  itemBuilder: (ctx, i) {
+                    final c = Map<String, dynamic>.from(_companies[i] as Map);
+                    final approved = (c['is_approved'] ?? 0) == 1;
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 6),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text((c['name'] ?? '').toString(),
+                                      style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w800)),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: approved
+                                        ? kNyqGreen.withValues(alpha: 0.12)
+                                        : Colors.orange.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    approved ? 'APPROVED' : 'PENDING',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: approved
+                                            ? kNyqGreen
+                                            : Colors.orange.shade800),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                                '${c['owner_name'] ?? ''} - ${c['industry'] ?? ''}',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600)),
+                            if ((c['description'] ?? '')
+                                .toString()
+                                .trim()
+                                .isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(c['description'].toString(),
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600)),
+                            ],
+                            if (!approved)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: FilledButton.icon(
+                                  style: FilledButton.styleFrom(
+                                      backgroundColor: kNyqGreen,
+                                      foregroundColor: Colors.white),
+                                  onPressed: () =>
+                                      _approve((c['id'] as num).toInt()),
+                                  icon: const Icon(Icons.check, size: 16),
+                                  label: const Text('Approve'),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+
+    return widget.embedded
+        ? body
+        : Scaffold(
+            appBar: AppBar(title: const Text('Companies')),
+            body: body,
+          );
+  }
+}
+
 class AdminUsersScreen extends StatefulWidget {
   final bool embedded;
   const AdminUsersScreen({super.key, this.embedded = false});
@@ -4746,6 +4931,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   List<dynamic> _deliveries = [];
   List<dynamic> _orders = [];
+  List<dynamic> _companies = [];
   String _vehicleType = 'Motorbike';
   bool _isOnline = false;
   bool _isWorker = false;
@@ -4848,6 +5034,153 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await _loadDeliveries();
     await _loadShops();
     await _loadOrders();
+    await _loadCompanies();
+  }
+
+  Future<void> _registerCompany() async {
+    final nameCtl = TextEditingController();
+    final descCtl = TextEditingController();
+    var industry = 'Logistics';
+    const industries = [
+      'Logistics', 'Cleaning', 'Construction', 'Retail',
+      'Food & Catering', 'Transport', 'Beauty', 'Professional Services', 'Other',
+    ];
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text('Register a Company'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtl,
+                  decoration: const InputDecoration(
+                      labelText: 'Company Name',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: industry,
+                  decoration: const InputDecoration(
+                      labelText: 'Industry / Service Type',
+                      border: OutlineInputBorder()),
+                  items: industries
+                      .map((i) =>
+                          DropdownMenuItem(value: i, child: Text(i)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => industry = v);
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descCtl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                      labelText: 'Brief Description',
+                      border: OutlineInputBorder()),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: saving ? null : () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (nameCtl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                              content: Text('Please enter the company name')),
+                        );
+                        return;
+                      }
+                      setDialogState(() => saving = true);
+                      try {
+                        final user = await UserSession.load();
+                        final res = await http.post(
+                          Uri.parse('$baseUrl/companies/apply'),
+                          headers: {
+                            'x-api-key': apiKey,
+                            'Authorization': 'Bearer ${user?['token'] ?? ''}',
+                            'Content-Type': 'application/json',
+                          },
+                          body: jsonEncode({
+                            'name': nameCtl.text.trim(),
+                            'industry': industry,
+                            'description': descCtl.text.trim(),
+                          }),
+                        ).timeout(const Duration(seconds: 10));
+                        if (!dialogCtx.mounted) return;
+                        if (res.statusCode >= 200 && res.statusCode < 300) {
+                          Navigator.pop(dialogCtx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content:
+                                  Text('Company application sent to Admin.'),
+                              backgroundColor: kNyqGreen,
+                            ),
+                          );
+                          _load();
+                        } else {
+                          setDialogState(() => saving = false);
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                                content: Text('Could not submit application'),
+                                backgroundColor: Colors.red),
+                          );
+                        }
+                      } catch (_) {
+                        if (!dialogCtx.mounted) return;
+                        setDialogState(() => saving = false);
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('Network error')),
+                        );
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _loadCompanies() async {
+    final user = await UserSession.load();
+    if (user?['token'] == null) return;
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/companies/my-companies'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user!['token']}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final list = jsonDecode(res.body) as List;
+        if (mounted) setState(() => _companies = list);
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadOrders() async {
@@ -5204,6 +5537,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             context, widget.currentUser!,
                             onDone: widget.onUserChanged),
                       ),
+              ),
+            ],
+            if (widget.currentUser != null) ...[
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  const Icon(Icons.business, size: 18, color: kNyqAccent),
+                  const SizedBox(width: 6),
+                  const Text('My Companies',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w800)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_companies.isEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFEFE9E0)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.hourglass_empty,
+                          size: 18, color: Colors.grey.shade400),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                            'No companies yet. Register one below - NYG Support reviews every application.',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade600)),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                ..._companies.map((c) {
+                  final company = Map<String, dynamic>.from(c as Map);
+                  final staff = company['employee_count'] ?? 0;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFEFE9E0)),
+                    ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 4),
+                      leading: CircleAvatar(
+                        backgroundColor: kNyqAccent,
+                        child: Text(
+                            (company['name'] ?? 'C')
+                                .toString()
+                                .substring(0, 1)
+                                .toUpperCase(),
+                            style: const TextStyle(color: Colors.white)),
+                      ),
+                      title: Text((company['name'] ?? '').toString(),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 14)),
+                      subtitle: Text(
+                          '${company['industry'] ?? ''} - $staff staff',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600)),
+                      trailing: const Icon(Icons.chevron_right,
+                          size: 18, color: Color(0xFFB0A89F)),
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CompanyManagementScreen(
+                              company: company,
+                              currentUser: widget.currentUser,
+                            ),
+                          ),
+                        );
+                        _load();
+                      },
+                    ),
+                  );
+                }),
+              const SizedBox(height: 4),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFEFE9E0)),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 4),
+                  leading:
+                      const Icon(Icons.add_business, color: kNyqGreen),
+                  title: const Text('Register New Company',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 14)),
+                  subtitle: Text('Apply to run a business on NYG',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade600)),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 18, color: Color(0xFFB0A89F)),
+                  onTap: _registerCompany,
+                ),
               ),
             ],
             if (widget.currentUser != null && !_isSellerUser) ...[
@@ -6796,9 +7235,192 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
 // ==========================================
 // SHOP PAGE — PUBLIC VIEW
 // ==========================================
+class CompanyManagementScreen extends StatefulWidget {
+  final Map<String, dynamic> company;
+  final Map<String, dynamic>? currentUser;
+  const CompanyManagementScreen(
+      {super.key, required this.company, this.currentUser});
+
+  @override
+  State<CompanyManagementScreen> createState() =>
+      _CompanyManagementScreenState();
+}
+
+class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
+  late Map<String, dynamic> company;
+  int _staff = 0;
+  int _shops = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    company = Map<String, dynamic>.from(widget.company);
+    _load();
+  }
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    return {
+      'x-api-key': apiKey,
+      if (user?['token'] != null) 'Authorization': 'Bearer ${user!['token']}',
+    };
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/companies/${company['id']}'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final fresh = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+        if (mounted) {
+          setState(() {
+            company = fresh;
+            _staff = (fresh['employee_count'] as num?)?.toInt() ?? 0;
+          });
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/shops/'), headers: await _headers())
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final all = jsonDecode(res.body) as List;
+        final linked = all
+            .where((s) => (s['company_id'] ?? 0) == company['id'])
+            .toList();
+        if (mounted) setState(() => _shops = linked.length);
+      }
+    } catch (_) {}
+  }
+
+  String get _initial {
+    final n = (company['name'] ?? '').toString().trim();
+    return n.isEmpty ? '?' : n[0].toUpperCase();
+  }
+
+  void _info(String title, String body) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+        ],
+      ),
+    );
+  }
+
+  Widget _stat(String value, String label, Color colour) =>
+      Expanded(child: ManagementStat(value, label, colour));
+
+  Widget _actionCard(IconData icon, String title, String subtitle,
+          VoidCallback onTap) =>
+      ManagementActionCard(icon, title, subtitle, onTap);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: Text((company['name'] ?? 'Company').toString()),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: kNyqAccent,
+                child: Text(_initial,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text((company['name'] ?? '').toString(),
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w800)),
+                    Text((company['industry'] ?? '').toString(),
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              _stat('$_staff', 'Staff', kNyqAccent),
+              const SizedBox(width: 8),
+              _stat('$_shops', 'Shops', kNyqGreen),
+              const SizedBox(width: 8),
+              _stat('0', 'Jobs', kNyqOchre),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _actionCard(Icons.groups_outlined, 'Manage Employees',
+              'Add staff, salaries and clock-in', () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => EmployeeListScreen(company: company),
+              ),
+            );
+            _load();
+          }),
+          _actionCard(Icons.storefront_outlined, 'Linked Shops',
+              'Storefronts attached to this company', () {
+            _info(
+                'Linked Shops',
+                _shops == 0
+                    ? 'No shops are linked yet. Linking arrives in the next phase.'
+                    : '$_shops shop(s) linked to this company.');
+          }),
+          _actionCard(Icons.work_outline, 'Company Jobs',
+              'Jobs this company has taken or posted', () {
+            _info('Company Jobs',
+                'Company job assignment is coming in the next phase.');
+          }),
+          _actionCard(Icons.info_outline, 'Company Details',
+              'Registration information', () {
+            _info(
+                'Company Details',
+                'Name: ${company['name']}\n'
+                    'Industry: ${company['industry']}\n'
+                    'Description: ${company['description'] ?? '-'}\n'
+                    'Owner: ${company['owner_name'] ?? '-'}\n'
+                    'Status: ${((company['is_approved'] ?? 0) == 1) ? 'Approved' : 'Pending'}');
+          }),
+        ],
+      ),
+    );
+  }
+}
+
 class EmployeeListScreen extends StatefulWidget {
-  final Map<String, dynamic> shop;
-  const EmployeeListScreen({super.key, required this.shop});
+  final Map<String, dynamic>? shop;
+  final Map<String, dynamic>? company;
+  const EmployeeListScreen({super.key, this.shop, this.company})
+      : assert(shop != null || company != null);
 
   @override
   State<EmployeeListScreen> createState() => _EmployeeListScreenState();
@@ -6807,6 +7429,16 @@ class EmployeeListScreen extends StatefulWidget {
 class _EmployeeListScreenState extends State<EmployeeListScreen> {
   List<dynamic> _employees = [];
   bool _loading = true;
+
+  bool get _isCompany => widget.company != null;
+  int get _ownerId =>
+      (((_isCompany ? widget.company!['id'] : widget.shop!['id'])) as num)
+          .toInt();
+  String get _base => _isCompany
+      ? '$baseUrl/companies/$_ownerId/employees'
+      : '$baseUrl/shops/$_ownerId/employees';
+  String get _title =>
+      'Employees - ${((_isCompany ? widget.company!['name'] : widget.shop!['shop_name']) ?? '')}';
 
   @override
   void initState() {
@@ -6826,7 +7458,7 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
     setState(() => _loading = true);
     try {
       final res = await http.get(
-        Uri.parse('$baseUrl/shops/${widget.shop['id']}/employees'),
+        Uri.parse(_base),
         headers: await _headers(),
       ).timeout(const Duration(seconds: 10));
       if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -6902,8 +7534,7 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
     if (confirmed != true) return;
     try {
       final res = await http.put(
-        Uri.parse('$baseUrl/shops/${widget.shop['id']}'
-            '/employees/${(e['id'] as num).toInt()}/deactivate'),
+        Uri.parse('$_base/${(e['id'] as num).toInt()}/deactivate'),
         headers: await _headers(),
       ).timeout(const Duration(seconds: 10));
       if (!mounted) return;
@@ -7002,8 +7633,7 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                       setDialogState(() => saving = true);
                       try {
                         final res = await http.post(
-                          Uri.parse(
-                              '$baseUrl/shops/${widget.shop['id']}/employees'),
+                          Uri.parse(_base),
                           headers: {
                             ...await _headers(),
                             'Content-Type': 'application/json',
@@ -7134,7 +7764,7 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
     return Scaffold(
       backgroundColor: kNyqSand,
       appBar: AppBar(
-        title: Text('Employees - ${widget.shop['shop_name'] ?? ''}'),
+        title: Text(_title),
         backgroundColor: kNyqAccent,
         foregroundColor: Colors.white,
         elevation: 0,
