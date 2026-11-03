@@ -6796,6 +6796,301 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
 // ==========================================
 // SHOP PAGE — PUBLIC VIEW
 // ==========================================
+class EmployeeListScreen extends StatefulWidget {
+  final Map<String, dynamic> shop;
+  const EmployeeListScreen({super.key, required this.shop});
+
+  @override
+  State<EmployeeListScreen> createState() => _EmployeeListScreenState();
+}
+
+class _EmployeeListScreenState extends State<EmployeeListScreen> {
+  List<dynamic> _employees = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    return {
+      'x-api-key': apiKey,
+      if (user?['token'] != null) 'Authorization': 'Bearer ${user!['token']}',
+    };
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/shops/${widget.shop['id']}/employees'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final list = jsonDecode(res.body) as List;
+        if (mounted) {
+          setState(() {
+            _employees = list;
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _employees = [];
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _clock(int id, bool clockIn) async {
+    try {
+      final res = await http.post(
+        Uri.parse(
+            '$baseUrl/employees/$id/${clockIn ? 'clock-in' : 'clock-out'}'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        await _load();
+        return;
+      }
+      String msg = 'Could not update';
+      try {
+        msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+      } catch (_) {}
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red.shade800),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error. Please try again.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _addEmployee() async {
+    final nameCtl = TextEditingController();
+    final phoneCtl = TextEditingController(text: '+232');
+    final roleCtl = TextEditingController(text: 'Staff');
+    final salaryCtl = TextEditingController();
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24)),
+          title: const Text('Add Employee'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtl,
+                  decoration: const InputDecoration(
+                      labelText: 'Full Name',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneCtl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                      labelText: 'Phone Number',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: roleCtl,
+                  decoration: const InputDecoration(
+                      labelText: 'Role (e.g. Cashier)',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: salaryCtl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Monthly Salary (SLE)',
+                      border: OutlineInputBorder()),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: saving ? null : () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (nameCtl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                              content: Text('Please enter the name')),
+                        );
+                        return;
+                      }
+                      setDialogState(() => saving = true);
+                      try {
+                        final res = await http.post(
+                          Uri.parse(
+                              '$baseUrl/shops/${widget.shop['id']}/employees'),
+                          headers: {
+                            ...await _headers(),
+                            'Content-Type': 'application/json',
+                          },
+                          body: jsonEncode({
+                            'name': nameCtl.text.trim(),
+                            'phone': phoneCtl.text.trim(),
+                            'role_title': roleCtl.text.trim(),
+                            'monthly_salary_sle':
+                                double.tryParse(salaryCtl.text.trim()) ?? 0,
+                          }),
+                        ).timeout(const Duration(seconds: 10));
+                        if (!dialogCtx.mounted) return;
+                        if (res.statusCode >= 200 && res.statusCode < 300) {
+                          Navigator.pop(dialogCtx);
+                          await _load();
+                        } else {
+                          setDialogState(() => saving = false);
+                          String msg = 'Could not add employee';
+                          try {
+                            msg =
+                                (jsonDecode(res.body)['detail'] ?? msg).toString();
+                          } catch (_) {}
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                                content: Text(msg),
+                                backgroundColor: Colors.red.shade800),
+                          );
+                        }
+                      } catch (_) {
+                        if (!dialogCtx.mounted) return;
+                        setDialogState(() => saving = false);
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('Network error')),
+                        );
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _employeeTile(Map<String, dynamic> e) {
+    final clockedIn = e['clocked_in'] == true;
+    final today = e['today'];
+    final salary = (e['monthly_salary_sle'] ?? 0) as num;
+    final inTime = today is Map ? formatChatTime(today['clock_in_time']) : '';
+    final outTime = today is Map ? formatChatTime(today['clock_out_time']) : '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFEFE9E0)),
+      ),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        title: Text((e['name'] ?? '').toString(),
+            style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                '${e['role_title'] ?? 'Staff'} - SLE ${salary.toStringAsFixed(0)}/month',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            const SizedBox(height: 2),
+            Text(
+              clockedIn
+                  ? 'Clocked in at $inTime'
+                  : (inTime.isEmpty
+                      ? 'Not clocked in today'
+                      : 'Clocked in $inTime - out $outTime'),
+              style: TextStyle(
+                fontSize: 11,
+                color: clockedIn ? kNyqGreen : Colors.grey.shade500,
+                fontWeight: clockedIn ? FontWeight.w700 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+        trailing: TextButton(
+          style: TextButton.styleFrom(
+            foregroundColor: clockedIn ? Colors.orange.shade800 : kNyqGreen,
+          ),
+          onPressed: () => _clock((e['id'] as num).toInt(), !clockedIn),
+          child: Text(clockedIn ? 'Clock Out' : 'Clock In',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: Text('Employees - ${widget.shop['shop_name'] ?? ''}'),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _addEmployee,
+        backgroundColor: kNyqGreen,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.person_add_alt_1),
+        label: const Text('Add Employee'),
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _employees.isEmpty
+              ? EmptyState(
+                  icon: Icons.groups_outlined,
+                  title: 'No employees yet',
+                  message: 'Add your first employee to start tracking hours.',
+                  actionLabel: 'Add Employee',
+                  onAction: _addEmployee,
+                )
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+                  children: _employees
+                      .map((e) =>
+                          _employeeTile(Map<String, dynamic>.from(e as Map)))
+                      .toList(),
+                ),
+    );
+  }
+}
+
 class ShopManagementScreen extends StatefulWidget {
   final Map<String, dynamic> shop;
   final Map<String, dynamic>? currentUser;
@@ -6815,6 +7110,7 @@ class ShopManagementScreen extends StatefulWidget {
 class _ShopManagementScreenState extends State<ShopManagementScreen> {
   late Map<String, dynamic> shop;
   int _products = 0;
+  int _employees = 0;
 
   @override
   void initState() {
@@ -6842,6 +7138,25 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
           shop = fresh;
           _products = (fresh['product_count'] as num?)?.toInt() ?? _products;
         });
+      }
+    } catch (_) {}
+    await _refreshEmployeeCount();
+  }
+
+  Future<void> _refreshEmployeeCount() async {
+    final user = await UserSession.load();
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/shops/${shop['id']}/employees'),
+        headers: {
+          'x-api-key': apiKey,
+          if (user?['token'] != null)
+            'Authorization': 'Bearer ${user!['token']}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final list = jsonDecode(res.body) as List;
+        if (mounted) setState(() => _employees = list.length);
       }
     } catch (_) {}
   }
@@ -6932,7 +7247,7 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
               const SizedBox(width: 8),
               _stat('$_products', 'Products', kNyqAccent),
               const SizedBox(width: 8),
-              _stat('0', 'Employees', kNyqOchre),
+              _stat('$_employees', 'Employees', kNyqOchre),
             ],
           ),
           const SizedBox(height: 20),
@@ -6941,23 +7256,14 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
           _actionCard(Icons.inventory_2_outlined, 'Manage Products',
               'Add, edit and remove items', () => _openShop()),
           _actionCard(Icons.groups_outlined, 'Manage Employees',
-              'Clock-in and staff records', () {
-            showDialog<void>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24)),
-                title: const Text('Coming soon'),
-                content: const Text(
-                    'Employee management and clock-in is being built. Your shop is ready for it.'),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('OK')),
-                ],
+              'Clock-in and staff records', () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => EmployeeListScreen(shop: shop),
               ),
             );
+            _refresh();
           }),
           _actionCard(Icons.settings_outlined, 'Settings',
               'Edit shop details and branding',
