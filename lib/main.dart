@@ -2523,8 +2523,33 @@ class _MessagesScreenState extends State<MessagesScreen> {
       return;
     }
     if (!mounted) return;
+    final list = <dynamic>[];
+    for (final c in data) {
+      list.add({...Map<String, dynamic>.from(c as Map), '_kind': 'direct'});
+    }
+    try {
+      final user = await UserSession.load();
+      final tr = await http.get(
+        Uri.parse('$baseUrl/threads/mine'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (tr.statusCode >= 200 && tr.statusCode < 300) {
+        for (final t in jsonDecode(tr.body) as List) {
+          list.add({...Map<String, dynamic>.from(t as Map), '_kind': 'thread'});
+        }
+      }
+    } catch (_) {}
+    list.sort((a, b) {
+      final da = (a['last_at'] ?? '').toString();
+      final db2 = (b['last_at'] ?? '').toString();
+      return db2.compareTo(da);
+    });
+    if (!mounted) return;
     setState(() {
-      _conversations = data;
+      _conversations = list;
       _loading = false;
     });
   }
@@ -2552,6 +2577,41 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   itemCount: _conversations.length,
                   itemBuilder: (ctx, i) {
                     final c = _conversations[i];
+                    if ((c['_kind'] ?? 'direct') == 'thread') {
+                      return ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: kNyqAccent,
+                          child: Icon(Icons.groups,
+                              color: Colors.white, size: 20),
+                        ),
+                        title: Text((c['name'] ?? 'Team Chat').toString(),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold)),
+                        subtitle: Text(
+                          (c['last_message'] ?? 'No messages yet').toString(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Text(
+                            '${c['member_count'] ?? 0} members',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade500)),
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                threadId: (c['id'] as num).toInt(),
+                                threadName:
+                                    (c['name'] ?? 'Team Chat').toString(),
+                              ),
+                            ),
+                          );
+                          _load();
+                        },
+                      );
+                    }
                     final other = c['other_user'];
                     if (other == null) return const SizedBox.shrink();
                     final unread = c['unread_count'] ?? 0;
@@ -2604,21 +2664,25 @@ class _MessagesScreenState extends State<MessagesScreen> {
 // CHAT SCREEN
 // ==========================================
 class ChatScreen extends StatefulWidget {
-  final int otherUserId;
-  final String otherUserName;
+  final int? otherUserId;
+  final String? otherUserName;
+  final int? threadId;
+  final String? threadName;
   final int? shopId;
   final int? orderId;
   final int? productId;
   final String? initialMessage;
   const ChatScreen({
     super.key,
-    required this.otherUserId,
-    required this.otherUserName,
+    this.otherUserId,
+    this.otherUserName,
+    this.threadId,
+    this.threadName,
     this.shopId,
     this.orderId,
     this.productId,
     this.initialMessage,
-  });
+  }) : assert(threadId != null || otherUserId != null);
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -2632,6 +2696,9 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _pollTimer;
   int? _myId;
   int _lastCount = 0;
+
+  bool get _isThread => widget.threadId != null;
+  String get _title => widget.threadName ?? widget.otherUserName ?? 'Chat';
   Map<String, dynamic>? _replyTo;
   bool _showEmoji = false;
 
@@ -2646,24 +2713,53 @@ class _ChatScreenState extends State<ChatScreen> {
     _myId = user?['id'];
     await _load();
     final opening = widget.initialMessage;
-    if (opening != null &&
+    if (!_isThread &&
+        opening != null &&
         opening.isNotEmpty &&
         _messages.isEmpty &&
         widget.otherUserId != _myId) {
       final sent = await MessageSession.send(
-        widget.otherUserId,
+        widget.otherUserId!,
         opening,
         shopId: widget.shopId,
         orderId: widget.orderId,
       );
       if (sent) await _load();
     }
-    await MessageSession.markRead(widget.otherUserId);
+    if (!_isThread && widget.otherUserId != null) {
+      await MessageSession.markRead(widget.otherUserId!);
+    }
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _load());
   }
 
   Future<void> _load() async {
-    final msgs = await MessageSession.getConversation(widget.otherUserId);
+    if (_isThread) {
+      final u = await UserSession.load();
+      try {
+        final res = await http.get(
+          Uri.parse('$baseUrl/threads/${widget.threadId}/messages'),
+          headers: {
+            'x-api-key': apiKey,
+            'Authorization': 'Bearer ${u?['token'] ?? ''}',
+          },
+        ).timeout(const Duration(seconds: 10));
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          final List msgs = jsonDecode(res.body) as List;
+          if (!mounted) return;
+          final grewThread = msgs.length > _lastCount;
+          setState(() {
+            _messages = msgs;
+            _loading = false;
+            _lastCount = msgs.length;
+          });
+          if (grewThread) _scrollToBottom();
+          return;
+        }
+      } catch (_) {}
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    final msgs = await MessageSession.getConversation(widget.otherUserId!);
     if (MessageSession.lastCallWasUnauthorized) {
       if (mounted) handleSessionExpired(context);
       return;
@@ -2752,6 +2848,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             'amount_sle': amount,
                             'product_id': widget.productId,
                             'order_id': widget.orderId,
+                            'shop_id': widget.shopId,
                             'recipient_id': widget.otherUserId,
                           }),
                         ).timeout(const Duration(seconds: 10));
@@ -2928,8 +3025,27 @@ class _ChatScreenState extends State<ChatScreen> {
     _textController.clear();
     final replyId = (_replyTo?['id'] as num?)?.toInt();
     if (mounted) setState(() => _replyTo = null);
+    if (_isThread) {
+      final u = await UserSession.load();
+      try {
+        await http.post(
+          Uri.parse('$baseUrl/threads/${widget.threadId}/messages'),
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'Authorization': 'Bearer ${u?['token'] ?? ''}',
+          },
+          body: jsonEncode({
+            'text': text,
+            'reply_to_message_id': replyId,
+          }),
+        ).timeout(const Duration(seconds: 10));
+      } catch (_) {}
+      await _load();
+      return;
+    }
     await MessageSession.send(
-      widget.otherUserId,
+      widget.otherUserId!,
       text,
       shopId: widget.shopId,
       orderId: widget.orderId,
@@ -2954,9 +3070,12 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.otherUserName),
+        title: Text(_title),
         actions: [
-          if (widget.orderId != null || widget.productId != null)
+          if (!_isThread &&
+              (widget.orderId != null ||
+                  widget.productId != null ||
+                  widget.shopId != null))
             IconButton(
               icon: const Icon(Icons.handshake_outlined),
               tooltip: 'Make an offer',
@@ -3006,6 +3125,19 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ? CrossAxisAlignment.end
                                     : CrossAxisAlignment.start,
                                 children: [
+                                  if (_isThread && !isMine)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          bottom: 3),
+                                      child: Text(
+                                        (m['sender_name'] ?? '').toString(),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ),
                                   if ((m['reply_preview'] ?? '')
                                       .toString()
                                       .isNotEmpty)
@@ -7979,6 +8111,34 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
     return n.isEmpty ? '?' : n[0].toUpperCase();
   }
 
+  Future<void> _openTeamChat() async {
+    final user = await UserSession.load();
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/threads/company/${company['id']}'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final t = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              threadId: (t['id'] as num).toInt(),
+              threadName: (t['name'] ?? 'Team Chat').toString(),
+            ),
+          ),
+        );
+        _load();
+      }
+    } catch (_) {}
+  }
+
   void _info(String title, String body) {
     showDialog<void>(
       context: context,
@@ -8064,6 +8224,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             );
             _load();
           }),
+          _actionCard(Icons.forum_outlined, 'Team Chat',
+              'Group chat with your staff', _openTeamChat),
           _actionCard(Icons.storefront_outlined, 'Linked Shops',
               'Storefronts attached to this company', () {
             _info(
@@ -8444,6 +8606,19 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
       child: ListTile(
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        onTap: (e['employee_user_id'] == null)
+            ? null
+            : () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChatScreen(
+                      otherUserId:
+                          (e['employee_user_id'] as num).toInt(),
+                      otherUserName:
+                          (e['name'] ?? 'Employee').toString(),
+                    ),
+                  ),
+                ),
         title: Text((e['name'] ?? '').toString(),
             style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Column(
@@ -8456,6 +8631,12 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
               Text((e['phone'] ?? '').toString().trim(),
                   style: TextStyle(
                       fontSize: 11, color: Colors.grey.shade500)),
+            if (e['employee_user_id'] == null)
+              Text('No app account yet',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey.shade400)),
             const SizedBox(height: 2),
             Text(
               clockedIn
@@ -8585,6 +8766,34 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
     await _refreshEmployeeCount();
   }
 
+  Future<void> _openTeamChat() async {
+    final user = await UserSession.load();
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/threads/shop/${shop['id']}'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final t = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              threadId: (t['id'] as num).toInt(),
+              threadName: (t['name'] ?? 'Team Chat').toString(),
+            ),
+          ),
+        );
+        _refresh();
+      }
+    } catch (_) {}
+  }
+
   Future<void> _refreshEmployeeCount() async {
     final user = await UserSession.load();
     try {
@@ -8707,6 +8916,8 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
             );
             _refresh();
           }),
+          _actionCard(Icons.forum_outlined, 'Team Chat',
+              'Group chat with your staff', _openTeamChat),
           _actionCard(Icons.settings_outlined, 'Settings',
               'Edit shop details and branding',
               () => _openShop(action: 'settings')),
