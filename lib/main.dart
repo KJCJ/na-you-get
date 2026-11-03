@@ -3865,6 +3865,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   final _searchCtl = TextEditingController();
   List<dynamic> _users = [];
   bool _loading = true;
+  bool _pendingOnly = false;
   Timer? _debounce;
 
   @override
@@ -3962,6 +3963,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     final isSeller = u['is_seller'] == 1;
     final isRunner = u['is_runner'] == 1;
     final isSuspended = u['is_suspended'] == 1;
+    final pendingRole = (u['pending_role'] ?? '').toString();
+    final isCompanyManager = (u['is_company_manager'] ?? 0) == 1;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -3990,7 +3993,17 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.storefront),
+              tileColor: (!isSeller && pendingRole == 'seller')
+                  ? Colors.orange.withValues(alpha: 0.10)
+                  : null,
               title: Text(isSeller ? 'Remove Seller' : 'Make Seller'),
+              subtitle: (!isSeller && pendingRole == 'seller')
+                  ? Text('Applied - awaiting your approval',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.orange.shade800))
+                  : null,
               onTap: () async {
                 Navigator.pop(ctx);
                 final done = await _send('PUT', '/admin/users/$id/roles',
@@ -4000,11 +4013,38 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.directions_run),
+              tileColor: (!isRunner && pendingRole == 'runner')
+                  ? Colors.orange.withValues(alpha: 0.10)
+                  : null,
               title: Text(isRunner ? 'Remove Job Worker' : 'Make Job Worker'),
+              subtitle: (!isRunner && pendingRole == 'runner')
+                  ? Text('Applied - awaiting your approval',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.orange.shade800))
+                  : null,
               onTap: () async {
                 Navigator.pop(ctx);
                 final done = await _send('PUT', '/admin/users/$id/roles',
                     {'is_runner': isRunner ? 0 : 1});
+                if (done) await _fetch();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.business_center_outlined),
+              title: Text(isCompanyManager
+                  ? 'Remove Company Manager'
+                  : 'Make Company Manager'),
+              subtitle: Text(
+                  isCompanyManager
+                      ? 'Can register companies without approval'
+                      : 'Lets them create companies immediately',
+                  style: const TextStyle(fontSize: 11)),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final done = await _send('PUT', '/admin/users/$id/roles',
+                    {'is_company_manager': isCompanyManager ? 0 : 1});
                 if (done) await _fetch();
               },
             ),
@@ -4180,8 +4220,17 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   Scaffold _buildInner(BuildContext context) {
+    final pendingCount = _users
+        .where((e) => (e['pending_role'] ?? '').toString().isNotEmpty)
+        .length;
+    final shown = _pendingOnly
+        ? _users
+            .where((e) =>
+                (e['pending_role'] ?? '').toString().isNotEmpty)
+            .toList()
+        : _users;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Manage Users')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _createUser,
         backgroundColor: kNyqAccent,
@@ -4214,24 +4263,65 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                FilterChip(
+                  label: Text('All (${_users.length})',
+                      style: const TextStyle(fontSize: 12)),
+                  selected: !_pendingOnly,
+                  onSelected: (_) => setState(() => _pendingOnly = false),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  avatar: Icon(Icons.pending_actions,
+                      size: 16,
+                      color: pendingCount > 0
+                          ? Colors.orange.shade800
+                          : Colors.grey),
+                  label: Text('Pending ($pendingCount)',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: pendingCount > 0
+                              ? FontWeight.w700
+                              : FontWeight.normal)),
+                  selected: _pendingOnly,
+                  onSelected: (_) => setState(() => _pendingOnly = true),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _users.isEmpty
-                    ? const EmptyState(
-                        icon: Icons.people_outline,
-                        title: 'No users found',
-                        message: 'Try a different search.',
+                    ? EmptyState(
+                        icon: _pendingOnly
+                            ? Icons.check_circle_outline
+                            : Icons.people_outline,
+                        title: _pendingOnly
+                            ? 'No pending applications'
+                            : 'No users found',
+                        message: _pendingOnly
+                            ? 'Every application has been reviewed.'
+                            : 'Try a different search.',
+                        actionLabel: _pendingOnly ? 'Show all users' : null,
+                        onAction: _pendingOnly
+                            ? () => setState(() => _pendingOnly = false)
+                            : null,
                       )
                     : RefreshIndicator(
                         onRefresh: _fetch,
                         child: ListView.builder(
                           padding: const EdgeInsets.fromLTRB(12, 0, 12, 90),
-                          itemCount: _users.length,
+                          itemCount: shown.length,
                           itemBuilder: (ctx, i) {
                             final u =
-                                Map<String, dynamic>.from(_users[i] as Map);
+                                Map<String, dynamic>.from(shown[i] as Map);
                             final suspended = u['is_suspended'] == 1;
+                            final pendingRole =
+                                (u['pending_role'] ?? '').toString();
                             final roles = <String>[
                               if (u['is_admin'] == 1) 'Admin',
                               if (u['is_seller'] == 1) 'Seller',
@@ -4268,7 +4358,31 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                         : Colors.grey.shade600,
                                   ),
                                 ),
-                                trailing: const Icon(Icons.chevron_right),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (pendingRole.isNotEmpty)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange
+                                              .withValues(alpha: 0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          'PENDING ${pendingRole.toUpperCase()}',
+                                          style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              color:
+                                                  Colors.orange.shade800),
+                                        ),
+                                      ),
+                                    const Icon(Icons.chevron_right),
+                                  ],
+                                ),
                                 onTap: () => _showUserSheet(u),
                               ),
                             );
@@ -5128,9 +5242,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         if (res.statusCode >= 200 && res.statusCode < 300) {
                           Navigator.pop(dialogCtx);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content:
-                                  Text('Company application sent to Admin.'),
+                            SnackBar(
+                              content: Text(
+                                  (widget.currentUser?['is_company_manager'] ??
+                                              0) ==
+                                          1
+                                      ? 'Company created.'
+                                      : 'Company application sent to Admin.'),
                               backgroundColor: kNyqGreen,
                             ),
                           );
