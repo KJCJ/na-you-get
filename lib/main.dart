@@ -7,18 +7,12 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
+import 'core/theme.dart';
+import 'core/widgets/management_hub.dart';
 
 const String baseUrl = 'https://random.taila91e03.ts.net';
 const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785acabfd295';
 const String appVersion = '1.0.0';
-const Color kNyqBlue = Color(0xFF1A5AD7);
-const Color kNyqBlueDeep = Color(0xFF0D47A1);
-const Color kNyqAccent = Color(0xFF0D47A1);
-const Color kNyqOchre = Color(0xFFD4A017);
-const Color kNyqSand = Color(0xFFFAF7F2);
-const Color kNyqInk = Color(0xFF231F1C);
-const Color kNyqAccentDeep = Color(0xFF072E66);
-const Color kNyqGreen = Color(0xFF1B5E20);
 const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk';
 
 // ==========================================
@@ -4878,17 +4872,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadShops() async {
     if (!_isSellerUser) return;
+    final user = await UserSession.load();
     try {
       final res = await http
-          .get(Uri.parse('$baseUrl/shops/'))
+          .get(
+            Uri.parse('$baseUrl/shops/'),
+            headers: {
+              'x-api-key': apiKey,
+              if (user?['token'] != null)
+                'Authorization': 'Bearer ${user!['token']}',
+            },
+          )
           .timeout(const Duration(seconds: 10));
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final all = jsonDecode(res.body) as List;
-        final phone = normalisePhone(
-            (widget.currentUser?['phone_number'] ?? '').toString());
         final mine = all
-            .where((s) =>
-                normalisePhone((s['phone_number'] ?? '').toString()) == phone)
+            .where((s) => (s['my_role'] ?? '').toString() == 'owner')
             .toList();
         if (mounted) setState(() => _shops = mine);
         return;
@@ -6861,53 +6860,12 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
     ).then((_) => _refresh());
   }
 
-  Widget _stat(String value, String label, Color colour) => Expanded(
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFEFE9E0)),
-          ),
-          child: Column(
-            children: [
-              Text(value,
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: colour)),
-              const SizedBox(height: 2),
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 11, color: Colors.grey.shade600)),
-            ],
-          ),
-        ),
-      );
+  Widget _stat(String value, String label, Color colour) =>
+      Expanded(child: ManagementStat(value, label, colour));
 
   Widget _actionCard(IconData icon, String title, String subtitle,
           VoidCallback onTap) =>
-      Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFEFE9E0)),
-        ),
-        child: ListTile(
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          leading: Icon(icon, color: kNyqAccent),
-          title: Text(title,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w700, fontSize: 14)),
-          subtitle: Text(subtitle,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-          trailing: const Icon(Icons.chevron_right,
-              size: 18, color: Color(0xFFB0A89F)),
-          onTap: onTap,
-        ),
-      );
+      ManagementActionCard(icon, title, subtitle, onTap);
 
   @override
   Widget build(BuildContext context) {
@@ -7056,8 +7014,14 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
 
   Future<void> _refreshShop() async {
     try {
+      final user = await UserSession.load();
       final res = await http.get(
         Uri.parse('$baseUrl/merchants/${shop['id']}'),
+        headers: {
+          'x-api-key': apiKey,
+          if (user?['token'] != null)
+            'Authorization': 'Bearer ${user!['token']}',
+        },
       ).timeout(const Duration(seconds: 8));
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final data = jsonDecode(res.body);
@@ -8103,6 +8067,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
   }
 
   bool get _isOwner {
+    final role = (shop['my_role'] ?? '').toString();
+    if (role.isNotEmpty) return role == 'owner' || role == 'admin';
     if (_currentUser == null) return false;
     return _currentUser!['phone_number'] == shop['phone_number'];
   }
