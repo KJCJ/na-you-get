@@ -58,6 +58,15 @@ Future<String?> pickAndUploadImage(BuildContext context) async {
   }
 }
 
+const List<String> kChatEmojis = [
+  '😀', '😂', '🙂', '😍', '😎', '🤔', '😢', '😡',
+  '👍', '👎', '🙏', '👏', '💪', '👋', '🤝', '✌️',
+  '❤️', '🔥', '✨', '🎉', '💯', '⚡', '🌹', '🥰',
+  '😅', '😇', '🤗', '😴', '🙌', '👌', '🤙', '🫶',
+  '🛒', '💰', '💵', '📦', '🚚', '🏪', '📱', '⏰',
+  '✅', '❌', '❓', '❗', '🙋', '🤷', '😬', '🫡',
+];
+
 String normalisePhone(String raw) {
   return raw.trim().replaceAll(RegExp(r'[\s\-\(\)]'), '');
 }
@@ -367,6 +376,11 @@ class UserSession {
     if (user['photo_url'] != null) {
       await prefs.setString(_photoKey, user['photo_url']);
     }
+    if (user['must_change_password'] != null) {
+      await prefs.setBool('user_must_change_password',
+          user['must_change_password'] == 1 ||
+              user['must_change_password'] == true);
+    }
     await prefs.setString(_tokenKey, token);
   }
 
@@ -386,6 +400,8 @@ class UserSession {
       'vehicle_type': prefs.getString('user_vehicle_type'),
       'is_online': prefs.getBool('user_is_online') ?? false,
       'photo_url': prefs.getString(_photoKey),
+      'must_change_password':
+          prefs.getBool('user_must_change_password') ?? false,
       'token': token,
     };
   }
@@ -1029,7 +1045,8 @@ class MessageSession {
     }
   }
 
-  static Future<bool> send(int recipientId, String text, {int? shopId, int? orderId}) async {
+  static Future<bool> send(int recipientId, String text,
+      {int? shopId, int? orderId, int? replyToMessageId}) async {
     lastCallWasUnauthorized = false;
     final user = await UserSession.load();
     if (user == null) return false;
@@ -1038,6 +1055,9 @@ class MessageSession {
       final Map<String, dynamic> body = {'recipient_id': recipientId, 'text': text};
       if (shopId != null) body['shop_id'] = shopId;
       if (orderId != null) body['order_id'] = orderId;
+      if (replyToMessageId != null) {
+        body['reply_to_message_id'] = replyToMessageId;
+      }
       final res = await http.post(
         Uri.parse('$baseUrl/messages/'),
         headers: {
@@ -2588,6 +2608,7 @@ class ChatScreen extends StatefulWidget {
   final String otherUserName;
   final int? shopId;
   final int? orderId;
+  final int? productId;
   final String? initialMessage;
   const ChatScreen({
     super.key,
@@ -2595,6 +2616,7 @@ class ChatScreen extends StatefulWidget {
     required this.otherUserName,
     this.shopId,
     this.orderId,
+    this.productId,
     this.initialMessage,
   });
 
@@ -2610,6 +2632,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _pollTimer;
   int? _myId;
   int _lastCount = 0;
+  Map<String, dynamic>? _replyTo;
+  bool _showEmoji = false;
 
   @override
   void initState() {
@@ -2666,15 +2690,250 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _makeOffer() async {
+    final amountCtl = TextEditingController();
+    bool sending = false;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24)),
+          title: const Text('Make an Offer'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                  'Enter the amount you would like to pay. The seller can accept or decline.',
+                  style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountCtl,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: const InputDecoration(
+                    labelText: 'Amount (SLE)',
+                    border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: sending ? null : () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: kNyqGreen),
+              onPressed: sending
+                  ? null
+                  : () async {
+                      final amount =
+                          double.tryParse(amountCtl.text.trim());
+                      if (amount == null || amount <= 0) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                              content: Text('Enter a valid amount')),
+                        );
+                        return;
+                      }
+                      setDialogState(() => sending = true);
+                      final user = await UserSession.load();
+                      try {
+                        final res = await http.post(
+                          Uri.parse('$baseUrl/messages/offer'),
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': apiKey,
+                            'Authorization':
+                                'Bearer ${user?['token'] ?? ''}',
+                          },
+                          body: jsonEncode({
+                            'amount_sle': amount,
+                            'product_id': widget.productId,
+                            'order_id': widget.orderId,
+                            'recipient_id': widget.otherUserId,
+                          }),
+                        ).timeout(const Duration(seconds: 10));
+                        if (!dialogCtx.mounted) return;
+                        if (res.statusCode >= 200 && res.statusCode < 300) {
+                          Navigator.pop(dialogCtx);
+                          await _load();
+                        } else {
+                          setDialogState(() => sending = false);
+                          String msg = 'Could not send offer';
+                          try {
+                            msg =
+                                (jsonDecode(res.body)['detail'] ?? msg)
+                                    .toString();
+                          } catch (_) {}
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                                content: Text(msg),
+                                backgroundColor: Colors.red),
+                          );
+                        }
+                      } catch (_) {
+                        if (!dialogCtx.mounted) return;
+                        setDialogState(() => sending = false);
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('Network error')),
+                        );
+                      }
+                    },
+              child: sending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Send Offer'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _answerOffer(int messageId, bool accept) async {
+    final user = await UserSession.load();
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/messages/$messageId/offer/${accept ? 'accept' : 'decline'}'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(accept ? 'Offer accepted' : 'Offer declined'),
+              backgroundColor: kNyqGreen),
+        );
+        await _load();
+      } else {
+        String msg = 'Could not respond to offer';
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.red),
+        );
+      }
+    } catch (_) {}
+  }
+
+  Widget _offerBubble(
+      Map<String, dynamic> m, Map<String, dynamic> offer, bool isMine) {
+    final status = (offer['status'] ?? 'pending').toString();
+    final amount = (offer['amount_sle'] ?? 0) as num;
+    final sellerId = (offer['seller_id'] as num?)?.toInt();
+    final iAmSeller = sellerId != null && sellerId == _myId;
+    final canAnswer = iAmSeller && status == 'pending';
+    final id = (m['id'] as num).toInt();
+
+    return Align(
+      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 3),
+        padding: const EdgeInsets.all(12),
+        constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.78),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: status == 'accepted'
+                  ? kNyqGreen
+                  : (status == 'declined'
+                      ? Colors.red.shade200
+                      : kNyqOchre),
+              width: 1.4),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.handshake, size: 16, color: kNyqAccent),
+                const SizedBox(width: 6),
+                const Text('Price Offer',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: kNyqAccent)),
+                const Spacer(),
+                Text(formatChatTime(m['created_at']),
+                    style: TextStyle(
+                        fontSize: 10, color: Colors.grey.shade500)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text('SLE ${amount.toStringAsFixed(0)}',
+                style: const TextStyle(
+                    fontSize: 22, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 2),
+            Text(
+              status == 'accepted'
+                  ? 'Agreed'
+                  : (status == 'declined' ? 'Declined' : 'Awaiting response'),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: status == 'accepted'
+                    ? kNyqGreen
+                    : (status == 'declined'
+                        ? Colors.red
+                        : Colors.orange.shade800),
+              ),
+            ),
+            if (canAnswer) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                          backgroundColor: kNyqGreen,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 10)),
+                      onPressed: () => _answerOffer(id, true),
+                      child: const Text('Accept'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 10)),
+                      onPressed: () => _answerOffer(id, false),
+                      child: const Text('Decline'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _send() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
     _textController.clear();
+    final replyId = (_replyTo?['id'] as num?)?.toInt();
+    if (mounted) setState(() => _replyTo = null);
     await MessageSession.send(
       widget.otherUserId,
       text,
       shopId: widget.shopId,
       orderId: widget.orderId,
+      replyToMessageId: replyId,
     );
     if (MessageSession.lastCallWasUnauthorized) {
       if (mounted) handleSessionExpired(context);
@@ -2697,6 +2956,12 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         title: Text(widget.otherUserName),
         actions: [
+          if (widget.orderId != null || widget.productId != null)
+            IconButton(
+              icon: const Icon(Icons.handshake_outlined),
+              tooltip: 'Make an offer',
+              onPressed: _makeOffer,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
@@ -2718,6 +2983,11 @@ class _ChatScreenState extends State<ChatScreen> {
                         itemBuilder: (ctx, i) {
                           final m = _messages[i];
                           final isMine = m['sender_id'] == _myId;
+                          final offer = m['offer_data'];
+                          if (offer is Map) {
+                            return _offerBubble(m,
+                                Map<String, dynamic>.from(offer), isMine);
+                          }
                           return Align(
                             alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
                             child: Container(
@@ -2728,11 +2998,42 @@ class _ChatScreenState extends State<ChatScreen> {
                                 color: isMine ? const Color(0xFF1B5E20) : Colors.grey.shade200,
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              child: Column(
+                              child: GestureDetector(
+                                onLongPress: () =>
+                                    setState(() => _replyTo = m),
+                                child: Column(
                                 crossAxisAlignment: isMine
                                     ? CrossAxisAlignment.end
                                     : CrossAxisAlignment.start,
                                 children: [
+                                  if ((m['reply_preview'] ?? '')
+                                      .toString()
+                                      .isNotEmpty)
+                                    Container(
+                                      margin:
+                                          const EdgeInsets.only(bottom: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: isMine
+                                            ? Colors.white24
+                                            : Colors.black12,
+                                        borderRadius:
+                                            BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        m['reply_preview'].toString(),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontStyle: FontStyle.italic,
+                                          color: isMine
+                                              ? Colors.white70
+                                              : Colors.black54,
+                                        ),
+                                      ),
+                                    ),
                                   Text(
                                     m['text'] ?? '',
                                     style: TextStyle(
@@ -2754,6 +3055,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   ),
                                 ],
                               ),
+                              ),
                             ),
                           );
                         },
@@ -2766,8 +3068,71 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: Colors.white,
                 border: Border(top: BorderSide(color: Colors.grey.shade300)),
               ),
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (_replyTo != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
+                      decoration: BoxDecoration(
+                        color: kNyqSand,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Replying: ${(_replyTo!['text'] ?? '').toString()}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade700),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 16),
+                            onPressed: () =>
+                                setState(() => _replyTo = null),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_showEmoji)
+                    SizedBox(
+                      height: 118,
+                      child: GridView.count(
+                        crossAxisCount: 8,
+                        children: [
+                          for (final e in kChatEmojis)
+                            InkWell(
+                              onTap: () {
+                                _textController.text += e;
+                                _textController.selection =
+                                    TextSelection.fromPosition(
+                                        TextPosition(
+                                            offset: _textController
+                                                .text.length));
+                              },
+                              child: Center(
+                                  child: Text(e,
+                                      style: const TextStyle(
+                                          fontSize: 22))),
+                            ),
+                        ],
+                      ),
+                    ),
+                  Row(
+                children: [
+                  IconButton(
+                    icon: Icon(_showEmoji
+                        ? Icons.keyboard_outlined
+                        : Icons.emoji_emotions_outlined),
+                    color: kNyqAccent,
+                    onPressed: () =>
+                        setState(() => _showEmoji = !_showEmoji),
+                  ),
                   Expanded(
                     child: TextField(
                       controller: _textController,
@@ -2792,9 +3157,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                 ],
+                  ),
+                ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -6286,6 +6653,179 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+class ChangePasswordScreen extends StatefulWidget {
+  final Map<String, dynamic> currentUser;
+  final VoidCallback onDone;
+  const ChangePasswordScreen(
+      {super.key, required this.currentUser, required this.onDone});
+
+  @override
+  State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
+}
+
+class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
+  final _pass = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _pass.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final p = _pass.text;
+    if (p.length < 6) {
+      setState(() => _error = 'Password must be at least 6 characters');
+      return;
+    }
+    if (p != _confirm.text) {
+      setState(() => _error = 'Passwords do not match');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final user = await UserSession.load();
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/auth/me/password'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+        body: jsonEncode(
+            {'current_password': 'guest123', 'new_password': p}),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('user_must_change_password', false);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Password updated'),
+              backgroundColor: kNyqGreen),
+        );
+        widget.onDone();
+        return;
+      }
+      String msg = 'Could not update password';
+      try {
+        msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+      } catch (_) {}
+      setState(() {
+        _error = msg;
+        _saving = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'Network error. Please try again.';
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        backgroundColor: kNyqSand,
+        appBar: AppBar(
+          title: const Text('Set Your Password'),
+          backgroundColor: kNyqAccent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+        ),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_reset, size: 56, color: kNyqAccent),
+                const SizedBox(height: 12),
+                Text(
+                  'Welcome, ${widget.currentUser['name'] ?? ''}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Your account was created for you. Choose your own password to continue.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 13, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _pass,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                      labelText: 'New Password',
+                      border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Colors.white),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _confirm,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                      labelText: 'Confirm New Password',
+                      border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Colors.white),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(_error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w600)),
+                ],
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kNyqGreen,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: _saving ? null : _submit,
+                    child: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Text('Save Password',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
 
@@ -6410,6 +6950,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget build(BuildContext context) {
     if (_loadingUser) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final mustChangePassword = _currentUser != null &&
+        (_currentUser!['must_change_password'] == 1 ||
+            _currentUser!['must_change_password'] == true);
+    if (mustChangePassword) {
+      return ChangePasswordScreen(
+        currentUser: _currentUser!,
+        onDone: _refreshUser,
+      );
     }
 
 
@@ -6679,6 +7229,8 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                                             (item['shop_name'] ?? 'Seller')
                                                 .toString(),
                                         shopId: item['merchant_id'],
+                                        productId:
+                                            (item['id'] as num?)?.toInt(),
                                       ),
                                     ),
                                   );
@@ -7773,14 +8325,73 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                         ).timeout(const Duration(seconds: 10));
                         if (!dialogCtx.mounted) return;
                         if (res.statusCode >= 200 && res.statusCode < 300) {
+                          Map<String, dynamic> added = {};
+                          try {
+                            final body = jsonDecode(res.body);
+                            added = Map<String, dynamic>.from(
+                                (body['employee'] ?? body) as Map);
+                          } catch (_) {}
+                          final temp = added['temp_password']?.toString();
                           Navigator.pop(dialogCtx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('${nameCtl.text.trim()} added'),
-                              backgroundColor: kNyqGreen,
-                            ),
-                          );
                           await _load();
+                          if (!mounted) return;
+                          if (temp != null && temp.isNotEmpty) {
+                            await showDialog<void>(
+                              context: context,
+                              builder: (c) => AlertDialog(
+                                backgroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(24)),
+                                title: const Text('Employee Added'),
+                                content: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Temporary Password:',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13)),
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: kNyqSand,
+                                        borderRadius:
+                                            BorderRadius.circular(10),
+                                      ),
+                                      child: SelectableText(temp,
+                                          style: const TextStyle(
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 1.5)),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    const Text(
+                                        'Please share this with them so they can log in and change it.',
+                                        style: TextStyle(fontSize: 12)),
+                                  ],
+                                ),
+                                actions: [
+                                  FilledButton(
+                                      style: FilledButton.styleFrom(
+                                          backgroundColor: kNyqGreen),
+                                      onPressed: () => Navigator.pop(c),
+                                      child: const Text('Got it')),
+                                ],
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content:
+                                    Text('${nameCtl.text.trim()} added'),
+                                backgroundColor: kNyqGreen,
+                              ),
+                            );
+                          }
                         } else {
                           setDialogState(() => saving = false);
                           String msg = 'Could not add employee';
@@ -10601,6 +11212,7 @@ class ProductDetailScreen extends StatelessWidget {
                         otherUserId: sellerUserId!,
                         otherUserName: product['shop_name'] ?? 'Seller',
                         shopId: product['merchant_id'],
+                        productId: (product['id'] as num?)?.toInt(),
                         initialMessage:
                             'Hi, I would like to negotiate the price of this item.',
                       ),
