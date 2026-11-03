@@ -9725,6 +9725,24 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
 
     if (!mounted) return;
 
+    double? agreedOffer;
+    try {
+      final u = await UserSession.load();
+      final res = await http.get(
+        Uri.parse('$baseUrl/products/${product['id']}/my-offer'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${u?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final o = jsonDecode(res.body)['offer'];
+        if (o is Map && o['amount_sle'] != null) {
+          agreedOffer = (o['amount_sle'] as num).toDouble();
+        }
+      }
+    } catch (_) {}
+
     String paymentMethod = 'cash_on_delivery';
     String shopPaymentMethod = 'orange_money';
     String workerPaymentMethod = 'cash_on_delivery';
@@ -9732,7 +9750,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     final deliveryController = TextEditingController();
     final offerController = TextEditingController(text: '25');
     final agreedController = TextEditingController(
-        text: (product['price_sle'] ?? '').toString());
+        text: (agreedOffer ?? (product['price_sle'] ?? 0)).toString());
 
     showDialog(
       context: context,
@@ -9810,10 +9828,23 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
               TextField(
                 controller: agreedController,
                 keyboardType: TextInputType.number,
+                readOnly: agreedOffer != null,
                 onChanged: (_) => setDialogState(() {}),
                 decoration: InputDecoration(
                   labelText: 'Agreed Price (SLE)',
-                  helperText: 'Change this if you agreed a deal in chat',
+                  helperText: agreedOffer != null
+                      ? 'You agreed to SLE ${agreedOffer.toStringAsFixed(0)} in chat with the seller.'
+                      : 'Change this if you agreed a deal in chat',
+                  helperMaxLines: 2,
+                  helperStyle: agreedOffer != null
+                      ? const TextStyle(
+                          color: kNyqGreen,
+                          fontWeight: FontWeight.w600)
+                      : null,
+                  suffixIcon: agreedOffer != null
+                      ? const Icon(Icons.lock_outline,
+                          size: 18, color: kNyqGreen)
+                      : null,
                   filled: true,
                   fillColor: const Color(0xFFF5F5F5),
                   border: OutlineInputBorder(
@@ -11639,6 +11670,24 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     }
     if (!mounted) return;
 
+    double? agreedOffer;
+    try {
+      final u = await UserSession.load();
+      final res = await http.get(
+        Uri.parse('$baseUrl/products/${product['id']}/my-offer'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${u?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final o = jsonDecode(res.body)['offer'];
+        if (o is Map && o['amount_sle'] != null) {
+          agreedOffer = (o['amount_sle'] as num).toDouble();
+        }
+      }
+    } catch (_) {}
+
     String paymentMethod = 'cash_on_delivery';
     String shopPaymentMethod = 'orange_money';
     String workerPaymentMethod = 'cash_on_delivery';
@@ -11646,7 +11695,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     final deliveryController = TextEditingController();
     final offerController = TextEditingController(text: '25');
     final agreedController = TextEditingController(
-        text: (product['price_sle'] ?? '').toString());
+        text: (agreedOffer ?? (product['price_sle'] ?? 0)).toString());
 
     showDialog(
       context: context,
@@ -11724,10 +11773,23 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               TextField(
                 controller: agreedController,
                 keyboardType: TextInputType.number,
+                readOnly: agreedOffer != null,
                 onChanged: (_) => setDialogState(() {}),
                 decoration: InputDecoration(
                   labelText: 'Agreed Price (SLE)',
-                  helperText: 'Change this if you agreed a deal in chat',
+                  helperText: agreedOffer != null
+                      ? 'You agreed to SLE ${agreedOffer.toStringAsFixed(0)} in chat with the seller.'
+                      : 'Change this if you agreed a deal in chat',
+                  helperMaxLines: 2,
+                  helperStyle: agreedOffer != null
+                      ? const TextStyle(
+                          color: kNyqGreen,
+                          fontWeight: FontWeight.w600)
+                      : null,
+                  suffixIcon: agreedOffer != null
+                      ? const Icon(Icons.lock_outline,
+                          size: 18, color: kNyqGreen)
+                      : null,
                   filled: true,
                   fillColor: const Color(0xFFF5F5F5),
                   border: OutlineInputBorder(
