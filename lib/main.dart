@@ -6428,7 +6428,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     return Stack(
       children: [
-        Scaffold(
+        PopScope(
+          canPop: safeIndex == 0,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            setState(() => _currentIndex = 0);
+          },
+          child: Scaffold(
       body: KenteBackground(
         child: IndexedStack(index: safeIndex, children: screens),
       ),
@@ -6458,6 +6464,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               label: 'Profile'),
         ],
           ),
+        ),
         ),
         ),
         ),
@@ -6688,7 +6695,7 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                                     const Icon(Icons.chat_bubble_outline,
                                         size: 18, color: Colors.white),
                                     const SizedBox(width: 8),
-                                    const Text('Message Seller',
+                                    const Text('Message & Buy',
                                         style: TextStyle(
                                             color: Colors.white,
                                             fontWeight: FontWeight.w600)),
@@ -9680,6 +9687,45 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                       ],
                     ),
                   ),
+                if ((shop['owner_user_id'] ?? 0) != 0 &&
+                    shop['owner_user_id'] != widget.currentUser?['id'])
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _headerTextColour == Colors.white
+                              ? kNyqGreen
+                              : Colors.white,
+                          foregroundColor: _headerTextColour == Colors.white
+                              ? Colors.white
+                              : kNyqGreen,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                otherUserId:
+                                    (shop['owner_user_id'] as num).toInt(),
+                                otherUserName:
+                                    (shop['shop_name'] ?? 'Shop').toString(),
+                                shopId: shop['id'],
+                                initialMessage:
+                                    'Hi, I would like to ask about your products.',
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                        label: const Text('Message & Buy'),
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 if (shop['city'] != null)
                   Row(
@@ -10547,7 +10593,7 @@ class ProductDetailScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                   ),
                   icon: const Icon(Icons.chat_bubble_outline),
-                  label: const Text('Negotiate'),
+                  label: const Text('Message & Buy'),
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
