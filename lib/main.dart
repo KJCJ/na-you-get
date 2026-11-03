@@ -5396,7 +5396,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => ShopPageScreen(
+                          builder: (_) => ShopManagementScreen(
                             shop: shopMap,
                             currentUser: widget.currentUser,
                             onUserChanged: widget.onUserChanged,
@@ -6797,16 +6797,231 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
 // ==========================================
 // SHOP PAGE — PUBLIC VIEW
 // ==========================================
+class ShopManagementScreen extends StatefulWidget {
+  final Map<String, dynamic> shop;
+  final Map<String, dynamic>? currentUser;
+  final VoidCallback? onUserChanged;
+
+  const ShopManagementScreen({
+    super.key,
+    required this.shop,
+    this.currentUser,
+    this.onUserChanged,
+  });
+
+  @override
+  State<ShopManagementScreen> createState() => _ShopManagementScreenState();
+}
+
+class _ShopManagementScreenState extends State<ShopManagementScreen> {
+  late Map<String, dynamic> shop;
+  int _products = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    shop = Map<String, dynamic>.from(widget.shop);
+    _products = (shop['product_count'] as num?)?.toInt() ?? 0;
+    _refresh();
+  }
+
+  String get _initial {
+    final n = (shop['shop_name'] ?? '').toString().trim();
+    return n.isEmpty ? '?' : n[0].toUpperCase();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/merchants/${shop['id']}'))
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body);
+        final fresh = Map<String, dynamic>.from(data['merchant'] ?? data);
+        if (!mounted) return;
+        setState(() {
+          shop = fresh;
+          _products = (fresh['product_count'] as num?)?.toInt() ?? _products;
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _openShop({String? action}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShopPageScreen(
+          shop: shop,
+          currentUser: widget.currentUser,
+          onUserChanged: widget.onUserChanged,
+          openAction: action,
+        ),
+      ),
+    ).then((_) => _refresh());
+  }
+
+  Widget _stat(String value, String label, Color colour) => Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFEFE9E0)),
+          ),
+          child: Column(
+            children: [
+              Text(value,
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: colour)),
+              const SizedBox(height: 2),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey.shade600)),
+            ],
+          ),
+        ),
+      );
+
+  Widget _actionCard(IconData icon, String title, String subtitle,
+          VoidCallback onTap) =>
+      Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEFE9E0)),
+        ),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          leading: Icon(icon, color: kNyqAccent),
+          title: Text(title,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w700, fontSize: 14)),
+          subtitle: Text(subtitle,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          trailing: const Icon(Icons.chevron_right,
+              size: 18, color: Color(0xFFB0A89F)),
+          onTap: onTap,
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final logo = (shop['logo_url'] ?? '').toString().trim();
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: const Text('Manage Shop'),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        children: [
+          Row(
+            children: [
+              ClipOval(
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  color: kNyqAccent,
+                  child: logo.isEmpty
+                      ? Center(
+                          child: Text(_initial,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold)),
+                        )
+                      : Image.network(
+                          logo,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Center(
+                            child: Text(_initial,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text((shop['shop_name'] ?? 'Shop').toString(),
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w800)),
+                    Text((shop['city'] ?? '').toString(),
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              _stat('SLE 0', 'Sales', kNyqGreen),
+              const SizedBox(width: 8),
+              _stat('$_products', 'Products', kNyqAccent),
+              const SizedBox(width: 8),
+              _stat('0', 'Employees', kNyqOchre),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _actionCard(Icons.storefront, 'View Public Shop',
+              'See what customers see', () => _openShop()),
+          _actionCard(Icons.inventory_2_outlined, 'Manage Products',
+              'Add, edit and remove items', () => _openShop()),
+          _actionCard(Icons.groups_outlined, 'Manage Employees',
+              'Clock-in and staff records', () {
+            showDialog<void>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24)),
+                title: const Text('Coming soon'),
+                content: const Text(
+                    'Employee management and clock-in is being built. Your shop is ready for it.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('OK')),
+                ],
+              ),
+            );
+          }),
+          _actionCard(Icons.settings_outlined, 'Settings',
+              'Edit shop details and branding',
+              () => _openShop(action: 'settings')),
+        ],
+      ),
+    );
+  }
+}
+
 class ShopPageScreen extends StatefulWidget {
   final Map<String, dynamic> shop;
   final Map<String, dynamic>? currentUser;
   final VoidCallback? onUserChanged;
+  final String? openAction;
 
   const ShopPageScreen({
     super.key,
     required this.shop,
     this.currentUser,
     this.onUserChanged,
+    this.openAction,
   });
 
   @override
@@ -6827,6 +7042,11 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     if (_currentUser == null) _loadUser();
     _fetchProducts();
     _refreshShop();
+    if (widget.openAction == 'settings') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showEditShopDialog();
+      });
+    }
   }
 
   Future<void> _loadUser() async {
