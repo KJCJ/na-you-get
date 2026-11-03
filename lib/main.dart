@@ -7329,65 +7329,74 @@ class _ProductFeedCardState extends State<ProductFeedCard> {
                   Row(
                     children: [
                       Expanded(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [kNyqAccent, kNyqAccentDeep],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: kNyqAccent.withAlpha(85),
-                                blurRadius: 14,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () {
-                                final sid = item['seller_user_id'];
-                                if (sid is num) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => ChatScreen(
-                                        otherUserId: sid.toInt(),
-                                        otherUserName:
-                                            (item['shop_name'] ?? 'Seller')
-                                                .toString(),
-                                        shopId: item['merchant_id'],
-                                        productId:
-                                            (item['id'] as num?)?.toInt(),
-                                      ),
-                                    ),
-                                  );
-                                } else if (widget.onOpen != null) {
-                                  widget.onOpen!(item);
-                                }
-                              },
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.chat_bubble_outline,
-                                        size: 18, color: Colors.white),
-                                    const SizedBox(width: 8),
-                                    const Text('Message & Buy',
-                                        style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600)),
-                                  ],
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: kNyqAccent,
+                                  side: BorderSide(
+                                      color: kNyqAccent.withValues(
+                                          alpha: 0.45)),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(12)),
                                 ),
+                                icon: const Icon(
+                                    Icons.chat_bubble_outline,
+                                    size: 16),
+                                label: const Text('Negotiate',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12)),
+                                onPressed: () {
+                                  final sid = item['seller_user_id'];
+                                  if (sid is num) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ChatScreen(
+                                          otherUserId: sid.toInt(),
+                                          otherUserName:
+                                              (item['shop_name'] ??
+                                                      'Seller')
+                                                  .toString(),
+                                          shopId: item['merchant_id'],
+                                          productId: (item['id'] as num?)
+                                              ?.toInt(),
+                                        ),
+                                      ),
+                                    );
+                                  } else if (widget.onOpen != null) {
+                                    widget.onOpen!(item);
+                                  }
+                                },
                               ),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: kNyqAccent,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(12)),
+                                ),
+                                icon: const Icon(Icons.shopping_cart,
+                                    size: 16),
+                                label: const Text('Buy Now',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12)),
+                                onPressed: () => widget.onBuy(item),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       if (widget.onEdit != null) ...[
