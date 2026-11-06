@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -80,6 +81,52 @@ Future<String?> pickAndUploadImage(BuildContext context) async {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Cannot pick image: $e')),
       );
+    }
+    return null;
+  }
+}
+
+/// Uploads an ID/selfie photo to the private KYC store.
+/// Gallery on web, camera on Android. Returns the opaque image id.
+Future<String?> uploadKycImage(BuildContext context) async {
+  final picker = ImagePicker();
+  try {
+    final source = kIsWeb ? ImageSource.gallery : ImageSource.camera;
+    final XFile? picked = await picker.pickImage(
+      source: source,
+      maxWidth: 1400,
+      maxHeight: 1400,
+      imageQuality: 85,
+    );
+    if (picked == null) return null;
+
+    final user = await UserSession.load();
+    final request =
+        http.MultipartRequest('POST', Uri.parse('$baseUrl/kyc/upload'));
+    request.headers['x-api-key'] = apiKey;
+    request.headers['Authorization'] = 'Bearer ${user?['token'] ?? ''}';
+    final bytes = await picked.readAsBytes();
+    request.files.add(http.MultipartFile.fromBytes('file', bytes,
+        filename: 'id.jpg'));
+
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return jsonDecode(body)['image_id']?.toString();
+    }
+    if (context.mounted) {
+      String msg = 'Upload failed. Try again.';
+      try {
+        msg = (jsonDecode(body)['detail'] ?? msg).toString();
+      } catch (_) {}
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red.shade700),
+      );
+    }
+    return null;
+  } catch (e) {
+    if (context.mounted) {
+      showNetworkError(context, 'your ID photo');
     }
     return null;
   }
@@ -5596,6 +5643,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isOnline = false;
   bool _isWorker = false;
 
+  Future<void> _loadKycBadge() async {
+    try {
+      final user = await UserSession.load();
+      final res = await http.get(
+        Uri.parse('$baseUrl/kyc/mine'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final list = jsonDecode(res.body) as List;
+        final n = list.where((r) {
+          final m = Map<String, dynamic>.from(r as Map);
+          return (m['status'] ?? '') == 'requested';
+        }).length;
+        if (mounted) setState(() => _kycRequests = n);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _openKycRequests() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const KycRequestsScreen()),
+    );
+    _loadKycBadge();
+  }
+
   bool get _isSellerUser => isSeller(widget.currentUser);
 
   String? get _pendingRole {
@@ -5635,6 +5711,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool get _isRunnerUser => isRunner(widget.currentUser);
 
   List<dynamic> _shops = [];
+  int _kycRequests = 0;
 
   @override
   void initState() {
@@ -5646,6 +5723,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _isWorker = isRunner(u);
     }
     _load();
+    _loadKycBadge();
     // Pull fresh roles from the server so admin approvals show up immediately.
     widget.onUserChanged();
   }
@@ -6104,6 +6182,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     MaterialPageRoute(
                         builder: (_) => const AdminDashboardScreen()),
                   ),
+                ),
+              ),
+            ],
+            if (_kycRequests > 0) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 4),
+                  leading:
+                      const Icon(Icons.badge_outlined, color: Colors.red),
+                  title: const Text('Action Required',
+                      style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15)),
+                  subtitle: Text(
+                    _kycRequests == 1
+                        ? 'Upload your ID for your employer'
+                        : 'Upload your ID ($_kycRequests requests)',
+                    style:
+                        TextStyle(color: Colors.red.shade700, fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right,
+                      color: Colors.red, size: 18),
+                  onTap: _openKycRequests,
                 ),
               ),
             ],
@@ -9839,6 +9949,420 @@ class _ReceiveShipmentScreenState extends State<ReceiveShipmentScreen> {
                 ),
               ),
             ),
+    );
+  }
+}
+
+// ==========================================
+// KYC (EMPLOYEE SIDE)
+// ==========================================
+class KycRequestsScreen extends StatefulWidget {
+  const KycRequestsScreen({super.key});
+
+  @override
+  State<KycRequestsScreen> createState() => _KycRequestsScreenState();
+}
+
+class _KycRequestsScreenState extends State<KycRequestsScreen> {
+  List<dynamic> _rows = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final user = await UserSession.load();
+      final res = await http.get(
+        Uri.parse('$baseUrl/kyc/mine'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        if (mounted) {
+          setState(() {
+            _rows = jsonDecode(res.body) as List;
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'your ID requests');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Color _chip(String s) {
+    switch (s) {
+      case 'submitted':
+        return kNyqGreen;
+      case 'declined':
+        return Colors.grey;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return kNyqOchre;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: const Text('Identity Verification'),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _rows.isEmpty
+              ? EmptyState(
+                  icon: Icons.badge_outlined,
+                  title: 'Nothing to upload',
+                  message: 'No employer has asked for your ID.',
+                  actionLabel: 'Back',
+                  onAction: () => Navigator.pop(context),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: _rows.map((raw) {
+                    final r = Map<String, dynamic>.from(raw as Map);
+                    final status = (r['status'] ?? '').toString();
+                    final company =
+                        (r['company_name'] ?? 'Your employer').toString();
+                    final done = status != 'requested';
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFEFE9E0)),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                        leading: Icon(Icons.badge_outlined,
+                            color: done ? Colors.grey : kNyqAccent),
+                        title: Text(company,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 14)),
+                        subtitle: Text(
+                          done ? 'Status: $status' : 'This employer has asked to see your ID',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: _chip(status),
+                              fontWeight: FontWeight.w600),
+                        ),
+                        trailing: done
+                            ? null
+                            : const Icon(Icons.chevron_right,
+                                color: kNyqAccent),
+                        onTap: done
+                            ? null
+                            : () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => KycUploadScreen(
+                                      kycId: (r['id'] as num).toInt(),
+                                      companyName: company,
+                                    ),
+                                  ),
+                                );
+                                _load();
+                              },
+                      ),
+                    );
+                  }).toList(),
+                ),
+    );
+  }
+}
+
+class KycUploadScreen extends StatefulWidget {
+  final int kycId;
+  final String companyName;
+  const KycUploadScreen(
+      {super.key, required this.kycId, required this.companyName});
+
+  @override
+  State<KycUploadScreen> createState() => _KycUploadScreenState();
+}
+
+class _KycUploadScreenState extends State<KycUploadScreen> {
+  final _idNumber = TextEditingController();
+  final _fullName = TextEditingController();
+  String _idType = 'nin';
+  String? _front;
+  String? _back;
+  String? _selfie;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _idNumber.dispose();
+    _fullName.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pick(String slot) async {
+    final id = await uploadKycImage(context);
+    if (id == null || !mounted) return;
+    setState(() {
+      if (slot == 'front') _front = id;
+      if (slot == 'back') _back = id;
+      if (slot == 'selfie') _selfie = id;
+    });
+  }
+
+  Future<void> _submit() async {
+    if (_front == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Add a photo of the front of your ID')),
+      );
+      return;
+    }
+    if (_idNumber.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter your ID number')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final user = await UserSession.load();
+      final res = await http.post(
+        Uri.parse('$baseUrl/kyc/submit'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+        body: jsonEncode({
+          'id_type': _idType,
+          'id_number': _idNumber.text.trim(),
+          'full_name_on_id': _fullName.text.trim(),
+          'front_image_id': _front,
+          'back_image_id': _back,
+          'selfie_image_id': _selfie,
+        }),
+      ).timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('ID sent to your employer'),
+              backgroundColor: kNyqGreen),
+        );
+      } else {
+        setState(() => _saving = false);
+        String msg = 'Could not submit your ID';
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.red.shade700),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saving = false);
+        showNetworkError(context, 'your ID');
+      }
+    }
+  }
+
+  Future<void> _decline() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Not now?'),
+        content: Text(
+            '${widget.companyName} will be told you did not share your ID.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Not now',
+                  style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final user = await UserSession.load();
+      final res = await http.post(
+        Uri.parse('$baseUrl/kyc/${widget.kycId}/decline'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You did not share your ID')),
+        );
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'your request');
+    }
+  }
+
+  Widget _tile(String label, String? id, String slot, IconData icon) {
+    final done = id != null;
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: _saving ? null : () => _pick(slot),
+        child: Container(
+          height: 96,
+          decoration: BoxDecoration(
+            color: done ? kNyqGreen.withValues(alpha: 0.08) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: done ? kNyqGreen : const Color(0xFFE0DAD2)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(done ? Icons.check_circle : icon,
+                  color: done ? kNyqGreen : Colors.grey.shade400, size: 24),
+              const SizedBox(height: 6),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: done ? kNyqGreen : Colors.grey.shade600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: const Text('Verify Your Identity'),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kNyqAccent.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Requested by',
+                    style: TextStyle(fontSize: 11, color: kNyqAccent)),
+                Text(widget.companyName,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 15)),
+                const SizedBox(height: 4),
+                Text(
+                    'They will see your ID photo. It is not public and is never shown on your profile.',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade700)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _idType,
+            decoration: const InputDecoration(
+                labelText: 'ID type', border: OutlineInputBorder()),
+            items: const [
+              DropdownMenuItem(value: 'nin', child: Text('National ID (NIN)')),
+              DropdownMenuItem(
+                  value: 'passport', child: Text('Passport')),
+              DropdownMenuItem(
+                  value: 'licence', child: Text('Driving Licence')),
+            ],
+            onChanged: (v) => setState(() => _idType = v ?? 'nin'),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _idNumber,
+            decoration: const InputDecoration(
+                labelText: 'ID number', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _fullName,
+            decoration: const InputDecoration(
+                labelText: 'Name as written on the ID',
+                border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _tile('Front', _front, 'front', Icons.add_a_photo_outlined),
+              const SizedBox(width: 10),
+              _tile('Back', _back, 'back', Icons.add_a_photo_outlined),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _tile('Selfie', _selfie, 'selfie', Icons.face_outlined),
+              const SizedBox(width: 10),
+              const Expanded(child: SizedBox()),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _saving ? null : _decline,
+                  child: const Text('Not now'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  style:
+                      FilledButton.styleFrom(backgroundColor: kNyqGreen),
+                  onPressed: _saving ? null : _submit,
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Text('Submit'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
