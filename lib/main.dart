@@ -9360,6 +9360,128 @@ class _ReceiveShipmentScreenState extends State<ReceiveShipmentScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
+  Future<void> _requestDelivery() async {
+    final s = _s;
+    if (s == null) return;
+    final feeCtl = TextEditingController();
+    final addrCtl = TextEditingController();
+    bool sending = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24)),
+          title: const Text('Request Delivery to Shop'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                  'A job worker will pick the shipment up and bring it to you. You pay them on delivery.',
+                  style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: addrCtl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                    labelText: 'Shop address',
+                    border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: feeCtl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                    labelText: 'Delivery offer (SLE)',
+                    border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: sending ? null : () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: kNyqGreen),
+              onPressed: sending
+                  ? null
+                  : () async {
+                      final fee = double.tryParse(feeCtl.text.trim());
+                      if (fee == null || fee <= 0) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                              content: Text('Enter a delivery offer')),
+                        );
+                        return;
+                      }
+                      if (addrCtl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                              content: Text('Enter your shop address')),
+                        );
+                        return;
+                      }
+                      setDialogState(() => sending = true);
+                      final hdrs = await _headers();
+                      try {
+                        final res = await http.post(
+                          Uri.parse(
+                              '$baseUrl/shipments/${widget.shipmentId}/request-delivery'),
+                          headers: hdrs,
+                          body: jsonEncode({
+                            'offer_sle': fee,
+                            'shop_address': addrCtl.text.trim(),
+                          }),
+                        ).timeout(const Duration(seconds: 10));
+                        if (!dialogCtx.mounted) return;
+                        if (res.statusCode >= 200 && res.statusCode < 300) {
+                          Navigator.pop(dialogCtx);
+                          await _load();
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Delivery requested'),
+                                backgroundColor: kNyqGreen),
+                          );
+                        } else {
+                          setDialogState(() => sending = false);
+                          String msg = 'Could not request delivery';
+                          try {
+                            msg =
+                                (jsonDecode(res.body)['detail'] ?? msg)
+                                    .toString();
+                          } catch (_) {}
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                                content: Text(msg),
+                                backgroundColor: Colors.red),
+                          );
+                        }
+                      } catch (_) {
+                        if (!dialogCtx.mounted) return;
+                        setDialogState(() => sending = false);
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('Network error')),
+                        );
+                      }
+                    },
+              child: sending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Request'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _save({bool finalise = false}) async {
     if (_s == null) return;
     if (finalise) {
@@ -9451,6 +9573,53 @@ class _ReceiveShipmentScreenState extends State<ReceiveShipmentScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
               children: [
+                if ((s['delivery_status'] ?? '').toString().isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: kNyqAccent.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.local_shipping,
+                            size: 18, color: kNyqAccent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            (s['delivery_status'] ?? '').toString(),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: kNyqAccent),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (widget.canReceive &&
+                    (s['delivery_status'] ?? '').toString().isEmpty &&
+                    s['status'] != 'Received' &&
+                    s['receiver_shop_id'] != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: kNyqAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.local_shipping, size: 18),
+                        label: const Text('Request Delivery to Shop'),
+                        onPressed: _requestDelivery,
+                      ),
+                    ),
+                  ),
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -13267,6 +13436,29 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  if (job['shipment_id'] != null) ...[
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.local_shipping,
+                                            size: 18, color: kNyqOchre),
+                                        const SizedBox(width: 6),
+                                        Text('SHIPMENT ${job['shipment_tracking'] ?? ''}',
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w800,
+                                                color: kNyqOchre,
+                                                letterSpacing: 0.5)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Pick up shipment from ${job['shipment_origin'] ?? 'abroad'} and deliver to ${job['shipment_receiver_name'] ?? 'the shop'}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 4),
+                                  ],
                                   Row(
                                     children: [
                                       const Icon(Icons.work_outline,
