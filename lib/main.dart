@@ -87,9 +87,9 @@ Future<String?> pickAndUploadImage(BuildContext context) async {
   }
 }
 
-/// True when the signed-in user has a PLATFORM KYC on file (company_id null).
-/// An employer-held ID does not count.
-Future<bool> hasPlatformKyc() async {
+/// The signed-in user's PLATFORM KYC status: approved | submitted |
+/// rejected | none. An employer-held ID does not count.
+Future<String> platformKycStatus() async {
   try {
     final user = await UserSession.load();
     final res = await http.get(
@@ -101,15 +101,21 @@ Future<bool> hasPlatformKyc() async {
     ).timeout(const Duration(seconds: 8));
     if (res.statusCode >= 200 && res.statusCode < 300) {
       final list = jsonDecode(res.body) as List;
-      return list.any((r) {
+      for (final r in list) {
         final m = Map<String, dynamic>.from(r as Map);
-        final st = (m['status'] ?? '').toString();
-        return m['company_id'] == null &&
-            (st == 'submitted' || st == 'approved');
-      });
+        if (m['company_id'] == null) {
+          return (m['status'] ?? 'none').toString();
+        }
+      }
+      return 'none';
     }
   } catch (_) {}
-  return false;
+  return 'none';
+}
+
+/// Only an APPROVED platform ID unlocks applications.
+Future<bool> hasPlatformKyc() async {
+  return (await platformKycStatus()) == 'approved';
 }
 
 /// The "Identity Verification (Required)" panel used by every application form.
@@ -124,7 +130,7 @@ class KycGate extends StatefulWidget {
 }
 
 class _KycGateState extends State<KycGate> {
-  bool? _ok;
+  String? _status;
   bool _busy = false;
 
   @override
@@ -134,10 +140,10 @@ class _KycGateState extends State<KycGate> {
   }
 
   Future<void> _check() async {
-    final v = await hasPlatformKyc();
+    final s = await platformKycStatus();
     if (!mounted) return;
-    setState(() => _ok = v);
-    widget.onChanged?.call(v);
+    setState(() => _status = s);
+    widget.onChanged?.call(s == 'approved');
   }
 
   Future<void> _upload() async {
@@ -147,14 +153,14 @@ class _KycGateState extends State<KycGate> {
     if (!mounted) return;
     setState(() {
       _busy = false;
-      _ok = null;
+      _status = null;
     });
     await _check();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_ok == null || _busy) {
+    if (_status == null || _busy) {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -176,30 +182,46 @@ class _KycGateState extends State<KycGate> {
         ),
       );
     }
-    return kycRequirementBlock(context, _ok!, _upload);
+    return kycRequirementBlock(context, _status!, _upload);
   }
 }
 
 Widget kycRequirementBlock(
-    BuildContext context, bool ok, Future<void> Function() onUpload) {
+    BuildContext context, String status, Future<void> Function() onUpload) {
+  final approved = status == 'approved';
+  final underReview = status == 'submitted';
+  final ok = approved;
   return Container(
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: ok
+      color: approved
           ? kNyqGreen.withValues(alpha: 0.08)
-          : Colors.orange.shade50,
+          : (underReview ? Colors.grey.shade100 : Colors.orange.shade50),
       borderRadius: BorderRadius.circular(12),
       border: Border.all(
-          color: ok ? kNyqGreen : Colors.orange.shade300),
+          color: approved
+              ? kNyqGreen
+              : (underReview
+                  ? Colors.grey.shade400
+                  : Colors.orange.shade300)),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(ok ? Icons.verified : Icons.badge_outlined,
+            Icon(
+                approved
+                    ? Icons.verified
+                    : (underReview
+                        ? Icons.hourglass_top
+                        : Icons.badge_outlined),
                 size: 16,
-                color: ok ? kNyqGreen : Colors.orange.shade900),
+                color: approved
+                    ? kNyqGreen
+                    : (underReview
+                        ? Colors.grey.shade700
+                        : Colors.orange.shade900)),
             const SizedBox(width: 6),
             const Text('Identity Verification (Required)',
                 style: TextStyle(
@@ -208,12 +230,18 @@ Widget kycRequirementBlock(
         ),
         const SizedBox(height: 4),
         Text(
-          ok
-              ? 'ID submitted'
-              : 'Upload your ID before we can review your application.',
+          approved
+              ? 'ID verified'
+              : (underReview
+                  ? 'Under review - NYG is checking your ID.'
+                  : 'Upload your ID before we can review your application.'),
           style: TextStyle(
               fontSize: 11,
-              color: ok ? kNyqGreen : Colors.orange.shade900),
+              color: approved
+                  ? kNyqGreen
+                  : (underReview
+                      ? Colors.grey.shade700
+                      : Colors.orange.shade900)),
         ),
         if (!ok) ...[
           const SizedBox(height: 8),
@@ -226,7 +254,7 @@ Widget kycRequirementBlock(
               ),
               icon: const Icon(Icons.badge_outlined, size: 16),
               label: const Text('Upload ID Now'),
-              onPressed: () => onUpload(),
+              onPressed: underReview ? null : () => onUpload(),
             ),
           ),
         ],
@@ -4377,7 +4405,7 @@ class AdminDashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Admin Dashboard'),
@@ -4388,6 +4416,7 @@ class AdminDashboardScreen extends StatelessWidget {
               Tab(text: 'Users', icon: Icon(Icons.people_outline)),
               Tab(text: 'Invoices', icon: Icon(Icons.receipt_long)),
           Tab(text: 'Companies', icon: Icon(Icons.business_outlined)),
+              Tab(text: 'KYC', icon: Icon(Icons.badge_outlined)),
               Tab(text: 'Overview', icon: Icon(Icons.insights_outlined)),
             ],
           ),
@@ -4397,6 +4426,7 @@ class AdminDashboardScreen extends StatelessWidget {
             AdminUsersScreen(embedded: true),
             InvoicesScreen(isAdmin: true, embedded: true),
           AdminCompaniesScreen(embedded: true),
+            AdminKycScreen(embedded: true),
             AdminEarningsScreen(embedded: true),
           ],
         ),
@@ -4404,6 +4434,416 @@ class AdminDashboardScreen extends StatelessWidget {
     );
   }
 }
+// ==========================================
+// ADMIN KYC REVIEW
+// ==========================================
+class AdminKycScreen extends StatefulWidget {
+  final bool embedded;
+  const AdminKycScreen({super.key, this.embedded = false});
+
+  @override
+  State<AdminKycScreen> createState() => _AdminKycScreenState();
+}
+
+class _AdminKycScreenState extends State<AdminKycScreen> {
+  List<dynamic> _rows = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    return {
+      'x-api-key': apiKey,
+      'Authorization': 'Bearer ${user?['token'] ?? ''}',
+    };
+  }
+
+  Future<void> _fetch() async {
+    setState(() => _loading = true);
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/admin/kyc'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        if (mounted) {
+          setState(() {
+            _rows = jsonDecode(res.body) as List;
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'KYC submissions');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.badge_outlined,
+                          size: 18, color: kNyqAccent),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                            '${_rows.length} ID(s) waiting for review',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 13)),
+                      ),
+                      IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed: _fetch),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: _rows.isEmpty
+                      ? EmptyState(
+                          icon: Icons.verified_outlined,
+                          title: 'Nothing to review',
+                          message: 'No identity documents are waiting.',
+                          actionLabel: 'Refresh',
+                          onAction: _fetch,
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(10),
+                          itemCount: _rows.length,
+                          itemBuilder: (ctx, i) {
+                            final r =
+                                Map<String, dynamic>.from(_rows[i] as Map);
+                            return Card(
+                              margin: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 4),
+                              child: ListTile(
+                                leading: const CircleAvatar(
+                                  backgroundColor: kNyqAccent,
+                                  child: Icon(Icons.person,
+                                      color: Colors.white, size: 20),
+                                ),
+                                title: Text(
+                                    (r['name'] ?? 'Unknown').toString(),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700)),
+                                subtitle: Text(
+                                  '${r['phone_number']} - ${r['id_type'] ?? 'id'} ${r['id_number'] ?? ''}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () async {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => AdminKycReviewScreen(
+                                        record: r,
+                                      ),
+                                    ),
+                                  );
+                                  _fetch();
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+/// Auth-fetched KYC image, used by both viewer screens.
+class KycImageBlock extends StatefulWidget {
+  final String? imageId;
+  final String label;
+  const KycImageBlock(
+      {super.key, required this.imageId, required this.label});
+
+  @override
+  State<KycImageBlock> createState() => _KycImageBlockState();
+}
+
+class _KycImageBlockState extends State<KycImageBlock> {
+  Uint8List? _bytes;
+  bool _busy = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final id = widget.imageId;
+    if (id == null || id.isEmpty) {
+      setState(() => _busy = false);
+      return;
+    }
+    try {
+      final user = await UserSession.load();
+      final res = await http.get(
+        Uri.parse('$baseUrl/kyc/image/$id'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 20));
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _bytes = (res.statusCode >= 200 && res.statusCode < 300)
+            ? res.bodyBytes
+            : null;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(widget.label,
+            style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: kNyqAccent,
+                letterSpacing: 0.6)),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          height: 210,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE0DAD2)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: _busy
+              ? const Center(
+                  child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2)))
+              : _bytes != null
+                  ? InteractiveViewer(
+                      maxScale: 4,
+                      child: Image.memory(_bytes!,
+                          fit: BoxFit.contain, width: double.infinity),
+                    )
+                  : Center(
+                      child: Text('Not provided',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade500)),
+                    ),
+        ),
+        const SizedBox(height: 14),
+      ],
+    );
+  }
+}
+
+class AdminKycReviewScreen extends StatefulWidget {
+  final Map<String, dynamic> record;
+  const AdminKycReviewScreen({super.key, required this.record});
+
+  @override
+  State<AdminKycReviewScreen> createState() =>
+      _AdminKycReviewScreenState();
+}
+
+class _AdminKycReviewScreenState extends State<AdminKycReviewScreen> {
+  bool _saving = false;
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    return {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'Authorization': 'Bearer ${user?['token'] ?? ''}',
+    };
+  }
+
+  Future<void> _decide(String status, {String? reason}) async {
+    setState(() => _saving = true);
+    try {
+      final res = await http.put(
+        Uri.parse(
+            '$baseUrl/admin/kyc/${widget.record['id']}/decide'),
+        headers: await _headers(),
+        body: jsonEncode({
+          'status': status,
+          if (reason != null) 'reason': reason,
+        }),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(status == 'approved'
+                  ? 'ID approved'
+                  : 'ID rejected'),
+              backgroundColor:
+                  status == 'approved' ? kNyqGreen : Colors.red.shade700),
+        );
+      } else {
+        setState(() => _saving = false);
+        String msg = 'Could not save the decision';
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.red.shade700),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saving = false);
+        showNetworkError(context, 'the decision');
+      }
+    }
+  }
+
+  Future<void> _reject() async {
+    final reasonCtl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Reject this ID?'),
+        content: TextField(
+          controller: reasonCtl,
+          maxLines: 2,
+          decoration: const InputDecoration(
+              labelText: 'Reason (the user will need to resubmit)',
+              border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Reject',
+                  style: TextStyle(color: Colors.red.shade700))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    if (reasonCtl.text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('A reason is required')),
+        );
+      }
+      return;
+    }
+    await _decide('rejected', reason: reasonCtl.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.record;
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: Text((r['name'] ?? 'Review').toString()),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE0DAD2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text((r['full_name_on_id'] ?? 'Not provided').toString(),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 15)),
+                const SizedBox(height: 4),
+                Text(
+                    '${(r['id_type'] ?? 'id').toString().toUpperCase()}  ${r['id_number'] ?? ''}',
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade700)),
+                const SizedBox(height: 2),
+                Text((r['phone_number'] ?? '').toString(),
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade500)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          KycImageBlock(imageId: r['front_image_id']?.toString(), label: 'FRONT'),
+          KycImageBlock(imageId: r['back_image_id']?.toString(), label: 'BACK'),
+          KycImageBlock(imageId: r['selfie_image_id']?.toString(), label: 'SELFIE'),
+          Text(
+            'Opening this document is recorded in the access log.',
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade700,
+                      side: BorderSide(color: Colors.red.shade300)),
+                  onPressed: _saving ? null : _reject,
+                  child: const Text('Reject'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  style:
+                      FilledButton.styleFrom(backgroundColor: kNyqGreen),
+                  onPressed: _saving ? null : () => _decide('approved'),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Text('Approve'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
 class AdminCompaniesScreen extends StatefulWidget {
   final bool embedded;
   const AdminCompaniesScreen({super.key, this.embedded = false});
@@ -5857,13 +6297,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ).timeout(const Duration(seconds: 8));
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final list = jsonDecode(res.body) as List;
-        final n = list.where((r) {
-          final m = Map<String, dynamic>.from(r as Map);
-          return (m['status'] ?? '') == 'requested';
-        }).length;
-        if (mounted) setState(() => _kycRequests = n);
+        var employerRequests = 0;
+        var approvedPlatform = false;
+        var submittedPlatform = false;
+        for (final raw in list) {
+          final m = Map<String, dynamic>.from(raw as Map);
+          final st = (m['status'] ?? '').toString();
+          if (m['company_id'] == null) {
+            if (st == 'approved') approvedPlatform = true;
+            if (st == 'submitted') submittedPlatform = true;
+          } else if (st == 'requested') {
+            employerRequests++;
+          }
+        }
+        if (mounted) {
+          setState(() {
+            _kycRequests = employerRequests;
+            _platformKyc = approvedPlatform
+                ? 'approved'
+                : (submittedPlatform ? 'submitted' : 'none');
+            _platformKycUnderReview =
+                approvedPlatform && submittedPlatform;
+          });
+        }
       }
     } catch (_) {}
+  }
+
+  Future<void> _renewKyc() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => const KycUploadScreen(renew: true)),
+    );
+    _loadKycBadge();
   }
 
   Future<void> _openKycRequests() async {
@@ -5914,6 +6381,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   List<dynamic> _shops = [];
   int _kycRequests = 0;
+  String _platformKyc = 'none';
+  bool _platformKycUnderReview = false;
 
   @override
   void initState() {
@@ -6410,6 +6879,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   trailing: const Icon(Icons.chevron_right,
                       color: Colors.red, size: 18),
                   onTap: _openKycRequests,
+                ),
+              ),
+            ],
+            if (_platformKyc == 'approved') ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: kNyqGreen.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border:
+                      Border.all(color: kNyqGreen.withValues(alpha: 0.35)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 2),
+                      leading: const Icon(Icons.verified, color: kNyqGreen),
+                      title: const Text('Identity Verified',
+                          style: TextStyle(
+                              color: kNyqGreen,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15)),
+                      subtitle: TextButton(
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 22),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: _renewKyc,
+                        child: const Text('Update ID',
+                            style: TextStyle(
+                                fontSize: 12, color: kNyqAccent)),
+                      ),
+                    ),
+                    if (_platformKycUnderReview)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(52, 0, 16, 10),
+                        child: Row(
+                          children: [
+                            Icon(Icons.hourglass_top,
+                                size: 12, color: Colors.grey.shade600),
+                            const SizedBox(width: 6),
+                            Text('New ID under review',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600)),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ] else if (_platformKyc == 'submitted') ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 4),
+                  leading: Icon(Icons.hourglass_top,
+                      color: Colors.grey.shade700),
+                  title: Text('ID under review',
+                      style: TextStyle(
+                          color: Colors.grey.shade800,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15)),
+                  subtitle: Text(
+                      'NYG Support is checking your identity document.',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade600)),
                 ),
               ),
             ],
@@ -10632,7 +11179,9 @@ class _KycRequestsScreenState extends State<KycRequestsScreen> {
 class KycUploadScreen extends StatefulWidget {
   final int? kycId;
   final String? companyName;
-  const KycUploadScreen({super.key, this.kycId, this.companyName});
+  final bool renew;
+  const KycUploadScreen(
+      {super.key, this.kycId, this.companyName, this.renew = false});
 
   @override
   State<KycUploadScreen> createState() => _KycUploadScreenState();
@@ -10652,7 +11201,32 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
   void initState() {
     super.initState();
     _kycId = widget.kycId;
-    if (_kycId == null) _startPlatformKyc();
+    if (_kycId == null) {
+      if (widget.renew) {
+        _startRenewal();
+      } else {
+        _startPlatformKyc();
+      }
+    }
+  }
+
+  Future<void> _startRenewal() async {
+    try {
+      final user = await UserSession.load();
+      final res = await http.post(
+        Uri.parse('$baseUrl/kyc/renew'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final d = jsonDecode(res.body) as Map;
+        if (mounted) setState(() => _kycId = (d['kyc_id'] as num).toInt());
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'your new ID');
+    }
   }
 
   Future<void> _startPlatformKyc() async {
@@ -10837,6 +11411,21 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (widget.renew) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: kNyqOchre.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Upload your new ID. Your old ID stays active until the new one is approved.',
+                style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
