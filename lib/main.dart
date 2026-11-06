@@ -11,6 +11,33 @@ import 'core/theme.dart';
 import 'core/widgets/management_hub.dart';
 
 const String baseUrl = 'https://random.taila91e03.ts.net';
+
+// Vocabulary note: the UI calls these users "Job Workers". The database and
+// API keep the historical name `is_runner` / `driver_id` / `/deliveries`.
+// One person, two names: Worker in the UI, runner in the backend.
+
+DateTime? _lastApiErrorAt;
+
+/// Shows a red snackbar when a network call fails. Throttled so a screen that
+/// fires several requests at once does not stack identical messages.
+void showNetworkError(BuildContext context, String action) {
+  final now = DateTime.now();
+  if (_lastApiErrorAt != null &&
+      now.difference(_lastApiErrorAt!).inSeconds < 20) {
+    return;
+  }
+  _lastApiErrorAt = now;
+  debugPrint('Network error while fetching ' + action);
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: const Text(
+          'Could not reach the server. Check your connection.'),
+      backgroundColor: Colors.red.shade700,
+      duration: const Duration(seconds: 3),
+    ),
+  );
+}
 const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785acabfd295';
 const String appVersion = '1.0.0';
 const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk';
@@ -1534,14 +1561,14 @@ Future<void> showSellerApplicationDialog(
               TextField(
                 controller: business,
                 decoration: const InputDecoration(
-                    labelText: 'Business Name',
+                    labelText: 'Shop Name',
                     border: OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 initialValue: category,
                 decoration: const InputDecoration(
-                    labelText: 'Business Category',
+                    labelText: 'Shop Category',
                     border: OutlineInputBorder()),
                 items: categories
                     .map((c) =>
@@ -1555,7 +1582,7 @@ Future<void> showSellerApplicationDialog(
               TextField(
                 controller: city,
                 decoration: const InputDecoration(
-                    labelText: 'Business Address / City',
+                    labelText: 'Shop Address / City',
                     border: OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
@@ -1590,7 +1617,7 @@ Future<void> showSellerApplicationDialog(
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
                         const SnackBar(
                             content: Text(
-                                'Please fill in the business name and what you sell')),
+                                'Please fill in the shop name and what you sell')),
                       );
                       return;
                     }
@@ -2541,7 +2568,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
           list.add({...Map<String, dynamic>.from(t as Map), '_kind': 'thread'});
         }
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'messages');
+      }
     list.sort((a, b) {
       final da = (a['last_at'] ?? '').toString();
       final db2 = (b['last_at'] ?? '').toString();
@@ -2755,7 +2784,9 @@ class _ChatScreenState extends State<ChatScreen> {
           if (grewThread) _scrollToBottom();
           return;
         }
-      } catch (_) {}
+      } catch (_) {
+        showNetworkError(context, 'messages');
+      }
       if (mounted) setState(() => _loading = false);
       return;
     }
@@ -2863,7 +2894,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             msg =
                                 (jsonDecode(res.body)['detail'] ?? msg)
                                     .toString();
-                          } catch (_) {}
+                          } catch (_) {
+        showNetworkError(context, 'data');
+      }
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(
                                 content: Text(msg),
@@ -2914,12 +2947,16 @@ class _ChatScreenState extends State<ChatScreen> {
         String msg = 'Could not respond to offer';
         try {
           msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
-        } catch (_) {}
+        } catch (_) {
+        showNetworkError(context, 'data');
+      }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: Colors.red),
         );
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'data');
+      }
   }
 
   Widget _offerBubble(
@@ -3040,7 +3077,9 @@ class _ChatScreenState extends State<ChatScreen> {
             'reply_to_message_id': replyId,
           }),
         ).timeout(const Duration(seconds: 10));
-      } catch (_) {}
+      } catch (_) {
+        showNetworkError(context, 'messages');
+      }
       await _load();
       return;
     }
@@ -3620,7 +3659,9 @@ class _MerchantOrdersScreenState extends State<MerchantOrdersScreen> {
         });
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'your orders');
+      }
     if (mounted) setState(() => _loading = false);
   }
 
@@ -4211,7 +4252,9 @@ class _AdminCompaniesScreenState extends State<AdminCompaniesScreen> {
         }
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'company details');
+      }
     if (mounted) {
       setState(() {
         _companies = [];
@@ -4401,7 +4444,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         result = jsonDecode(res.body) as List;
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'users');
+      }
     if (!mounted) return;
     setState(() {
       _users = result;
@@ -5291,7 +5336,9 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       } else {
         try {
           msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
-        } catch (_) {}
+        } catch (_) {
+        showNetworkError(context, 'invoices');
+      }
       }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(msg),
@@ -5797,7 +5844,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final list = jsonDecode(res.body) as List;
         if (mounted) setState(() => _companies = list);
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'company details');
+      }
   }
 
   Future<void> _loadOrders() async {
@@ -5816,7 +5865,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (mounted) setState(() => _orders = list);
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'your orders');
+      }
     if (mounted) setState(() => _orders = []);
   }
 
@@ -5842,7 +5893,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (mounted) setState(() => _shops = mine);
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'shops');
+      }
     if (mounted) setState(() => _shops = []);
   }
 
@@ -5861,7 +5914,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         _deliveries = jsonDecode(res.body) as List;
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'shops');
+      }
   }
 
   int get _completed {
@@ -6850,7 +6905,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       String msg = 'Could not update password';
       try {
         msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
-      } catch (_) {}
+      } catch (_) {
+        showNetworkError(context, 'your account');
+      }
       setState(() {
         _error = msg;
         _saving = false;
@@ -6993,7 +7050,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           _showUpdateDialog(latest);
         }
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'data');
+      }
   }
 
   void _showUpdateDialog(String latestVersion) {
@@ -7054,7 +7113,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (mine != null) {
         await ShopSession.save(mine);
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'shops');
+      }
   }
 
   Future<void> _refreshUser() async {
@@ -7073,7 +7134,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           final fresh = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
           await UserSession.save(fresh, token);
         }
-      } catch (_) {}
+      } catch (_) {
+        showNetworkError(context, 'your account');
+      }
     }
     await _loadUser();
   }
@@ -8103,7 +8166,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
           });
         }
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'company details');
+      }
 
     try {
       final res = await http
@@ -8116,7 +8181,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             .toList();
         if (mounted) setState(() => _shops = linked.length);
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'shops');
+      }
   }
 
   String get _initial {
@@ -8149,7 +8216,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
         );
         _load();
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'messages');
+      }
   }
 
   void _info(String title, String body) {
@@ -8253,19 +8322,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               if (mounted) setState(() => _pendingShipments = n);
             });
           }),
-          _actionCard(Icons.storefront_outlined, 'Linked Shops',
-              'Storefronts attached to this company', () {
-            _info(
-                'Linked Shops',
-                _shops == 0
-                    ? 'No shops are linked yet. Linking arrives in the next phase.'
-                    : '$_shops shop(s) linked to this company.');
-          }),
-          _actionCard(Icons.work_outline, 'Company Jobs',
-              'Jobs this company has taken or posted', () {
-            _info('Company Jobs',
-                'Company job assignment is coming in the next phase.');
-          }),
+
           _actionCard(Icons.info_outline, 'Company Details',
               'Registration information', () {
             _info(
@@ -8337,7 +8394,9 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
         }
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'employees');
+      }
     if (mounted) {
       setState(() {
         _employees = [];
@@ -8361,7 +8420,9 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
       String msg = 'Could not update';
       try {
         msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
-      } catch (_) {}
+      } catch (_) {
+        showNetworkError(context, 'employees');
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), backgroundColor: Colors.red.shade800),
       );
@@ -8519,7 +8580,9 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                             final body = jsonDecode(res.body);
                             added = Map<String, dynamic>.from(
                                 (body['employee'] ?? body) as Map);
-                          } catch (_) {}
+                          } catch (_) {
+        showNetworkError(context, 'data');
+      }
                           final temp = added['temp_password']?.toString();
                           Navigator.pop(dialogCtx);
                           await _load();
@@ -8587,7 +8650,9 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                           try {
                             msg =
                                 (jsonDecode(res.body)['detail'] ?? msg).toString();
-                          } catch (_) {}
+                          } catch (_) {
+        showNetworkError(context, 'data');
+      }
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(
                                 content: Text(msg),
@@ -8811,7 +8876,9 @@ class _ShipmentListScreenState extends State<ShipmentListScreen> {
         }
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'shipments');
+      }
     if (mounted) {
       setState(() {
         _rows = [];
@@ -9026,7 +9093,9 @@ class _CreateShipmentDialogState extends State<CreateShipmentDialog> {
         final list = jsonDecode(res.body) as List;
         if (mounted) setState(() => _receivers = list);
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'shipments');
+      }
   }
 
   @override
@@ -9090,7 +9159,9 @@ class _CreateShipmentDialogState extends State<CreateShipmentDialog> {
         String msg = 'Could not create shipment';
         try {
           msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
-        } catch (_) {}
+        } catch (_) {
+        showNetworkError(context, 'shipments');
+      }
         setState(() {
           _error = msg;
           _saving = false;
@@ -9356,7 +9427,9 @@ class _ReceiveShipmentScreenState extends State<ReceiveShipmentScreen> {
         }
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'shipments');
+      }
     if (mounted) setState(() => _loading = false);
   }
 
@@ -9453,7 +9526,9 @@ class _ReceiveShipmentScreenState extends State<ReceiveShipmentScreen> {
                             msg =
                                 (jsonDecode(res.body)['detail'] ?? msg)
                                     .toString();
-                          } catch (_) {}
+                          } catch (_) {
+        showNetworkError(context, 'shipments');
+      }
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(
                                 content: Text(msg),
@@ -9540,7 +9615,9 @@ class _ReceiveShipmentScreenState extends State<ReceiveShipmentScreen> {
         String msg = 'Could not save';
         try {
           msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
-        } catch (_) {}
+        } catch (_) {
+        showNetworkError(context, 'shipments');
+      }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: Colors.red),
         );
@@ -9818,7 +9895,9 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
           _products = (fresh['product_count'] as num?)?.toInt() ?? _products;
         });
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'shop details');
+      }
     await _refreshEmployeeCount();
   }
 
@@ -9847,7 +9926,9 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
         );
         _refresh();
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'messages');
+      }
   }
 
   Future<void> _refreshEmployeeCount() async {
@@ -9865,7 +9946,9 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
         final list = jsonDecode(res.body) as List;
         if (mounted) setState(() => _employees = list.length);
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'employees');
+      }
   }
 
   void _openShop({String? action}) {
@@ -10057,7 +10140,9 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         final fresh = Map<String, dynamic>.from(data['merchant'] ?? data);
         if (mounted) setState(() => shop = fresh);
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'shop details');
+      }
   }
 
   Color get _headerColour =>
@@ -10811,7 +10896,9 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
           agreedOffer = (o['amount_sle'] as num).toDouble();
         }
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'products');
+      }
 
     String paymentMethod = 'cash_on_delivery';
     String shopPaymentMethod = 'orange_money';
@@ -11092,7 +11179,9 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                       newOrderId = decoded['id'].toString();
                     }
                   }
-                } catch (_) {}
+                } catch (_) {
+        showNetworkError(context, 'your orders');
+      }
                 if (mounted) {
                   Navigator.pop(ctx);
                   final shopMethod =
@@ -11751,298 +11840,6 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
 // ==========================================
 // SHOPS BROWSE SCREEN
 // ==========================================
-class ShopsBrowseScreen extends StatefulWidget {
-  final Map<String, dynamic>? currentUser;
-  final VoidCallback onUserChanged;
-
-  const ShopsBrowseScreen({
-    super.key,
-    required this.currentUser,
-    required this.onUserChanged,
-  });
-
-  @override
-  State<ShopsBrowseScreen> createState() => _ShopsBrowseScreenState();
-}
-
-class _ShopsBrowseScreenState extends State<ShopsBrowseScreen> {
-  List<dynamic> shops = [];
-  List<dynamic> filteredShops = [];
-  bool isLoading = true;
-  String searchQuery = '';
-  Map<String, dynamic>? myShop;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMyShop();
-    _fetchShops();
-  }
-
-  Future<void> _loadMyShop() async {
-    final shop = await ShopSession.load();
-    if (!mounted) return;
-    setState(() => myShop = shop);
-  }
-
-  Future<void> _fetchShops() async {
-    setState(() => isLoading = true);
-    try {
-      final res = await http.get(Uri.parse('$baseUrl/shops/'));
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final data = jsonDecode(res.body) as List;
-        setState(() {
-          shops = data;
-          filteredShops = data;
-          isLoading = false;
-        });
-      } else {
-        setState(() => isLoading = false);
-      }
-    } catch (_) {
-      setState(() => isLoading = false);
-    }
-  }
-
-  void _applySearch(String query) {
-    setState(() {
-      searchQuery = query;
-      if (query.trim().isEmpty) {
-        filteredShops = shops;
-      } else {
-        final q = query.toLowerCase();
-        filteredShops = shops.where((s) {
-          final name = (s['shop_name'] ?? '').toString().toLowerCase();
-          final city = (s['city'] ?? '').toString().toLowerCase();
-          final category = (s['category'] ?? '').toString().toLowerCase();
-          return name.contains(q) || city.contains(q) || category.contains(q);
-        }).toList();
-      }
-    });
-  }
-
-  void _openShop(Map<String, dynamic> shop) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ShopPageScreen(
-          shop: shop,
-          currentUser: widget.currentUser,
-          onUserChanged: widget.onUserChanged,
-        ),
-      ),
-    ).then((_) => _fetchShops());
-  }
-
-  Future<bool> _ensureLoggedIn({String? suggestedRole}) async {
-    if (widget.currentUser != null) return true;
-
-    final result = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AuthScreen(suggestedRole: suggestedRole),
-      ),
-    );
-
-    if (result == true) {
-      widget.onUserChanged();
-      return true;
-    }
-    return false;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: Image.asset('assets/logo.png', height: 60),
-        actions: [
-          AccountButton(
-              currentUser: widget.currentUser,
-              onUserChanged: widget.onUserChanged,
-              ensureLoggedIn: _ensureLoggedIn,
-              onRefreshUser: () {
-                if (mounted) setState(() => myShop = null);
-                _loadMyShop();
-              },
-              currentShop: myShop),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              onChanged: _applySearch,
-              decoration: InputDecoration(
-                hintText: 'Search shops by name, city, or category...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Text(
-                  '${filteredShops.length} shop${filteredShops.length == 1 ? '' : 's'}',
-                  style: TextStyle(
-                    color: Colors.grey.shade700,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Divider(height: 1),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : filteredShops.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.store_outlined,
-                                size: 80, color: Colors.grey.shade400),
-                            const SizedBox(height: 16),
-                            Text(
-                              searchQuery.isEmpty
-                                  ? 'No shops yet in Sierra Leone.'
-                                  : 'No shops match "$searchQuery".',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(10),
-                        itemCount: filteredShops.length,
-                        itemBuilder: (ctx, i) {
-                          final shop = filteredShops[i];
-                          final bg = parseThemeColour(
-                              shop['theme_colour']?.toString());
-                          final isDark =
-                              ThemeData.estimateBrightnessForColor(bg) ==
-                                  Brightness.dark;
-                          final onBg = isDark ? Colors.white : Colors.black87;
-                          final sub = isDark ? Colors.white70 : Colors.black54;
-                          return Container(
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: bg,
-                              borderRadius: BorderRadius.circular(16),
-                              border: const Border(
-                                top: BorderSide(color: kNyqAccent, width: 3),
-                                left: BorderSide(color: Color(0xFFEFE9E0)),
-                                right: BorderSide(color: Color(0xFFEFE9E0)),
-                                bottom: BorderSide(color: Color(0xFFEFE9E0)),
-                              ),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x1A5A3A28),
-                                  blurRadius: 18,
-                                  offset: Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: InkWell(
-                              onTap: () => _openShop(shop),
-                              borderRadius: BorderRadius.circular(16),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 32,
-                                      backgroundColor: isDark
-                                          ? Colors.white24
-                                          : const Color(0xFF1B5E20),
-                                      backgroundImage: shop['logo_url'] != null &&
-                                              shop['logo_url'].toString().isNotEmpty
-                                          ? NetworkImage(shop['logo_url'])
-                                          : null,
-                                      child: shop['logo_url'] != null &&
-                                              shop['logo_url'].toString().isNotEmpty
-                                          ? null
-                                          : Text(
-                                              (shop['shop_name'] ?? '?')[0]
-                                                  .toUpperCase(),
-                                              style: const TextStyle(
-                                                fontSize: 26,
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            shop['shop_name'] ?? 'Shop',
-                                            style: TextStyle(
-                                                fontSize: 17,
-                                                fontWeight: FontWeight.bold,
-                                                color: onBg),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '${shop['city'] ?? ''} • ${shop['category'] ?? 'Other'}',
-                                            style: TextStyle(
-                                                fontSize: 13, color: sub),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            children: [
-                                              Icon(Icons.inventory_2,
-                                                  size: 14, color: sub),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                '${shop['product_count'] ?? 0} products',
-                                                style: TextStyle(
-                                                    fontSize: 12, color: sub),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Icon(Icons.chevron_right, color: sub),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ==========================================
-// PRODUCT DETAIL SCREEN
-// ==========================================
 class _ShopBanner extends StatefulWidget {
   final Map<String, dynamic> product;
   const _ShopBanner({required this.product});
@@ -12076,7 +11873,9 @@ class _ShopBannerState extends State<_ShopBanner> {
               Map<String, dynamic>.from(data['merchant'] ?? data));
         }
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'shop details');
+      }
     if (mounted) setState(() => _loading = false);
   }
 
@@ -12756,7 +12555,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           agreedOffer = (o['amount_sle'] as num).toDouble();
         }
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'products');
+      }
 
     String paymentMethod = 'cash_on_delivery';
     String shopPaymentMethod = 'orange_money';
@@ -13037,7 +12838,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       newOrderId = decoded['id'].toString();
                     }
                   }
-                } catch (_) {}
+                } catch (_) {
+        showNetworkError(context, 'your orders');
+      }
                 if (mounted) {
                   Navigator.pop(ctx);
                   final shopMethod =
@@ -13211,52 +13014,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 // ==========================================
 // RUNNER DASHBOARD
 // ==========================================
-class BecomeJobWorkerScreen extends StatelessWidget {
-  const BecomeJobWorkerScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kNyqSand,
-      appBar: AppBar(title: const Text('Become a Job Worker')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 96,
-                height: 96,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF1F7F1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.work_outline,
-                    size: 44, color: kNyqAccent),
-              ),
-              const SizedBox(height: 20),
-              const Text('Coming soon',
-                  style: TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              Text(
-                'Applications to become a Job Worker are being set up. '
-                'Check back shortly.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 14,
-                    height: 1.4,
-                    color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class RunnerDashboardScreen extends StatefulWidget {
   final Map<String, dynamic>? currentUser;
   final VoidCallback onUserChanged;
@@ -13332,7 +13089,9 @@ class _RunnerDashboardScreenState extends State<RunnerDashboardScreen> {
       } else {
         setState(() => jobs = []);
       }
-    } catch (_) {}
+    } catch (_) {
+        showNetworkError(context, 'data');
+      }
     if (mounted) setState(() => _loadingJobs = false);
   }
 
