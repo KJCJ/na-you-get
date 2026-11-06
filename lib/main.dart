@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -84,6 +85,87 @@ Future<String?> pickAndUploadImage(BuildContext context) async {
     }
     return null;
   }
+}
+
+/// True when the signed-in user has a PLATFORM KYC on file (company_id null).
+/// An employer-held ID does not count.
+Future<bool> hasPlatformKyc() async {
+  try {
+    final user = await UserSession.load();
+    final res = await http.get(
+      Uri.parse('$baseUrl/kyc/mine'),
+      headers: {
+        'x-api-key': apiKey,
+        'Authorization': 'Bearer ${user?['token'] ?? ''}',
+      },
+    ).timeout(const Duration(seconds: 8));
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final list = jsonDecode(res.body) as List;
+      return list.any((r) {
+        final m = Map<String, dynamic>.from(r as Map);
+        final st = (m['status'] ?? '').toString();
+        return m['company_id'] == null &&
+            (st == 'submitted' || st == 'approved');
+      });
+    }
+  } catch (_) {}
+  return false;
+}
+
+/// The "Identity Verification (Required)" panel used by every application form.
+Widget kycRequirementBlock(
+    BuildContext context, bool ok, Future<void> Function() onUpload) {
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: ok
+          ? kNyqGreen.withValues(alpha: 0.08)
+          : Colors.orange.shade50,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+          color: ok ? kNyqGreen : Colors.orange.shade300),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(ok ? Icons.verified : Icons.badge_outlined,
+                size: 16,
+                color: ok ? kNyqGreen : Colors.orange.shade900),
+            const SizedBox(width: 6),
+            const Text('Identity Verification (Required)',
+                style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w800)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          ok
+              ? 'ID submitted'
+              : 'Upload your ID before we can review your application.',
+          style: TextStyle(
+              fontSize: 11,
+              color: ok ? kNyqGreen : Colors.orange.shade900),
+        ),
+        if (!ok) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: kNyqAccent,
+                side: BorderSide(color: kNyqAccent.withValues(alpha: 0.5)),
+              ),
+              icon: const Icon(Icons.badge_outlined, size: 16),
+              label: const Text('Upload ID Now'),
+              onPressed: () => onUpload(),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
 }
 
 /// Uploads an ID/selfie photo to the private KYC store.
@@ -1575,9 +1657,10 @@ Future<void> showSellerApplicationDialog(
     {VoidCallback? onDone}) async {
   final business = TextEditingController();
   final city = TextEditingController(text: 'Freetown');
-  final about = TextEditingController();
+
   final phone = TextEditingController(
       text: (user['phone_number'] ?? '').toString());
+  var kycOk = await hasPlatformKyc();
   var category = 'Fashion';
   const categories = [
     'Fashion',
@@ -1633,13 +1716,15 @@ Future<void> showSellerApplicationDialog(
                     border: OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
-              TextField(
-                controller: about,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                    labelText: 'What do you intend to sell?',
-                    border: OutlineInputBorder()),
-              ),
+              kycRequirementBlock(context, kycOk, () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const KycUploadScreen()),
+                );
+                kycOk = await hasPlatformKyc();
+                setDialogState(() {});
+              }),
               const SizedBox(height: 10),
               TextField(
                 controller: phone,
@@ -1656,11 +1741,10 @@ Future<void> showSellerApplicationDialog(
               onPressed: busy ? null : () => Navigator.pop(dialogCtx),
               child: const Text('Cancel')),
           FilledButton(
-            onPressed: busy
+            onPressed: (busy || !kycOk)
                 ? null
                 : () async {
-                    if (business.text.trim().isEmpty ||
-                        about.text.trim().isEmpty) {
+                    if (business.text.trim().isEmpty) {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
                         const SnackBar(
                             content: Text(
@@ -1673,7 +1757,6 @@ Future<void> showSellerApplicationDialog(
                       'Business: ' + business.text.trim(),
                       'Category: ' + category,
                       'City/Address: ' + city.text.trim(),
-                      'Intends to sell: ' + about.text.trim(),
                       'Phone: ' + phone.text.trim(),
                       'Account ID: ${user['id']}',
                     ]);
@@ -1714,6 +1797,7 @@ Future<void> showWorkerApplicationDialog(
   var vehicle = 'Motorbike';
   const vehicles = ['Motorbike', 'Car', 'Bicycle', 'None / Walking'];
   var busy = false;
+  var kycOk = await hasPlatformKyc();
 
   await showDialog<void>(
     context: context,
@@ -1765,6 +1849,16 @@ Future<void> showWorkerApplicationDialog(
                     labelText: 'Phone Number',
                     border: OutlineInputBorder()),
               ),
+              const SizedBox(height: 10),
+              kycRequirementBlock(context, kycOk, () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const KycUploadScreen()),
+                );
+                kycOk = await hasPlatformKyc();
+                setDialogState(() {});
+              }),
             ],
           ),
         ),
@@ -1773,7 +1867,7 @@ Future<void> showWorkerApplicationDialog(
               onPressed: busy ? null : () => Navigator.pop(dialogCtx),
               child: const Text('Cancel')),
           FilledButton(
-            onPressed: busy
+            onPressed: (busy || !kycOk)
                 ? null
                 : () async {
                     if (name.text.trim().isEmpty) {
@@ -4397,6 +4491,25 @@ class _AdminCompaniesScreenState extends State<AdminCompaniesScreen> {
                               ],
                             ),
                             const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                if ((c['owner_kyc_status'] ?? 'none') ==
+                                        'submitted' ||
+                                    (c['owner_kyc_status'] ?? 'none') ==
+                                        'approved')
+                                  Text('ID verified',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: kNyqGreen))
+                                else
+                                  Text('Owner has no ID',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.red)),
+                              ],
+                            ),
                             Text(
                                 '${c['owner_name'] ?? ''} - ${c['industry'] ?? ''}',
                                 style: TextStyle(
@@ -4970,6 +5083,42 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                               color:
                                                   Colors.orange.shade800),
                                         ),
+                                      ),
+                                    if ((u['kyc_status'] ?? 'none') == 'submitted' ||
+                                        (u['kyc_status'] ?? 'none') == 'approved')
+                                      Container(
+                                        margin:
+                                            const EdgeInsets.only(right: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: kNyqGreen.withValues(alpha: 0.12),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: const Text('ID VERIFIED',
+                                            style: TextStyle(
+                                                fontSize: 8,
+                                                fontWeight: FontWeight.bold,
+                                                color: kNyqGreen)),
+                                      )
+                                    else
+                                      Container(
+                                        margin:
+                                            const EdgeInsets.only(right: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color:
+                                              Colors.red.withValues(alpha: 0.10),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: const Text('NO ID',
+                                            style: TextStyle(
+                                                fontSize: 8,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.red)),
                                       ),
                                     const Icon(Icons.chevron_right),
                                   ],
@@ -5777,7 +5926,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _registerCompany() async {
     final nameCtl = TextEditingController();
-    final descCtl = TextEditingController();
+    var kycOk = await hasPlatformKyc();
     var industry = 'Logistics';
     const industries = [
       'Logistics', 'Cleaning', 'Construction', 'Retail',
@@ -5821,13 +5970,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   },
                 ),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: descCtl,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                      labelText: 'Brief Description',
-                      border: OutlineInputBorder()),
-                ),
+                kycRequirementBlock(context, kycOk, () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const KycUploadScreen()),
+                  );
+                  kycOk = await hasPlatformKyc();
+                  setDialogState(() {});
+                }),
               ],
             ),
           ),
@@ -5836,7 +5987,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onPressed: saving ? null : () => Navigator.pop(dialogCtx),
                 child: const Text('Cancel')),
             FilledButton(
-              onPressed: saving
+              onPressed: (saving || !kycOk)
                   ? null
                   : () async {
                       if (nameCtl.text.trim().isEmpty) {
@@ -5859,7 +6010,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           body: jsonEncode({
                             'name': nameCtl.text.trim(),
                             'industry': industry,
-                            'description': descCtl.text.trim(),
                           }),
                         ).timeout(const Duration(seconds: 10));
                         if (!dialogCtx.mounted) return;
@@ -8461,6 +8611,7 @@ class EmployeeListScreen extends StatefulWidget {
 
 class _EmployeeListScreenState extends State<EmployeeListScreen> {
   List<dynamic> _employees = [];
+  Map<String, String> _kycStatus = {};
   bool _loading = true;
 
   bool get _isCompany => widget.company != null;
@@ -8472,6 +8623,104 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
       : '$baseUrl/shops/$_ownerId/employees';
   String get _title =>
       'Employees - ${((_isCompany ? widget.company!['name'] : widget.shop!['shop_name']) ?? '')}';
+
+  Future<void> _loadKycStatus() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/companies/$_ownerId/employees/kyc-status'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final d = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+        if (mounted) {
+          setState(() {
+            _kycStatus = d.map((k, v) => MapEntry(k, v.toString()));
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  String _kycLabel(String s) {
+    switch (s) {
+      case 'submitted':
+      case 'approved':
+        return 'View ID';
+      case 'requested':
+        return 'Requested';
+      case 'declined':
+        return 'Declined';
+      case 'no_account':
+        return 'No app account';
+      default:
+        return 'Request ID';
+    }
+  }
+
+  Color _kycColour(String s) {
+    switch (s) {
+      case 'submitted':
+      case 'approved':
+        return kNyqGreen;
+      case 'requested':
+        return kNyqOchre;
+      case 'declined':
+        return Colors.red;
+      case 'no_account':
+        return Colors.grey;
+      default:
+        return kNyqAccent;
+    }
+  }
+
+  bool _kycTappable(String s) =>
+      s == 'none' || s == 'rejected';
+
+  Future<void> _kycAction(Map<String, dynamic> e) async {
+    final empId = (e['id'] as num).toInt();
+    final status = _kycStatus[empId.toString()] ?? 'none';
+    if (status == 'submitted' || status == 'approved') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => KycViewerScreen(
+            companyId: _ownerId,
+            employeeId: empId,
+            employeeName: (e['name'] ?? 'Employee').toString(),
+          ),
+        ),
+      );
+      return;
+    }
+    if (!_kycTappable(status)) return;
+
+    try {
+      final res = await http.post(
+        Uri.parse(
+            '$baseUrl/companies/$_ownerId/employees/$empId/request-kyc'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('ID request sent to employee.'),
+              backgroundColor: kNyqGreen),
+        );
+        _loadKycStatus();
+      } else {
+        String msg = 'Could not send the request';
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.red.shade700),
+        );
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'the ID request');
+    }
+  }
 
   @override
   void initState() {
@@ -8501,6 +8750,7 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
             _employees = list;
             _loading = false;
           });
+          if (_isCompany) _loadKycStatus();
         }
         return;
       }
@@ -8852,6 +9102,38 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                 fontWeight: clockedIn ? FontWeight.w700 : FontWeight.normal,
               ),
             ),
+            if (_isCompany)
+              Builder(builder: (context) {
+                final status =
+                    _kycStatus[(e['id'] as num).toInt().toString()] ?? 'none';
+                final colour = _kycColour(status);
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: SizedBox(
+                    height: 30,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        foregroundColor: colour,
+                        side: BorderSide(color: colour),
+                        textStyle: const TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                      icon: Icon(
+                          status == 'submitted' || status == 'approved'
+                              ? Icons.badge
+                              : Icons.badge_outlined,
+                          size: 14),
+                      label: Text(_kycLabel(status)),
+                      onPressed: _kycTappable(status) ||
+                              status == 'submitted' ||
+                              status == 'approved'
+                          ? () => _kycAction(e)
+                          : null,
+                    ),
+                  ),
+                );
+              }),
           ],
         ),
         trailing: Row(
@@ -9954,6 +10236,219 @@ class _ReceiveShipmentScreenState extends State<ReceiveShipmentScreen> {
 }
 
 // ==========================================
+// KYC VIEWER (EMPLOYER)
+// ==========================================
+class KycViewerScreen extends StatefulWidget {
+  final int companyId;
+  final int employeeId;
+  final String employeeName;
+  const KycViewerScreen({
+    super.key,
+    required this.companyId,
+    required this.employeeId,
+    required this.employeeName,
+  });
+
+  @override
+  State<KycViewerScreen> createState() => _KycViewerScreenState();
+}
+
+class _KycViewerScreenState extends State<KycViewerScreen> {
+  Map<String, dynamic>? _data;
+  String _token = '';
+  bool _loading = true;
+  final Map<String, Uint8List?> _images = {};
+  final Map<String, bool> _busy = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final user = await UserSession.load();
+    _token = (user?['token'] ?? '').toString();
+    try {
+      final res = await http.get(
+        Uri.parse(
+            '$baseUrl/companies/${widget.companyId}/employees/${widget.employeeId}/kyc'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final d = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+        if (mounted) {
+          setState(() {
+            _data = d;
+            _loading = false;
+          });
+        }
+        for (final slot in ['front', 'back', 'selfie']) {
+          final id = d[slot + '_image_id']?.toString();
+          if (id != null && id.isNotEmpty) _fetchImage(slot, id);
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'this ID');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _fetchImage(String slot, String id) async {
+    setState(() => _busy[slot] = true);
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/kyc/image/$id'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(const Duration(seconds: 20));
+      if (!mounted) return;
+      setState(() {
+        _busy[slot] = false;
+        _images[slot] =
+            (res.statusCode >= 200 && res.statusCode < 300) ? res.bodyBytes : null;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _busy[slot] = false);
+    }
+  }
+
+  Widget _block(String slot, String label) {
+    final busy = _busy[slot] == true;
+    final bytes = _images[slot];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: kNyqAccent,
+                letterSpacing: 0.6)),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          height: 210,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE0DAD2)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: busy
+              ? const Center(
+                  child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2)))
+              : bytes != null
+                  ? InteractiveViewer(
+                      maxScale: 4,
+                      child: Image.memory(bytes,
+                          fit: BoxFit.contain, width: double.infinity),
+                    )
+                  : Center(
+                      child: Text('Not provided',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade500)),
+                    ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = _data;
+    final status = (d?['status'] ?? '').toString();
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: Text(widget.employeeName),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: _loading || d == null
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE0DAD2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                                (d['full_name_on_id'] ?? 'Not provided')
+                                    .toString(),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 15)),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: (status == 'approved'
+                                      ? kNyqGreen
+                                      : kNyqOchre)
+                                  .withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(status.toUpperCase(),
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: status == 'approved'
+                                        ? kNyqGreen
+                                        : kNyqOchre)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${(d['id_type'] ?? 'id').toString().toUpperCase()}  '
+                        '${(d['id_number'] ?? '').toString()}',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade700),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _block('front', 'FRONT'),
+                _block('back', 'BACK'),
+                _block('selfie', 'SELFIE'),
+                Text(
+                  'Viewing this document is recorded in the access log.',
+                  style: TextStyle(
+                      fontSize: 10, color: Colors.grey.shade500),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+    );
+  }
+}
+
+// ==========================================
 // KYC (EMPLOYEE SIDE)
 // ==========================================
 class KycRequestsScreen extends StatefulWidget {
@@ -10089,16 +10584,16 @@ class _KycRequestsScreenState extends State<KycRequestsScreen> {
 }
 
 class KycUploadScreen extends StatefulWidget {
-  final int kycId;
-  final String companyName;
-  const KycUploadScreen(
-      {super.key, required this.kycId, required this.companyName});
+  final int? kycId;
+  final String? companyName;
+  const KycUploadScreen({super.key, this.kycId, this.companyName});
 
   @override
   State<KycUploadScreen> createState() => _KycUploadScreenState();
 }
 
 class _KycUploadScreenState extends State<KycUploadScreen> {
+  int? _kycId;
   final _idNumber = TextEditingController();
   final _fullName = TextEditingController();
   String _idType = 'nin';
@@ -10106,6 +10601,32 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
   String? _back;
   String? _selfie;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _kycId = widget.kycId;
+    if (_kycId == null) _startPlatformKyc();
+  }
+
+  Future<void> _startPlatformKyc() async {
+    try {
+      final user = await UserSession.load();
+      final res = await http.post(
+        Uri.parse('$baseUrl/kyc/start'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final d = jsonDecode(res.body) as Map;
+        if (mounted) setState(() => _kycId = (d['kyc_id'] as num).toInt());
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'your verification');
+    }
+  }
 
   @override
   void dispose() {
@@ -10207,7 +10728,7 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
     try {
       final user = await UserSession.load();
       final res = await http.post(
-        Uri.parse('$baseUrl/kyc/${widget.kycId}/decline'),
+        Uri.parse('$baseUrl/kyc/$_kycId/decline'),
         headers: {
           'x-api-key': apiKey,
           'Authorization': 'Bearer ${user?['token'] ?? ''}',
@@ -10281,12 +10802,14 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
               children: [
                 const Text('Requested by',
                     style: TextStyle(fontSize: 11, color: kNyqAccent)),
-                Text(widget.companyName,
+                Text(widget.companyName ?? 'Na You Get',
                     style: const TextStyle(
                         fontWeight: FontWeight.w800, fontSize: 15)),
                 const SizedBox(height: 4),
                 Text(
-                    'They will see your ID photo. It is not public and is never shown on your profile.',
+                    widget.companyName == null
+                        ? 'Your ID is stored privately and reviewed once. It is never shown on your profile.'
+                        : 'They will see your ID photo. It is not public and is never shown on your profile.',
                     style: TextStyle(
                         fontSize: 11, color: Colors.grey.shade700)),
               ],
@@ -10338,13 +10861,15 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
           const SizedBox(height: 20),
           Row(
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _saving ? null : _decline,
-                  child: const Text('Not now'),
+              if (widget.kycId != null) ...[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _saving ? null : _decline,
+                    child: const Text('Not now'),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
+                const SizedBox(width: 10),
+              ],
               Expanded(
                 child: FilledButton(
                   style:
