@@ -47,3 +47,6 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 apk/*.apk
+
+# Backend lives in its own private repo (KJCJ/na-you-get-backend)
+backend/
