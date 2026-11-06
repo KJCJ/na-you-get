@@ -6348,6 +6348,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool get _isSellerUser => isSeller(widget.currentUser);
 
+  /// Only roles that require verification see the KYC cards. A plain
+  /// customer can buy without ever uploading an ID.
+  bool get _isPrivileged =>
+      _isSellerUser ||
+      _isRunnerUser ||
+      (widget.currentUser?['is_company_manager'] ?? 0) == 1 ||
+      (widget.currentUser?['is_admin'] ?? 0) == 1;
+
   String? get _pendingRole {
     final v = (widget.currentUser?['pending_role'] ?? '').toString().trim();
     return v.isEmpty ? null : v;
@@ -6887,7 +6895,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ],
-            if (_platformKyc == 'approved') ...[
+            if (_isPrivileged && _platformKyc == 'approved') ...[
               const SizedBox(height: 16),
               Container(
                 width: double.infinity,
@@ -6939,7 +6947,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
-            ] else if (_platformKyc == 'submitted') ...[
+            ] else if (_isPrivileged && _platformKyc == 'submitted') ...[
               const SizedBox(height: 16),
               Container(
                 width: double.infinity,
@@ -6962,6 +6970,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       'NYG Support is checking your identity document.',
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade600)),
+                ),
+              ),
+            ] else if (_isPrivileged && _platformKyc == 'none') ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  leading:
+                      const Icon(Icons.badge_outlined, color: Colors.red),
+                  title: const Text('Identity Verification Required',
+                      style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15)),
+                  subtitle: Text(
+                    'Upload your ID to verify your business and unlock all features.',
+                    style:
+                        TextStyle(color: Colors.red.shade700, fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right,
+                      color: Colors.red, size: 18),
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const KycUploadScreen()),
+                    );
+                    _loadKycBadge();
+                  },
                 ),
               ),
             ],
