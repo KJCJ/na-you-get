@@ -1,6 +1,11 @@
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+// show LatLng only: latlong2 also exports a Path class that clashes with
+// Flutter's dart:ui Path used by the chart painters.
+import 'package:latlong2/latlong.dart' show LatLng;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' show Random;
@@ -11764,6 +11769,169 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
   }
 }
 
+// ==========================================
+// SHOP LOCATION PICKER
+// ==========================================
+// DEV ONLY: OpenStreetMap public tiles. Their usage policy forbids
+// production-scale traffic. Switch to MapTiler before public launch.
+const String kOsmTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const LatLng kFreetown = LatLng(8.4840, -13.2299);
+
+class ShopLocationPickerScreen extends StatefulWidget {
+  final LatLng? initial;
+  const ShopLocationPickerScreen({super.key, this.initial});
+
+  @override
+  State<ShopLocationPickerScreen> createState() =>
+      _ShopLocationPickerScreenState();
+}
+
+class _ShopLocationPickerScreenState extends State<ShopLocationPickerScreen> {
+  final MapController _map = MapController();
+  late LatLng _centre;
+  bool _locating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _centre = widget.initial ?? kFreetown;
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _useMyLocation() async {
+    setState(() => _locating = true);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        _toast('Turn on location services to use this.');
+        return;
+      }
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        _toast('Location permission denied. Tap the map to place the pin.');
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition()
+          .timeout(const Duration(seconds: 15));
+      final p = LatLng(pos.latitude, pos.longitude);
+      if (!mounted) return;
+      _map.move(p, 16);
+      setState(() => _centre = p);
+    } catch (_) {
+      _toast('Could not get your location. Tap the map instead.');
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Set Your Shop Location'),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _map,
+            options: MapOptions(
+              initialCenter: _centre,
+              initialZoom: 15,
+              onPositionChanged: (camera, hasGesture) {
+                _centre = camera.center;
+              },
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: kOsmTileUrl,
+                userAgentPackageName: 'com.nyg.app',
+              ),
+            ],
+          ),
+          const IgnorePointer(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 34),
+                child: Icon(Icons.location_on,
+                    size: 44, color: Colors.red),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 16,
+            bottom: 120,
+            child: FloatingActionButton.small(
+              backgroundColor: Colors.white,
+              onPressed: _locating ? null : _useMyLocation,
+              child: _locating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.my_location, color: kNyqAccent),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(color: Color(0x22000000), blurRadius: 10),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Lat ${_centre.latitude.toStringAsFixed(5)}, '
+                    'Lng ${_centre.longitude.toStringAsFixed(5)}',
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                              backgroundColor: kNyqGreen),
+                          onPressed: () => Navigator.pop(context, _centre),
+                          child: const Text('Use This Spot'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ShopPageScreen extends StatefulWidget {
   final Map<String, dynamic> shop;
   final Map<String, dynamic>? currentUser;
@@ -12930,6 +13098,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         TextEditingController(text: shop['tiktok_url'] ?? '');
     final xController =
         TextEditingController(text: shop['twitter_url'] ?? '');
+    double? shopLat = (shop['latitude'] as num?)?.toDouble();
+    double? shopLng = (shop['longitude'] as num?)?.toDouble();
 
     showDialog(
       context: context,
@@ -13123,6 +13293,99 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     }
                   },
                 ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: kNyqSand,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE0DAD2)),
+                  ),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        height: 110,
+                        child: shopLat == null || shopLng == null
+                            ? Center(
+                                child: Text(
+                                  'No location set - customers cannot find you on the map',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600),
+                                ),
+                              )
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: FlutterMap(
+                                  options: MapOptions(
+                                    initialCenter:
+                                        LatLng(shopLat!, shopLng!),
+                                    initialZoom: 15,
+                                    interactionOptions:
+                                        const InteractionOptions(
+                                            flags: InteractiveFlag.none),
+                                  ),
+                                  children: [
+                                    TileLayer(
+                                      urlTemplate: kOsmTileUrl,
+                                      userAgentPackageName: 'com.nyg.app',
+                                    ),
+                                    MarkerLayer(
+                                      markers: [
+                                        Marker(
+                                          point: LatLng(
+                                              shopLat!, shopLng!),
+                                          width: 28,
+                                          height: 28,
+                                          child: const Icon(
+                                              Icons.location_on,
+                                              size: 28,
+                                              color: Colors.red),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 6),
+                      if (shopLat != null && shopLng != null)
+                        Text(
+                          'Lat ${shopLat!.toStringAsFixed(5)}, '
+                          'Lng ${shopLng!.toStringAsFixed(5)}',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade600),
+                        ),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.map_outlined, size: 16),
+                          label: const Text('Pick Location on Map'),
+                          onPressed: () async {
+                            final picked = await Navigator.push<LatLng>(
+                              ctx,
+                              MaterialPageRoute(
+                                builder: (_) => ShopLocationPickerScreen(
+                                  initial: shopLat != null && shopLng != null
+                                      ? LatLng(shopLat!, shopLng!)
+                                      : null,
+                                ),
+                              ),
+                            );
+                            if (picked != null) {
+                              setDialogState(() {
+                                shopLat = picked.latitude;
+                                shopLng = picked.longitude;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -13156,6 +13419,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'instagram_url': igController.text.trim(),
                     'tiktok_url': ttController.text.trim(),
                     'twitter_url': xController.text.trim(),
+                    if (shopLat != null) 'latitude': shopLat,
+                    if (shopLng != null) 'longitude': shopLng,
                   }),
                 );
 

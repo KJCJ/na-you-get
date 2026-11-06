@@ -16,6 +16,10 @@ dependencies:
   shared_preferences: any
   url_launcher: ^6.2.5
   image_picker: ^1.1.2
+  # Marketplace map view + shop location picker
+  flutter_map: ^8.0.0
+  latlong2: ^0.9.0
+  geolocator: ^13.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
