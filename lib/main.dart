@@ -8068,12 +8068,16 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
   late Map<String, dynamic> company;
   int _staff = 0;
   int _shops = 0;
+  int _pendingShipments = 0;
 
   @override
   void initState() {
     super.initState();
     company = Map<String, dynamic>.from(widget.company);
     _load();
+    fetchIncomingShipmentCount().then((n) {
+      if (mounted) setState(() => _pendingShipments = n);
+    });
   }
 
   Future<Map<String, String>> _headers() async {
@@ -8235,6 +8239,20 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
           }),
           _actionCard(Icons.forum_outlined, 'Team Chat',
               'Group chat with your staff', _openTeamChat),
+          _actionCard(Icons.local_shipping_outlined, 'Shipments',
+              _pendingShipments > 0
+                  ? '$_pendingShipments incoming'
+                  : 'Track overseas deliveries', () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ShipmentListScreen(company: company),
+              ),
+            );
+            fetchIncomingShipmentCount().then((n) {
+              if (mounted) setState(() => _pendingShipments = n);
+            });
+          }),
           _actionCard(Icons.storefront_outlined, 'Linked Shops',
               'Storefronts attached to this company', () {
             _info(
@@ -8723,6 +8741,862 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
   }
 }
 
+Future<int> fetchIncomingShipmentCount() async {
+  try {
+    final user = await UserSession.load();
+    final res = await http.get(
+      Uri.parse('$baseUrl/shipments/mine'),
+      headers: {
+        'x-api-key': apiKey,
+        'Authorization': 'Bearer ${user?['token'] ?? ''}',
+      },
+    ).timeout(const Duration(seconds: 8));
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final list = jsonDecode(res.body) as List;
+      return list.where((r) {
+        final m = Map<String, dynamic>.from(r as Map);
+        final status = (m['status'] ?? '').toString();
+        return m['my_role'] == 'receiver' &&
+            (status == 'In Transit' || status == 'Arrived');
+      }).length;
+    }
+  } catch (_) {}
+  return 0;
+}
+
+// ==========================================
+// DIASPORA SHIPMENTS
+// ==========================================
+class ShipmentListScreen extends StatefulWidget {
+  final Map<String, dynamic>? company;
+  final Map<String, dynamic>? shop;
+  const ShipmentListScreen({super.key, this.company, this.shop});
+
+  @override
+  State<ShipmentListScreen> createState() => _ShipmentListScreenState();
+}
+
+class _ShipmentListScreenState extends State<ShipmentListScreen> {
+  List<dynamic> _rows = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    return {
+      'x-api-key': apiKey,
+      'Authorization': 'Bearer ${user?['token'] ?? ''}',
+    };
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/shipments/mine'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final list = jsonDecode(res.body) as List;
+        if (mounted) {
+          setState(() {
+            _rows = list;
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _rows = [];
+        _loading = false;
+      });
+    }
+  }
+
+  Color _statusColour(String s) {
+    switch (s) {
+      case 'Received':
+        return kNyqGreen;
+      case 'Arrived':
+        return kNyqOchre;
+      default:
+        return kNyqAccent;
+    }
+  }
+
+  Widget _tile(Map<String, dynamic> s) {
+    final status = (s['status'] ?? 'In Transit').toString();
+    final shortfall = (s['shortfall'] ?? 0) as num;
+    final role = (s['my_role'] ?? 'sender').toString();
+    final colour = _statusColour(status);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFEFE9E0)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ReceiveShipmentScreen(
+                shipmentId: (s['id'] as num).toInt(),
+                canReceive: role == 'receiver' && status != 'Received',
+              ),
+            ),
+          );
+          _load();
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.local_shipping_outlined,
+                      size: 18, color: kNyqAccent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text((s['tracking_number'] ?? '').toString(),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 14)),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: colour.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(status.toUpperCase(),
+                        style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: colour)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${s['origin'] ?? ''} to ${s['destination'] ?? ''}',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              if ((s['receiver_name'] ?? '').toString().isNotEmpty)
+                Text(
+                  '${role == 'receiver' ? 'Incoming to you' : 'Sent to'} ${s['receiver_name']}',
+                  style:
+                      TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Text(
+                    '${s['item_count'] ?? 0} items - ${s['total_sent'] ?? 0} units',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade500),
+                  ),
+                  if (shortfall > 0) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text('${shortfall.toStringAsFixed(0)} missing',
+                          style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red)),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isShop = widget.shop != null;
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: const Text('Shipments'),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      floatingActionButton: (widget.company != null)
+          ? FloatingActionButton.extended(
+              onPressed: _openCreate,
+              backgroundColor: kNyqGreen,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('New Shipment'),
+            )
+          : null,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _rows.isEmpty
+              ? EmptyState(
+                  icon: Icons.local_shipping_outlined,
+                  title: 'No shipments',
+                  message: isShop
+                      ? 'Incoming shipments from overseas will appear here.'
+                      : 'Create a shipment and add your manifest.',
+                  actionLabel: 'Refresh',
+                  onAction: _load,
+                )
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+                    children: _rows
+                        .map((r) =>
+                            _tile(Map<String, dynamic>.from(r as Map)))
+                        .toList(),
+                  ),
+                ),
+    );
+  }
+
+  Future<void> _openCreate() async {
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (_) => CreateShipmentDialog(companyId: (widget.company!['id'] as num).toInt()),
+    );
+    if (created == true) _load();
+  }
+}
+
+class CreateShipmentDialog extends StatefulWidget {
+  final int companyId;
+  const CreateShipmentDialog({super.key, required this.companyId});
+
+  @override
+  State<CreateShipmentDialog> createState() => _CreateShipmentDialogState();
+}
+
+class _CreateShipmentDialogState extends State<CreateShipmentDialog> {
+  final _tracking = TextEditingController();
+  final _carrier = TextEditingController(text: 'DHL');
+  final _origin = TextEditingController(text: 'USA');
+  final _destination = TextEditingController(text: 'Freetown');
+  final List<Map<String, dynamic>> _items = [
+    {'name': TextEditingController(), 'qty': TextEditingController(text: '1')}
+  ];
+  List<dynamic> _receivers = [];
+  String? _receiverKey;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReceivers();
+  }
+
+  Future<void> _loadReceivers() async {
+    try {
+      final user = await UserSession.load();
+      final res = await http.get(
+        Uri.parse('$baseUrl/shipments/receivers'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final list = jsonDecode(res.body) as List;
+        if (mounted) setState(() => _receivers = list);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _tracking.dispose();
+    _carrier.dispose();
+    _origin.dispose();
+    _destination.dispose();
+    for (final i in _items) {
+      (i['name'] as TextEditingController).dispose();
+      (i['qty'] as TextEditingController).dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_tracking.text.trim().isEmpty) {
+      setState(() => _error = 'Tracking number is required');
+      return;
+    }
+    final valid = _items.where((i) {
+      final c = i['name'] as TextEditingController;
+      return c.text.trim().isNotEmpty;
+    }).toList();
+    if (valid.isEmpty) {
+      setState(() => _error = 'Add at least one item');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final user = await UserSession.load();
+    final hdrs = {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'Authorization': 'Bearer ${user?['token'] ?? ''}',
+    };
+    try {
+      final body = <String, dynamic>{
+        'tracking_number': _tracking.text.trim(),
+        'carrier': _carrier.text.trim(),
+        'origin': _origin.text.trim(),
+        'destination': _destination.text.trim(),
+      };
+      if (_receiverKey != null) {
+        final parts = _receiverKey!.split(':');
+        if (parts[0] == 'shop') {
+          body['receiver_shop_id'] = int.parse(parts[1]);
+        } else {
+          body['receiver_company_id'] = int.parse(parts[1]);
+        }
+      }
+      final res = await http.post(
+        Uri.parse('$baseUrl/companies/${widget.companyId}/shipments'),
+        headers: hdrs,
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        String msg = 'Could not create shipment';
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+        } catch (_) {}
+        setState(() {
+          _error = msg;
+          _saving = false;
+        });
+        return;
+      }
+      final sid = (jsonDecode(res.body)['shipment']['id'] as num).toInt();
+      final items = valid
+          .map((i) => {
+                'item_name': (i['name'] as TextEditingController).text.trim(),
+                'quantity_sent': int.tryParse(
+                        (i['qty'] as TextEditingController).text.trim()) ??
+                    0,
+              })
+          .toList();
+      final res2 = await http.post(
+        Uri.parse('$baseUrl/shipments/$sid/items'),
+        headers: hdrs,
+        body: jsonEncode({'items': items}),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res2.statusCode < 200 || res2.statusCode >= 300) {
+        setState(() {
+          _error =
+              'Shipment created, but the manifest failed to save. Add items from the list.';
+          _saving = false;
+        });
+        return;
+      }
+      Navigator.pop(context, true);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'Network error. Please try again.';
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: const Text('New Shipment'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _tracking,
+              decoration: const InputDecoration(
+                  labelText: 'Tracking Number',
+                  border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _carrier,
+              decoration: const InputDecoration(
+                  labelText: 'Carrier', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _origin,
+                    decoration: const InputDecoration(
+                        labelText: 'From', border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _destination,
+                    decoration: const InputDecoration(
+                        labelText: 'To', border: OutlineInputBorder()),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              initialValue: _receiverKey,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                  labelText: 'Receiver (shop or company)',
+                  border: OutlineInputBorder()),
+              items: _receivers.map((r) {
+                final key = '${r['type']}:${r['id']}';
+                return DropdownMenuItem<String>(
+                  value: key,
+                  child: Text(
+                      '${r['name']} (${r['type'] == 'shop' ? 'Shop' : 'Company'})',
+                      overflow: TextOverflow.ellipsis),
+                );
+              }).toList(),
+              onChanged: (v) => setState(() => _receiverKey = v),
+            ),
+            const Divider(height: 24),
+            const Text('Manifest',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 13)),
+            const SizedBox(height: 6),
+            ..._items.asMap().entries.map((entry) {
+              final i = entry.key;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller:
+                            _items[i]['name'] as TextEditingController,
+                        decoration: const InputDecoration(
+                            labelText: 'Item',
+                            border: OutlineInputBorder(),
+                            isDense: true),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      flex: 1,
+                      child: TextField(
+                        controller:
+                            _items[i]['qty'] as TextEditingController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                            labelText: 'Qty',
+                            border: OutlineInputBorder(),
+                            isDense: true),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline,
+                          size: 20, color: Colors.red),
+                      onPressed: _items.length == 1
+                          ? null
+                          : () => setState(() => _items.removeAt(i)),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            TextButton.icon(
+              onPressed: () => setState(() {
+                _items.add({
+                  'name': TextEditingController(),
+                  'qty': TextEditingController(text: '1'),
+                });
+              }),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add another item'),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 6),
+              Text(_error!,
+                  style: const TextStyle(
+                      color: Colors.red,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: _saving ? null : () => Navigator.pop(context, false),
+            child: const Text('Cancel')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: kNyqGreen),
+          onPressed: _saving ? null : _submit,
+          child: _saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white))
+              : const Text('Create'),
+        ),
+      ],
+    );
+  }
+}
+
+class ReceiveShipmentScreen extends StatefulWidget {
+  final int shipmentId;
+  final bool canReceive;
+  const ReceiveShipmentScreen(
+      {super.key, required this.shipmentId, this.canReceive = false});
+
+  @override
+  State<ReceiveShipmentScreen> createState() =>
+      _ReceiveShipmentScreenState();
+}
+
+class _ReceiveShipmentScreenState extends State<ReceiveShipmentScreen> {
+  Map<String, dynamic>? _s;
+  bool _loading = true;
+  bool _saving = false;
+  final Map<int, TextEditingController> _qty = {};
+  final Map<int, TextEditingController> _reason = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _qty.values) {
+      c.dispose();
+    }
+    for (final c in _reason.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    return {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'Authorization': 'Bearer ${user?['token'] ?? ''}',
+    };
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/shipments/${widget.shipmentId}'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final d = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+        final items = (d['items'] as List?) ?? [];
+        for (final raw in items) {
+          final it = Map<String, dynamic>.from(raw as Map);
+          final id = (it['id'] as num).toInt();
+          _qty.putIfAbsent(
+              id,
+              () => TextEditingController(
+                  text: it['quantity_received'] == null
+                      ? ''
+                      : it['quantity_received'].toString()));
+          _reason.putIfAbsent(
+              id,
+              () => TextEditingController(
+                  text: (it['discrepancy_reason'] ?? '').toString()));
+        }
+        if (mounted) {
+          setState(() {
+            _s = d;
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _save({bool finalise = false}) async {
+    if (_s == null) return;
+    if (finalise) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text('Close this shipment?'),
+          content: const Text(
+              'The manifest will lock. You cannot record more arrivals after this.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: kNyqGreen),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Close shipment')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    setState(() => _saving = true);
+    final items = ((_s!['items'] as List?) ?? []).map((raw) {
+      final it = Map<String, dynamic>.from(raw as Map);
+      final id = (it['id'] as num).toInt();
+      final txt = _qty[id]?.text.trim() ?? '';
+      return {
+        'item_id': id,
+        'quantity_received': txt.isEmpty ? null : int.tryParse(txt),
+        'discrepancy_reason': _reason[id]?.text.trim(),
+      };
+    }).toList();
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/shipments/${widget.shipmentId}/receive'),
+        headers: await _headers(),
+        body: jsonEncode({'items': items, 'final': finalise}),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      setState(() => _saving = false);
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final d = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+        setState(() => _s = d['shipment']);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(finalise
+                  ? 'Shipment closed'
+                  : 'Progress saved'),
+              backgroundColor: kNyqGreen),
+        );
+      } else {
+        String msg = 'Could not save';
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.red),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _s;
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: Text(s == null
+            ? 'Shipment'
+            : (s['tracking_number'] ?? 'Shipment').toString()),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: _loading || s == null
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFEFE9E0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                          '${s['origin'] ?? ''} to ${s['destination'] ?? ''}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 15)),
+                      const SizedBox(height: 4),
+                      Text(
+                          'Status: ${s['status']} | ${s['receiver_name'] ?? 'No receiver'}',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600)),
+                      if ((s['shortfall'] ?? 0) > 0) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                            '${s['shortfall']} unit(s) missing',
+                            style: const TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13)),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ...((s['items'] as List?) ?? []).map((raw) {
+                  final it = Map<String, dynamic>.from(raw as Map);
+                  final id = (it['id'] as num).toInt();
+                  final sent = (it['quantity_sent'] ?? 0) as num;
+                  final recvTxt = _qty[id]?.text.trim() ?? '';
+                  final recv =
+                      recvTxt.isEmpty ? null : int.tryParse(recvTxt);
+                  final short = recv != null && recv < sent;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: short
+                          ? Colors.red.withValues(alpha: 0.06)
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: short
+                              ? Colors.red.shade300
+                              : const Color(0xFFEFE9E0)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text((it['item_name'] ?? '').toString(),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 13)),
+                        if ((it['notes'] ?? '').toString().isNotEmpty)
+                          Text((it['notes'] ?? '').toString(),
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500)),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Text('Sent: ${sent.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade700)),
+                            const SizedBox(width: 12),
+                            SizedBox(
+                              width: 90,
+                              child: TextField(
+                                controller: _qty[id],
+                                enabled: widget.canReceive &&
+                                    s['status'] != 'Received',
+                                keyboardType: TextInputType.number,
+                                onChanged: (_) => setState(() {}),
+                                decoration: const InputDecoration(
+                                    labelText: 'Received',
+                                    border: OutlineInputBorder(),
+                                    isDense: true),
+                              ),
+                            ),
+                            if (short) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                  '${(sent - recv).toStringAsFixed(0)} short',
+                                  style: const TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12)),
+                            ],
+                          ],
+                        ),
+                        if (short) ...[
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _reason[id],
+                            enabled: widget.canReceive &&
+                                s['status'] != 'Received',
+                            decoration: const InputDecoration(
+                                labelText: 'What happened?',
+                                border: OutlineInputBorder(),
+                                isDense: true),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+      bottomNavigationBar: (s == null || !widget.canReceive || s['status'] == 'Received')
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _saving ? null : () => _save(),
+                        child: const Text('Save progress'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        style:
+                            FilledButton.styleFrom(backgroundColor: kNyqGreen),
+                        onPressed:
+                            _saving ? null : () => _save(finalise: true),
+                        child: const Text('Close shipment'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+
 class ShopManagementScreen extends StatefulWidget {
   final Map<String, dynamic> shop;
   final Map<String, dynamic>? currentUser;
@@ -8743,6 +9617,7 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
   late Map<String, dynamic> shop;
   int _products = 0;
   int _employees = 0;
+  int _pendingShipments = 0;
 
   @override
   void initState() {
@@ -8750,6 +9625,9 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
     shop = Map<String, dynamic>.from(widget.shop);
     _products = (shop['product_count'] as num?)?.toInt() ?? 0;
     _refresh();
+    fetchIncomingShipmentCount().then((n) {
+      if (mounted) setState(() => _pendingShipments = n);
+    });
   }
 
   String get _initial {
@@ -8927,6 +9805,20 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
           }),
           _actionCard(Icons.forum_outlined, 'Team Chat',
               'Group chat with your staff', _openTeamChat),
+          _actionCard(Icons.local_shipping_outlined, 'Shipments',
+              _pendingShipments > 0
+                  ? '$_pendingShipments incoming'
+                  : 'Track overseas deliveries', () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ShipmentListScreen(shop: shop),
+              ),
+            );
+            fetchIncomingShipmentCount().then((n) {
+              if (mounted) setState(() => _pendingShipments = n);
+            });
+          }),
           _actionCard(Icons.settings_outlined, 'Settings',
               'Edit shop details and branding',
               () => _openShop(action: 'settings')),
