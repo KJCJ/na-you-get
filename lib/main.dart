@@ -623,6 +623,10 @@ class UserSession {
     if (user['is_admin'] != null) {
       await prefs.setBool('user_is_admin', user['is_admin'] == 1 || user['is_admin'] == true);
     }
+    if (user['is_company_manager'] != null) {
+      await prefs.setBool('user_is_company_manager',
+          user['is_company_manager'] == 1 || user['is_company_manager'] == true);
+    }
     if (user['vehicle_type'] != null) {
       await prefs.setString('user_vehicle_type', user['vehicle_type']);
     }
@@ -653,6 +657,8 @@ class UserSession {
       'is_seller': prefs.getBool(_isSellerKey) ?? false,
       'is_runner': prefs.getBool(_isRunnerKey) ?? false,
       'is_admin': prefs.getBool('user_is_admin') ?? false,
+      'is_company_manager':
+          prefs.getBool('user_is_company_manager') ?? false,
       'vehicle_type': prefs.getString('user_vehicle_type'),
       'is_online': prefs.getBool('user_is_online') ?? false,
       'photo_url': prefs.getString(_photoKey),
@@ -673,6 +679,7 @@ class UserSession {
     await prefs.remove(_isSellerKey);
     await prefs.remove(_isRunnerKey);
     await prefs.remove('user_is_admin');
+    await prefs.remove('user_is_company_manager');
     await prefs.remove('user_vehicle_type');
     await prefs.remove('user_is_online');
   }
@@ -5090,8 +5097,30 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     };
   }
 
+  /// Refreshes cached role flags so a stale token does not silently
+  /// produce an empty list.
+  Future<void> _refreshRoles() async {
+    try {
+      final user = await UserSession.load();
+      final token = (user?['token'] ?? '').toString();
+      if (token.isEmpty) return;
+      final res = await http.get(
+        Uri.parse('$baseUrl/auth/me'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final fresh = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+        await UserSession.save(fresh, token);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _fetch() async {
     setState(() => _loading = true);
+    await _refreshRoles();
     var result = <dynamic>[];
     try {
       final q = _searchCtl.text.trim();
@@ -5101,6 +5130,17 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           .timeout(const Duration(seconds: 12));
       if (res.statusCode >= 200 && res.statusCode < 300) {
         result = jsonDecode(res.body) as List;
+      } else if (mounted) {
+        final expired = res.statusCode == 401 || res.statusCode == 403;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(expired
+                ? 'Session expired - please sign out and back in.'
+                : 'Could not load users (${res.statusCode}).'),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 6),
+          ),
+        );
       }
     } catch (_) {
         showNetworkError(context, 'users');
@@ -6290,6 +6330,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isOnline = false;
   bool _isWorker = false;
 
+  /// Re-reads the user from the server so cached role flags never go stale.
+  Future<void> _refreshRoles() async {
+    try {
+      final user = await UserSession.load();
+      final token = (user?['token'] ?? '').toString();
+      if (token.isEmpty) return;
+      final res = await http.get(
+        Uri.parse('$baseUrl/auth/me'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final fresh = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+        await UserSession.save(fresh, token);
+        if (mounted) widget.onUserChanged();
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadKycBadge() async {
     try {
       final user = await UserSession.load();
@@ -6350,11 +6411,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Only roles that require verification see the KYC cards. A plain
   /// customer can buy without ever uploading an ID.
+  /// Flags arrive as int (from the API) or bool (from SharedPreferences),
+  /// so never compare against a single type.
+  bool _flag(dynamic v) => v == true || v == 1 || v == '1' || v == 'true';
+
   bool get _isPrivileged =>
-      _isSellerUser ||
-      _isRunnerUser ||
-      (widget.currentUser?['is_company_manager'] ?? 0) == 1 ||
-      (widget.currentUser?['is_admin'] ?? 0) == 1;
+      _flag(widget.currentUser?['is_seller']) ||
+      _flag(widget.currentUser?['is_runner']) ||
+      _flag(widget.currentUser?['is_company_manager']) ||
+      _flag(widget.currentUser?['is_admin']);
 
   String? get _pendingRole {
     final v = (widget.currentUser?['pending_role'] ?? '').toString().trim();
@@ -6408,6 +6473,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     _load();
     _loadKycBadge();
+    _refreshRoles();
     // Pull fresh roles from the server so admin approvals show up immediately.
     widget.onUserChanged();
   }
