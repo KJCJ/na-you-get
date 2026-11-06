@@ -113,6 +113,73 @@ Future<bool> hasPlatformKyc() async {
 }
 
 /// The "Identity Verification (Required)" panel used by every application form.
+/// Loads the KYC state itself, so dialogs open instantly and the panel fills
+/// in a moment later instead of the whole dialog waiting on the network.
+class KycGate extends StatefulWidget {
+  final void Function(bool)? onChanged;
+  const KycGate({super.key, this.onChanged});
+
+  @override
+  State<KycGate> createState() => _KycGateState();
+}
+
+class _KycGateState extends State<KycGate> {
+  bool? _ok;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    final v = await hasPlatformKyc();
+    if (!mounted) return;
+    setState(() => _ok = v);
+    widget.onChanged?.call(v);
+  }
+
+  Future<void> _upload() async {
+    setState(() => _busy = true);
+    await Navigator.push(context,
+        MaterialPageRoute(builder: (_) => const KycUploadScreen()));
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _ok = null;
+    });
+    await _check();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_ok == null || _busy) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 10),
+            Text('Checking identity verification...',
+                style: TextStyle(
+                    fontSize: 11, color: Colors.grey.shade600)),
+          ],
+        ),
+      );
+    }
+    return kycRequirementBlock(context, _ok!, _upload);
+  }
+}
+
 Widget kycRequirementBlock(
     BuildContext context, bool ok, Future<void> Function() onUpload) {
   return Container(
@@ -1660,7 +1727,7 @@ Future<void> showSellerApplicationDialog(
 
   final phone = TextEditingController(
       text: (user['phone_number'] ?? '').toString());
-  var kycOk = await hasPlatformKyc();
+  bool? kycOk;
   var category = 'Fashion';
   const categories = [
     'Fashion',
@@ -1716,15 +1783,8 @@ Future<void> showSellerApplicationDialog(
                     border: OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
-              kycRequirementBlock(context, kycOk, () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const KycUploadScreen()),
-                );
-                kycOk = await hasPlatformKyc();
-                setDialogState(() {});
-              }),
+              KycGate(
+                  onChanged: (v) => setDialogState(() => kycOk = v)),
               const SizedBox(height: 10),
               TextField(
                 controller: phone,
@@ -1741,7 +1801,7 @@ Future<void> showSellerApplicationDialog(
               onPressed: busy ? null : () => Navigator.pop(dialogCtx),
               child: const Text('Cancel')),
           FilledButton(
-            onPressed: (busy || !kycOk)
+            onPressed: (busy || kycOk != true)
                 ? null
                 : () async {
                     if (business.text.trim().isEmpty) {
@@ -1797,7 +1857,7 @@ Future<void> showWorkerApplicationDialog(
   var vehicle = 'Motorbike';
   const vehicles = ['Motorbike', 'Car', 'Bicycle', 'None / Walking'];
   var busy = false;
-  var kycOk = await hasPlatformKyc();
+  bool? kycOk;
 
   await showDialog<void>(
     context: context,
@@ -1850,15 +1910,8 @@ Future<void> showWorkerApplicationDialog(
                     border: OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
-              kycRequirementBlock(context, kycOk, () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const KycUploadScreen()),
-                );
-                kycOk = await hasPlatformKyc();
-                setDialogState(() {});
-              }),
+              KycGate(
+                  onChanged: (v) => setDialogState(() => kycOk = v)),
             ],
           ),
         ),
@@ -1867,7 +1920,7 @@ Future<void> showWorkerApplicationDialog(
               onPressed: busy ? null : () => Navigator.pop(dialogCtx),
               child: const Text('Cancel')),
           FilledButton(
-            onPressed: (busy || !kycOk)
+            onPressed: (busy || kycOk != true)
                 ? null
                 : () async {
                     if (name.text.trim().isEmpty) {
@@ -5926,7 +5979,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _registerCompany() async {
     final nameCtl = TextEditingController();
-    var kycOk = await hasPlatformKyc();
+    bool? kycOk;
     var industry = 'Logistics';
     const industries = [
       'Logistics', 'Cleaning', 'Construction', 'Retail',
@@ -5970,15 +6023,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   },
                 ),
                 const SizedBox(height: 10),
-                kycRequirementBlock(context, kycOk, () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const KycUploadScreen()),
-                  );
-                  kycOk = await hasPlatformKyc();
-                  setDialogState(() {});
-                }),
+                KycGate(
+                    onChanged: (v) => setDialogState(() => kycOk = v)),
               ],
             ),
           ),
@@ -5987,7 +6033,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onPressed: saving ? null : () => Navigator.pop(dialogCtx),
                 child: const Text('Cancel')),
             FilledButton(
-              onPressed: (saving || !kycOk)
+              onPressed: (saving || kycOk != true)
                   ? null
                   : () async {
                       if (nameCtl.text.trim().isEmpty) {
