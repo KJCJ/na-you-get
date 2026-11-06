@@ -50,3 +50,8 @@ apk/*.apk
 
 # Backend lives in its own private repo (KJCJ/na-you-get-backend)
 backend/
+
+# Desktop targets - this project ships web and android only
+/linux/
+/macos/
+/windows/

@@ -14355,6 +14355,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   bool isLoading = true;
   String selectedFilterCategory = 'All';
   String searchQuery = '';
+  bool _mapView = false;
+  List<dynamic> _shops = [];
+  dynamic _selectedShop;
 
   final List<String> categories = const [
     'All', 'Fashion', 'Food', 'Electronics', 'Home', 'Beauty', 'Services', 'Other',
@@ -14370,6 +14373,21 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     setState(() => isLoading = true);
     myShop = await ShopSession.load();
     await fetchProducts();
+    await _fetchShops();
+  }
+
+  Future<void> _fetchShops() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/shops/'),
+        headers: {'x-api-key': apiKey},
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        if (mounted) setState(() => _shops = jsonDecode(res.body) as List);
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'shops');
+    }
   }
 
   Future<void> fetchProducts() async {
@@ -14823,6 +14841,188 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
+  Widget _viewToggle(
+      String label, IconData icon, bool active, VoidCallback onTap) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Container(
+        height: 38,
+        decoration: BoxDecoration(
+          color: active ? kNyqAccent : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: active ? kNyqAccent : Colors.grey.shade300),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon,
+                size: 16,
+                color: active ? Colors.white : Colors.grey.shade700),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: active ? Colors.white : Colors.grey.shade700)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMapView() {
+    final located = _shops
+        .map((s) => Map<String, dynamic>.from(s as Map))
+        .where((m) => m['latitude'] != null && m['longitude'] != null)
+        .toList();
+    final missing = _shops.length - located.length;
+
+    return Stack(
+      children: [
+        if (located.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'No shops have set a map location yet.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+            ),
+          )
+        else
+          FlutterMap(
+            options: MapOptions(
+              initialCenter: LatLng(
+                (located.first['latitude'] as num).toDouble(),
+                (located.first['longitude'] as num).toDouble(),
+              ),
+              initialZoom: 13,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: kOsmTileUrl,
+                userAgentPackageName: 'com.nyg.app',
+              ),
+              MarkerLayer(
+                markers: located.map((s) {
+                  final lat = (s['latitude'] as num).toDouble();
+                  final lng = (s['longitude'] as num).toDouble();
+                  return Marker(
+                    point: LatLng(lat, lng),
+                    width: 40,
+                    height: 40,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selectedShop = s),
+                      child: const Icon(Icons.location_on,
+                          size: 38, color: kNyqAccent),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        if (missing > 0)
+          Positioned(
+            top: 8,
+            left: 8,
+            right: 8,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$missing shop${missing == 1 ? "" : "s"} haven\'t set a location yet.',
+                style: const TextStyle(color: Colors.white, fontSize: 11),
+              ),
+            ),
+          ),
+        if (_selectedShop != null)
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 12,
+            child: _shopPreviewCard(
+                Map<String, dynamic>.from(_selectedShop as Map)),
+          ),
+      ],
+    );
+  }
+
+  Widget _shopPreviewCard(Map<String, dynamic> s) {
+    final logo = (s['logo_url'] ?? '').toString();
+    final name = (s['shop_name'] ?? 'Shop').toString();
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x22000000),
+              blurRadius: 16,
+              offset: Offset(0, 6)),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: kNyqAccent,
+            backgroundImage: logo.isNotEmpty ? NetworkImage(logo) : null,
+            child: logo.isEmpty
+                ? Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 14)),
+                Text((s['category'] ?? '').toString(),
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade600)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: kNyqGreen,
+                padding: const EdgeInsets.symmetric(horizontal: 12)),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ShopPageScreen(
+                  shop: s,
+                  currentUser: widget.currentUser,
+                  onUserChanged: widget.onUserChanged,
+                ),
+              ),
+            ),
+            child: const Text('View Shop', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visible = filteredProducts;
@@ -14880,6 +15080,23 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _viewToggle('List', Icons.view_list, !_mapView,
+                            () => setState(() => _mapView = false)),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _viewToggle('Map', Icons.map_outlined, _mapView,
+                            () => setState(() => _mapView = true)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
                 SizedBox(
                   height: 44,
                   child: ListView.builder(
@@ -14920,7 +15137,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 const SizedBox(height: 8),
                 const Divider(height: 1),
                 Expanded(
-                  child: visible.isEmpty
+                  child: _mapView
+                      ? _buildMapView()
+                      : visible.isEmpty
                       ? EmptyState(
                           icon: Icons.storefront_outlined,
                           title: searchQuery.isNotEmpty
