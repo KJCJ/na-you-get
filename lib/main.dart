@@ -9029,11 +9029,58 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
     );
   }
 
+  Future<void> _openUri(String? raw) async {
+    final v = (raw ?? '').trim();
+    if (v.isEmpty) return;
+    final uri = Uri.tryParse(
+        v.startsWith('http') || v.startsWith('tel:') ? v : 'https://' + v);
+    if (uri == null) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'that link');
+    }
+  }
+
+  Widget _actionIcon(IconData icon, Color colour, VoidCallback? onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: onTap == null
+              ? Colors.grey.shade100
+              : colour.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon,
+            size: 18,
+            color: onTap == null ? Colors.grey.shade400 : colour),
+      ),
+    );
+  }
+
   Widget _shopPreviewCard(Map<String, dynamic> s) {
     final logo = (s['logo_url'] ?? '').toString();
     final name = (s['shop_name'] ?? 'Shop').toString();
+    final category = (s['category'] ?? '').toString().trim();
+    final hours = (s['opening_hours'] ?? '').toString().trim();
+    final phone = (s['phone_number'] ?? '').toString().trim();
+    final whatsapp = (s['whatsapp_number'] ?? '').toString().trim();
+    final ig = (s['instagram_url'] ?? '').toString().trim();
+    final tt = (s['tiktok_url'] ?? '').toString().trim();
+    final x = (s['twitter_url'] ?? '').toString().trim();
+    final sellerId = s['owner_user_id'];
+
+    final subtitle = [
+      if (category.isNotEmpty && category != 'null') category,
+      if (hours.isNotEmpty && hours != 'null') hours,
+    ].join(' - ');
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -9044,54 +9091,104 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
               offset: Offset(0, 6)),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: kNyqAccent,
-            backgroundImage: logo.isNotEmpty ? NetworkImage(logo) : null,
-            child: logo.isEmpty
-                ? Text(
-                    name.isNotEmpty ? name[0].toUpperCase() : '?',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold),
-                  )
-                : null,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 14)),
-                Text((s['category'] ?? '').toString(),
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey.shade600)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: kNyqGreen,
-                padding: const EdgeInsets.symmetric(horizontal: 12)),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ShopPageScreen(
-                  shop: s,
-                  currentUser: null,
-                  onUserChanged: widget.onUserChanged,
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: kNyqAccent,
+                backgroundImage: logo.isNotEmpty ? NetworkImage(logo) : null,
+                child: logo.isEmpty
+                    ? Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 14)),
+                    if (subtitle.isNotEmpty)
+                      Text(subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade600)),
+                  ],
                 ),
               ),
-            ),
-            child: const Text('View Shop', style: TextStyle(fontSize: 12)),
+              const SizedBox(width: 8),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                    backgroundColor: kNyqGreen,
+                    padding: const EdgeInsets.symmetric(horizontal: 12)),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ShopPageScreen(
+                      shop: s,
+                      currentUser: null,
+                      onUserChanged: widget.onUserChanged,
+                    ),
+                  ),
+                ),
+                child: const Text('View Shop', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _actionIcon(Icons.call, kNyqGreen,
+                  phone.isEmpty ? null : () => _openUri('tel:' + phone)),
+              const SizedBox(width: 8),
+              _actionIcon(
+                  Icons.chat_bubble_outline,
+                  kNyqAccent,
+                  sellerId == null
+                      ? null
+                      : () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                otherUserId: (sellerId as num).toInt(),
+                                otherUserName: name,
+                                shopId: (s['id'] as num?)?.toInt(),
+                              ),
+                            ),
+                          )),
+              const SizedBox(width: 8),
+              _actionIcon(
+                  Icons.chat,
+                  const Color(0xFF25D366),
+                  whatsapp.isEmpty
+                      ? null
+                      : () => _openUri('https://wa.me/' +
+                          whatsapp.replaceAll(RegExp(r'[^0-9]'), ''))),
+              const SizedBox(width: 8),
+              _actionIcon(Icons.camera_alt_outlined, const Color(0xFFE1306C),
+                  ig.isEmpty ? null : () => _openUri(ig)),
+              const SizedBox(width: 8),
+              _actionIcon(Icons.music_note, Colors.black87,
+                  tt.isEmpty ? null : () => _openUri(tt)),
+              const SizedBox(width: 8),
+              _actionIcon(Icons.alternate_email, Colors.black87,
+                  x.isEmpty ? null : () => _openUri(x)),
+            ],
           ),
         ],
       ),
