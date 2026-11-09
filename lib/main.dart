@@ -3150,6 +3150,7 @@ class ChatScreen extends StatefulWidget {
   final int? threadId;
   final String? threadName;
   final int? shopId;
+  final int? companyId;
   final int? orderId;
   final int? productId;
   final String? initialMessage;
@@ -3160,6 +3161,7 @@ class ChatScreen extends StatefulWidget {
     this.threadId,
     this.threadName,
     this.shopId,
+    this.companyId,
     this.orderId,
     this.productId,
     this.initialMessage,
@@ -3179,6 +3181,7 @@ class _ChatScreenState extends State<ChatScreen> {
   int _lastCount = 0;
 
   bool get _isThread => widget.threadId != null;
+  Map<String, dynamic>? _bookingTarget;
   String get _title => widget.threadName ?? widget.otherUserName ?? 'Chat';
   Map<String, dynamic>? _replyTo;
   bool _showEmoji = false;
@@ -3189,10 +3192,46 @@ class _ChatScreenState extends State<ChatScreen> {
     _init();
   }
 
+  Future<void> _loadBookingTarget() async {
+    try {
+      if (widget.shopId != null) {
+        final res = await http.get(
+          Uri.parse('$baseUrl/merchants/${widget.shopId}'),
+          headers: {'x-api-key': apiKey},
+        ).timeout(const Duration(seconds: 8));
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          final body = jsonDecode(res.body);
+          final m = Map<String, dynamic>.from(
+              (body is Map && body['merchant'] is Map) ? body['merchant'] : body);
+          final accepts = m['accept_bookings'] == 1 ||
+              (m['category'] ?? '').toString().toLowerCase() == 'services';
+          if (mounted && accepts) {
+            setState(() => _bookingTarget = {...m, '_type': 'shop'});
+          }
+        }
+      } else if (widget.companyId != null) {
+        final res = await http.get(
+          Uri.parse('$baseUrl/companies/${widget.companyId}/public'),
+          headers: {'x-api-key': apiKey},
+        ).timeout(const Duration(seconds: 8));
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          final m =
+              Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+          final accepts = m['accept_bookings'] == 1 ||
+              (m['industry'] ?? '').toString().toLowerCase() == 'services';
+          if (mounted && accepts) {
+            setState(() => _bookingTarget = {...m, '_type': 'company'});
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<void> _init() async {
     final user = await UserSession.load();
     _myId = user?['id'];
     await _load();
+    _loadBookingTarget();
     final opening = widget.initialMessage;
     if (!_isThread &&
         opening != null &&
@@ -3267,6 +3306,156 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
     });
+  }
+
+  Future<void> _bookFromChat() async {
+    final t = _bookingTarget;
+    if (t == null) return;
+    final serviceCtl = TextEditingController();
+    DateTime? date;
+    TimeOfDay? time;
+    bool sending = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx2, setD) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Text(
+              'Book ' + (t['shop_name'] ?? t['name'] ?? '').toString()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: serviceCtl,
+                decoration: const InputDecoration(
+                    labelText: 'Service', border: OutlineInputBorder()),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.event),
+                title: Text(date == null
+                    ? 'Choose a date'
+                    : '${date!.day}/${date!.month}/${date!.year}'),
+                onTap: () async {
+                  final now = DateTime.now();
+                  final picked = await showDatePicker(
+                    context: ctx2,
+                    firstDate: now.add(const Duration(days: 1)),
+                    lastDate: now.add(const Duration(days: 180)),
+                    initialDate: now.add(const Duration(days: 1)),
+                  );
+                  if (picked != null) setD(() => date = picked);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.schedule),
+                title: Text(
+                    time == null ? 'Choose a time' : time!.format(ctx2)),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                      context: ctx2,
+                      initialTime:
+                          const TimeOfDay(hour: 10, minute: 0));
+                  if (picked != null) setD(() => time = picked);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: kNyqGreen),
+              onPressed: sending
+                  ? null
+                  : () async {
+                      if (serviceCtl.text.trim().isEmpty ||
+                          date == null ||
+                          time == null) {
+                        ScaffoldMessenger.of(ctx2).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  'Add a service, a date and a time')),
+                        );
+                        return;
+                      }
+                      setD(() => sending = true);
+                      final when = DateTime(date!.year, date!.month,
+                          date!.day, time!.hour, time!.minute);
+                      final isCompany = t['_type'] == 'company';
+                      final id = (t['id'] as num).toInt();
+                      final url = isCompany
+                          ? '$baseUrl/companies/$id/appointments'
+                          : '$baseUrl/shops/$id/appointments';
+                      try {
+                        final user = await UserSession.load();
+                        final res = await http.post(
+                          Uri.parse(url),
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': apiKey,
+                            'Authorization':
+                                'Bearer ${user?['token'] ?? ''}',
+                          },
+                          body: jsonEncode({
+                            'service_name': serviceCtl.text.trim(),
+                            'appointment_date': when.toIso8601String(),
+                          }),
+                        ).timeout(const Duration(seconds: 12));
+                        if (!ctx.mounted) return;
+                        if (res.statusCode >= 200 &&
+                            res.statusCode < 300) {
+                          Navigator.pop(ctx);
+                          await _sendBookingMessage(
+                              serviceCtl.text.trim(), when);
+                        } else {
+                          setD(() => sending = false);
+                          String msg = 'Could not book';
+                          try {
+                            msg =
+                                (jsonDecode(res.body)['detail'] ?? msg)
+                                    .toString();
+                          } catch (_) {}
+                          ScaffoldMessenger.of(ctx2).showSnackBar(
+                            SnackBar(
+                                content: Text(msg),
+                                backgroundColor: Colors.red.shade700),
+                          );
+                        }
+                      } catch (_) {
+                        if (ctx.mounted) setD(() => sending = false);
+                      }
+                    },
+              child: sending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Request'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendBookingMessage(String service, DateTime when) async {
+    if (widget.otherUserId == null) return;
+    final stamp = '${when.day}/${when.month}/${when.year} at '
+        '${when.hour.toString().padLeft(2, '0')}:'
+        '${when.minute.toString().padLeft(2, '0')}';
+    await MessageSession.send(
+      widget.otherUserId!,
+      '📅 Booking requested: $service on $stamp. '
+      'The seller will confirm shortly.',
+      shopId: widget.shopId,
+    );
+    await _load();
   }
 
   Future<void> _makeOffer() async {
@@ -3563,6 +3752,12 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         title: Text(_title),
         actions: [
+          if (!_isThread && _bookingTarget != null)
+            IconButton(
+              icon: const Icon(Icons.calendar_month),
+              tooltip: 'Book an appointment',
+              onPressed: _bookFromChat,
+            ),
           if (!_isThread &&
               (widget.orderId != null ||
                   widget.productId != null ||
@@ -9391,6 +9586,321 @@ class ShopProductGrid extends StatelessWidget {
 // ==========================================
 // MARKETPLACE LOCATIONS SCREEN
 // ==========================================
+// ==========================================
+// COMPANY SETTINGS (PUBLIC PROFILE)
+// ==========================================
+class CompanySettingsScreen extends StatefulWidget {
+  final Map<String, dynamic> company;
+  final VoidCallback? onSaved;
+  const CompanySettingsScreen({super.key, required this.company, this.onSaved});
+
+  @override
+  State<CompanySettingsScreen> createState() => _CompanySettingsScreenState();
+}
+
+class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
+  late TextEditingController _name;
+  late TextEditingController _industry;
+  late TextEditingController _about;
+  late TextEditingController _services;
+  late TextEditingController _phone;
+  late TextEditingController _whatsapp;
+  late TextEditingController _instagram;
+  late TextEditingController _twitter;
+  late TextEditingController _tiktok;
+  late TextEditingController _hours;
+  String? _logo;
+  String? _banner;
+  double? _lat;
+  double? _lng;
+  bool _bookings = false;
+  bool _isPublic = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final c = widget.company;
+    _name = TextEditingController(text: (c['name'] ?? '').toString());
+    _industry =
+        TextEditingController(text: (c['industry'] ?? '').toString());
+    _about =
+        TextEditingController(text: (c['description'] ?? '').toString());
+    _services = TextEditingController(
+        text: (c['services_offered'] ?? '').toString());
+    _phone =
+        TextEditingController(text: (c['phone_number'] ?? '').toString());
+    _whatsapp = TextEditingController(
+        text: (c['whatsapp_number'] ?? '').toString());
+    _instagram = TextEditingController(
+        text: (c['instagram_url'] ?? '').toString());
+    _twitter =
+        TextEditingController(text: (c['twitter_url'] ?? '').toString());
+    _tiktok =
+        TextEditingController(text: (c['tiktok_url'] ?? '').toString());
+    _hours = TextEditingController(
+        text: (c['opening_hours'] ?? '').toString());
+    _logo = (c['logo_url'] ?? '').toString().isEmpty
+        ? null
+        : c['logo_url'].toString();
+    _banner = (c['banner_url'] ?? '').toString().isEmpty
+        ? null
+        : c['banner_url'].toString();
+    _lat = (c['latitude'] as num?)?.toDouble();
+    _lng = (c['longitude'] as num?)?.toDouble();
+    _bookings = (c['accept_bookings'] ?? 0) == 1;
+    _isPublic = (c['is_public'] ?? 1) == 1;
+  }
+
+  @override
+  void dispose() {
+    for (final c in [_name, _industry, _about, _services, _phone, _whatsapp,
+        _instagram, _twitter, _tiktok, _hours]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final user = await UserSession.load();
+      final res = await http.put(
+        Uri.parse('$baseUrl/companies/${widget.company['id']}/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+        body: jsonEncode({
+          'name': _name.text.trim(),
+          'industry': _industry.text.trim(),
+          'description': _about.text.trim(),
+          'services_offered': _services.text.trim(),
+          'phone_number': _phone.text.trim(),
+          'whatsapp_number': _whatsapp.text.trim(),
+          'instagram_url': _instagram.text.trim(),
+          'twitter_url': _twitter.text.trim(),
+          'tiktok_url': _tiktok.text.trim(),
+          'opening_hours': _hours.text.trim(),
+          'logo_url': _logo,
+          'banner_url': _banner,
+          'latitude': _lat,
+          'longitude': _lng,
+          'accept_bookings': _bookings ? 1 : 0,
+          'is_public': _isPublic ? 1 : 0,
+        }),
+      ).timeout(const Duration(seconds: 12));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Company profile updated'),
+              backgroundColor: kNyqGreen),
+        );
+        widget.onSaved?.call();
+        Navigator.pop(context);
+      } else {
+        setState(() => _saving = false);
+        String msg = 'Could not save the profile';
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.red.shade700),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saving = false);
+        showNetworkError(context, 'your company profile');
+      }
+    }
+  }
+
+  Widget _field(TextEditingController c, String label, {int lines = 1}) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: TextField(
+          controller: c,
+          maxLines: lines,
+          decoration: InputDecoration(
+              labelText: label, border: const OutlineInputBorder()),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: const Text('Company Settings'),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Center(
+            child: GestureDetector(
+              onTap: () async {
+                final url = await pickAndUploadImage(context);
+                if (url != null && mounted) setState(() => _logo = url);
+              },
+              child: CircleAvatar(
+                radius: 42,
+                backgroundColor: kNyqAccent,
+                backgroundImage: _logo != null ? NetworkImage(_logo!) : null,
+                child: _logo == null
+                    ? const Icon(Icons.add_a_photo,
+                        color: Colors.white, size: 26)
+                    : null,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Center(
+            child: TextButton(
+              onPressed: () async {
+                final url = await pickAndUploadImage(context);
+                if (url != null && mounted) setState(() => _banner = url);
+              },
+              child: Text(_banner == null
+                  ? 'Add a cover image'
+                  : 'Change cover image'),
+            ),
+          ),
+          _field(_name, 'Company Name'),
+          _field(_industry, 'Industry'),
+          _field(_about, 'About your company', lines: 3),
+          _field(_services, 'Services Offered', lines: 3),
+          _field(_phone, 'Phone Number'),
+          _field(_whatsapp, 'WhatsApp Number'),
+          _field(_instagram, 'Instagram URL'),
+          _field(_twitter, 'X / Twitter URL'),
+          _field(_tiktok, 'TikTok URL'),
+          _field(_hours, 'Opening Hours'),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: kNyqSand,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE0DAD2)),
+            ),
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 150,
+                  child: _lat == null || _lng == null
+                      ? Center(
+                          child: Text(
+                            'No location set - customers cannot find you',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade600),
+                          ),
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: FlutterMap(
+                            options: MapOptions(
+                              initialCenter: LatLng(_lat!, _lng!),
+                              initialZoom: 15,
+                              interactionOptions: const InteractionOptions(
+                                  flags: InteractiveFlag.none),
+                            ),
+                            children: [
+                              TileLayer(
+                                urlTemplate: kOsmTileUrl,
+                                userAgentPackageName: 'com.nyg.app',
+                              ),
+                              MarkerLayer(markers: [
+                                Marker(
+                                  point: LatLng(_lat!, _lng!),
+                                  width: 30,
+                                  height: 30,
+                                  child: const Icon(Icons.business,
+                                      size: 30, color: kNyqOchre),
+                                ),
+                              ]),
+                            ],
+                          ),
+                        ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.map_outlined, size: 16),
+                    label: Text(_lat == null
+                        ? 'Pick Location on Map'
+                        : 'Change Location'),
+                    onPressed: () async {
+                      final picked = await Navigator.push<LatLng>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ShopLocationPickerScreen(
+                            initial: _lat != null && _lng != null
+                                ? LatLng(_lat!, _lng!)
+                                : null,
+                          ),
+                        ),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _lat = picked.latitude;
+                          _lng = picked.longitude;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Accept Bookings'),
+            subtitle: const Text('Let customers book appointments',
+                style: TextStyle(fontSize: 11)),
+            value: _bookings,
+            onChanged: (v) => setState(() => _bookings = v),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Show Company in Public Directory'),
+            subtitle: const Text(
+                'Off hides you from the map and search. You can still manage employees, shipments and bookings.',
+                style: TextStyle(fontSize: 11)),
+            value: _isPublic,
+            onChanged: (v) => setState(() => _isPublic = v),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: kNyqGreen,
+                  padding: const EdgeInsets.symmetric(vertical: 14)),
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Save'),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
 class MarketplaceLocationsScreen extends StatefulWidget {
   final Map<String, dynamic>? currentUser;
   final VoidCallback onUserChanged;
@@ -9410,6 +9920,7 @@ class MarketplaceLocationsScreen extends StatefulWidget {
 
 class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen> {
   List<dynamic> shops = [];
+  List<dynamic> _companies = [];
   List<String> cities = [];
   bool isLoading = true;
   bool hasError = false;
@@ -9452,6 +9963,15 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
       );
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final data = jsonDecode(res.body) as List;
+        try {
+          final cres = await http
+              .get(Uri.parse('$baseUrl/companies/public'),
+                  headers: {'x-api-key': apiKey})
+              .timeout(const Duration(seconds: 8));
+          if (cres.statusCode >= 200 && cres.statusCode < 300) {
+            _companies = jsonDecode(cres.body) as List;
+          }
+        } catch (_) {}
         final uniqueCities = <String>{};
         for (final s in data) {
           final city = (s['city'] ?? '').toString().trim();
@@ -9656,11 +10176,19 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
   }
 
   Widget _buildMapView() {
-    final located = shops
+    final locatedShops = shops
         .map((s) => Map<String, dynamic>.from(s as Map))
         .where((m) => m['latitude'] != null && m['longitude'] != null)
+        .map((m) => {...m, '_type': 'shop'})
         .toList();
-    final missing = shops.length - located.length;
+    final locatedCompanies = _companies
+        .map((s) => Map<String, dynamic>.from(s as Map))
+        .where((m) => m['latitude'] != null && m['longitude'] != null)
+        .map((m) => {...m, '_type': 'company'})
+        .toList();
+    final located = [...locatedShops, ...locatedCompanies];
+    final missing = (shops.length - locatedShops.length) +
+        (_companies.length - locatedCompanies.length);
 
     return Stack(
       children: [
@@ -9699,8 +10227,14 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
                     height: 40,
                     child: GestureDetector(
                       onTap: () => setState(() => _selectedShop = s),
-                      child: const Icon(Icons.location_on,
-                          size: 38, color: kNyqAccent),
+                      child: Icon(
+                          s['_type'] == 'company'
+                              ? Icons.business
+                              : Icons.location_on,
+                          size: 38,
+                          color: s['_type'] == 'company'
+                              ? kNyqOchre
+                              : kNyqAccent),
                     ),
                   );
                 }).toList(),
@@ -9730,8 +10264,13 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
             left: 12,
             right: 12,
             bottom: 12,
-            child: _shopPreviewCard(
-                Map<String, dynamic>.from(_selectedShop as Map)),
+            child: (Map<String, dynamic>.from(_selectedShop as Map)[
+                        '_type'] ==
+                    'company')
+                ? _companyPreviewCard(
+                    Map<String, dynamic>.from(_selectedShop as Map))
+                : _shopPreviewCard(
+                    Map<String, dynamic>.from(_selectedShop as Map)),
           ),
       ],
     );
@@ -9766,6 +10305,79 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
         child: Icon(icon,
             size: 18,
             color: onTap == null ? Colors.grey.shade400 : colour),
+      ),
+    );
+  }
+
+  Widget _companyPreviewCard(Map<String, dynamic> c) {
+    final logo = (c['logo_url'] ?? '').toString();
+    final name = (c['name'] ?? 'Company').toString();
+    final industry = (c['industry'] ?? '').toString();
+    final hours = (c['opening_hours'] ?? '').toString();
+    final subtitle = [
+      if (industry.isNotEmpty && industry != 'null') industry,
+      if (hours.isNotEmpty && hours != 'null') hours,
+    ].join(' - ');
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x22000000),
+              blurRadius: 16,
+              offset: Offset(0, 6)),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: kNyqOchre,
+            backgroundImage: logo.isNotEmpty ? NetworkImage(logo) : null,
+            child: logo.isEmpty
+                ? const Icon(Icons.business, color: Colors.white, size: 20)
+                : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 14)),
+                if (subtitle.isNotEmpty)
+                  Text(subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade600)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: kNyqOchre,
+                padding: const EdgeInsets.symmetric(horizontal: 12)),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PublicCompanyScreen(
+                  companyId: (c['id'] as num).toInt(),
+                  companyName: name,
+                ),
+              ),
+            ),
+            child: const Text('View Company',
+                style: TextStyle(fontSize: 12)),
+          ),
+        ],
       ),
     );
   }
@@ -10233,6 +10845,20 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             fetchIncomingShipmentCount().then((n) {
               if (mounted) setState(() => _pendingShipments = n);
             });
+          }),
+
+          _actionCard(Icons.settings_outlined, 'Company Settings',
+              'Public profile, contact details and bookings', () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CompanySettingsScreen(
+                  company: company,
+                  onSaved: _load,
+                ),
+              ),
+            );
+            _load();
           }),
 
           _actionCard(Icons.info_outline, 'Company Details',
@@ -13478,6 +14104,429 @@ class _AppointmentListScreenState extends State<AppointmentListScreen> {
                     );
                   }).toList(),
                 ),
+    );
+  }
+}
+
+// ==========================================
+// PUBLIC COMPANY PROFILE
+// ==========================================
+class PublicCompanyScreen extends StatefulWidget {
+  final int companyId;
+  final String? companyName;
+  const PublicCompanyScreen(
+      {super.key, required this.companyId, this.companyName});
+
+  @override
+  State<PublicCompanyScreen> createState() => _PublicCompanyScreenState();
+}
+
+class _PublicCompanyScreenState extends State<PublicCompanyScreen> {
+  Map<String, dynamic>? _c;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final user = await UserSession.load();
+      final res = await http.get(
+        Uri.parse('$baseUrl/companies/${widget.companyId}/public'),
+        headers: {
+          'x-api-key': apiKey,
+          if (user?['token'] != null)
+            'Authorization': 'Bearer ${user!['token']}',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        if (mounted) {
+          setState(() {
+            _c = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'this company');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _openUri(String? raw) async {
+    final v = (raw ?? '').trim();
+    if (v.isEmpty) return;
+    final uri = Uri.tryParse(
+        v.startsWith('http') || v.startsWith('tel:') ? v : 'https://' + v);
+    if (uri == null) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+
+  Widget _action(IconData icon, Color colour, VoidCallback? onTap) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: onTap == null
+                ? Colors.grey.shade100
+                : colour.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon,
+              size: 18, color: onTap == null ? Colors.grey.shade400 : colour),
+        ),
+      );
+
+  Future<void> _book(Map<String, dynamic> c) async {
+    final user = await UserSession.load();
+    if (user == null) {
+      await guestSignupFlow(context);
+      if (!mounted) return;
+    }
+    final serviceCtl = TextEditingController();
+    DateTime? date;
+    TimeOfDay? time;
+    bool sending = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx2, setD) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Text('Book ' + (c['name'] ?? '').toString()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: serviceCtl,
+                decoration: const InputDecoration(
+                    labelText: 'Service',
+                    border: OutlineInputBorder()),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.event),
+                title: Text(date == null
+                    ? 'Choose a date'
+                    : '${date!.day}/${date!.month}/${date!.year}'),
+                onTap: () async {
+                  final now = DateTime.now();
+                  final picked = await showDatePicker(
+                    context: ctx2,
+                    firstDate: now.add(const Duration(days: 1)),
+                    lastDate: now.add(const Duration(days: 180)),
+                    initialDate: now.add(const Duration(days: 1)),
+                  );
+                  if (picked != null) setD(() => date = picked);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.schedule),
+                title: Text(
+                    time == null ? 'Choose a time' : time!.format(ctx2)),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                      context: ctx2,
+                      initialTime:
+                          const TimeOfDay(hour: 10, minute: 0));
+                  if (picked != null) setD(() => time = picked);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: kNyqGreen),
+              onPressed: sending
+                  ? null
+                  : () async {
+                      if (serviceCtl.text.trim().isEmpty ||
+                          date == null ||
+                          time == null) {
+                        ScaffoldMessenger.of(ctx2).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  'Add a service, a date and a time')),
+                        );
+                        return;
+                      }
+                      setD(() => sending = true);
+                      final when = DateTime(date!.year, date!.month,
+                          date!.day, time!.hour, time!.minute);
+                      try {
+                        final u = await UserSession.load();
+                        final res = await http.post(
+                          Uri.parse(
+                              '$baseUrl/companies/${c['id']}/appointments'),
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': apiKey,
+                            'Authorization':
+                                'Bearer ${u?['token'] ?? ''}',
+                          },
+                          body: jsonEncode({
+                            'service_name': serviceCtl.text.trim(),
+                            'appointment_date': when.toIso8601String(),
+                          }),
+                        ).timeout(const Duration(seconds: 12));
+                        if (!ctx.mounted) return;
+                        if (res.statusCode >= 200 &&
+                            res.statusCode < 300) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Booking requested'),
+                                backgroundColor: kNyqGreen),
+                          );
+                        } else {
+                          setD(() => sending = false);
+                          String msg = 'Could not book';
+                          try {
+                            msg =
+                                (jsonDecode(res.body)['detail'] ?? msg)
+                                    .toString();
+                          } catch (_) {}
+                          ScaffoldMessenger.of(ctx2).showSnackBar(
+                            SnackBar(
+                                content: Text(msg),
+                                backgroundColor: Colors.red.shade700),
+                          );
+                        }
+                      } catch (_) {
+                        if (ctx.mounted) setD(() => sending = false);
+                      }
+                    },
+              child: sending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _c;
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (c == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Company')),
+        body: EmptyState(
+          icon: Icons.business_outlined,
+          title: 'Company not available',
+          message: 'This company is not listed publicly.',
+          actionLabel: 'Back',
+          onAction: () => Navigator.pop(context),
+        ),
+      );
+    }
+    final logo = (c['logo_url'] ?? '').toString();
+    final banner = (c['banner_url'] ?? '').toString();
+    final name = (c['name'] ?? 'Company').toString();
+    final industry = (c['industry'] ?? '').toString();
+    final hours = (c['opening_hours'] ?? '').toString();
+    final services = (c['services_offered'] ?? '').toString();
+    final about = (c['description'] ?? '').toString();
+    final phone = (c['phone_number'] ?? '').toString();
+    final wa = (c['whatsapp_number'] ?? '').toString();
+    final ig = (c['instagram_url'] ?? '').toString();
+    final tt = (c['tiktok_url'] ?? '').toString();
+    final x = (c['twitter_url'] ?? '').toString();
+    final bookings = (c['accept_bookings'] ?? 0) == 1;
+    final lat = (c['latitude'] as num?)?.toDouble();
+    final lng = (c['longitude'] as num?)?.toDouble();
+
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: Text(name),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          if (banner.isNotEmpty)
+            Image.network(banner,
+                height: 150,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                    height: 150, color: kNyqAccent)),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundColor: kNyqAccent,
+                      backgroundImage:
+                          logo.isNotEmpty ? NetworkImage(logo) : null,
+                      child: logo.isEmpty
+                          ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold))
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 17)),
+                          if (industry.isNotEmpty)
+                            Text(industry,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600)),
+                          if (hours.isNotEmpty)
+                            Text(hours,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade500)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    _action(Icons.call, kNyqGreen,
+                        phone.isEmpty ? null : () => _openUri('tel:' + phone)),
+                    const SizedBox(width: 8),
+                    _action(
+                        Icons.chat,
+                        const Color(0xFF25D366),
+                        wa.isEmpty
+                            ? null
+                            : () => _openUri('https://wa.me/' +
+                                wa.replaceAll(RegExp(r'[^0-9]'), ''))),
+                    const SizedBox(width: 8),
+                    _action(Icons.camera_alt_outlined,
+                        const Color(0xFFE1306C),
+                        ig.isEmpty ? null : () => _openUri(ig)),
+                    const SizedBox(width: 8),
+                    _action(Icons.music_note, Colors.black87,
+                        tt.isEmpty ? null : () => _openUri(tt)),
+                    const SizedBox(width: 8),
+                    _action(Icons.alternate_email, Colors.black87,
+                        x.isEmpty ? null : () => _openUri(x)),
+                  ],
+                ),
+                if (about.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  const Text('About',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  Text(about,
+                      style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: Colors.grey.shade800)),
+                ],
+                if (services.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  const Text('Services Offered',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  Text(services,
+                      style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: Colors.grey.shade800)),
+                ],
+                if (lat != null && lng != null) ...[
+                  const SizedBox(height: 18),
+                  const Text('Location',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 14)),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SizedBox(
+                      height: 150,
+                      child: FlutterMap(
+                        options: MapOptions(
+                          initialCenter: LatLng(lat, lng),
+                          initialZoom: 15,
+                          interactionOptions: const InteractionOptions(
+                              flags: InteractiveFlag.none),
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate: kOsmTileUrl,
+                            userAgentPackageName: 'com.nyg.app',
+                          ),
+                          MarkerLayer(markers: [
+                            Marker(
+                              point: LatLng(lat, lng),
+                              width: 30,
+                              height: 30,
+                              child: const Icon(Icons.business,
+                                  size: 30, color: kNyqOchre),
+                            ),
+                          ]),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                if (bookings) ...[
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: kNyqGreen,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      icon: const Icon(Icons.calendar_month, size: 18),
+                      label: const Text('Book Appointment'),
+                      onPressed: () => _book(c),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
