@@ -2112,6 +2112,200 @@ String _profileRoleLabel(Map<String, dynamic>? user) {
   return 'Customer';
 }
 
+// ==========================================
+// ROLE-BASED ONBOARDING
+// ==========================================
+const List<String> kRoleOrder = ['admin', 'seller', 'worker', 'customer'];
+
+bool kFlagTrue(dynamic v) => v == true || v == 1 || v == '1' || v == 'true';
+
+List<String> userRoles(Map<String, dynamic>? u) {
+  if (u == null) return const ['customer'];
+  final roles = <String>[];
+  if (kFlagTrue(u['is_admin'])) roles.add('admin');
+  if (kFlagTrue(u['is_seller'])) roles.add('seller');
+  if (kFlagTrue(u['is_runner'])) roles.add('worker');
+  if (roles.isEmpty) roles.add('customer');
+  return roles;
+}
+
+class OnboardingStep {
+  final IconData icon;
+  final String title;
+  final String body;
+  const OnboardingStep(this.icon, this.title, this.body);
+}
+
+const Map<String, List<OnboardingStep>> kOnboardingSteps = {
+  'admin': [
+    OnboardingStep(Icons.people_outline, 'Manage Users',
+        'Grant or remove seller, worker and company roles, and suspend accounts that break the rules.'),
+    OnboardingStep(Icons.badge_outlined, 'Review KYC & Companies',
+        'Check uploaded IDs and approve company applications. Nobody gets verified until you do.'),
+    OnboardingStep(Icons.receipt_long, 'Monitor Invoices',
+        'Track commission, mark payments received, and see what NYG has earned.'),
+  ],
+  'seller': [
+    OnboardingStep(Icons.add_business_outlined, 'Add Products',
+        'Open My Shops, add products with prices, and set your shop location so buyers can find you on the map.'),
+    OnboardingStep(Icons.handshake_outlined, 'Accept Orders & Negotiate',
+        'Buyers can haggle in chat. Accept or decline their price, then fulfil the order.'),
+    OnboardingStep(Icons.groups_outlined, 'Manage Employees & Shipments',
+        'Add staff with salaries and clock-in, chat as a team, and track goods arriving from abroad.'),
+  ],
+  'worker': [
+    OnboardingStep(Icons.toggle_on_outlined, 'Go Online',
+        'Turn on your availability from Profile. You only receive jobs while you are online.'),
+    OnboardingStep(Icons.delivery_dining_outlined, 'Accept Jobs',
+        'Available deliveries appear on your board. Accept one, collect the item and mark it delivered.'),
+    OnboardingStep(Icons.payments_outlined, 'Negotiate Delivery Fees',
+        'Chat with the buyer about the fee before you accept. You are paid in cash on delivery.'),
+  ],
+  'customer': [
+    OnboardingStep(Icons.storefront_outlined, 'Browse & Chat',
+        'Shop the marketplace by list or map, and message any seller directly.'),
+    OnboardingStep(Icons.handshake_outlined, 'Haggle Prices',
+        'Use Negotiate to send a price offer. If the seller accepts, checkout locks to that price.'),
+    OnboardingStep(Icons.shopping_cart_checkout, 'Checkout',
+        'Pay the shop by Mobile Money and the worker in cash. No ID needed to buy.'),
+  ],
+};
+
+Future<void> showRoleOnboarding(
+    BuildContext context, Map<String, dynamic>? user) async {
+  final prefs = await SharedPreferences.getInstance();
+  for (final role in kRoleOrder) {
+    if (!userRoles(user).contains(role)) continue;
+    if (prefs.getBool('seen_onboarding_' + role) == true) continue;
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => OnboardingCarousel(
+        role: role,
+        steps: kOnboardingSteps[role]!,
+        onDone: () => prefs.setBool('seen_onboarding_' + role, true),
+      ),
+    );
+    return;
+  }
+}
+
+class OnboardingCarousel extends StatefulWidget {
+  final String role;
+  final List<OnboardingStep> steps;
+  final VoidCallback onDone;
+  const OnboardingCarousel(
+      {super.key, required this.role, required this.steps, required this.onDone});
+
+  @override
+  State<OnboardingCarousel> createState() => _OnboardingCarouselState();
+}
+
+class _OnboardingCarouselState extends State<OnboardingCarousel> {
+  final _pc = PageController();
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _pc.dispose();
+    super.dispose();
+  }
+
+  void _next() {
+    if (_page == widget.steps.length - 1) {
+      widget.onDone();
+      Navigator.pop(context);
+    } else {
+      _pc.nextPage(
+          duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = widget.steps;
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Welcome to NYG',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 2),
+            Text('Your ' + widget.role + ' guide',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            const SizedBox(height: 18),
+            SizedBox(
+              height: 190,
+              child: PageView.builder(
+                controller: _pc,
+                itemCount: steps.length,
+                onPageChanged: (i) => setState(() => _page = i),
+                itemBuilder: (_, i) => Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: kNyqAccent.withValues(alpha: 0.09),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Icon(steps[i].icon, size: 34, color: kNyqAccent),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(steps[i].title,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text(steps[i].body,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            height: 1.4,
+                            color: Colors.grey.shade700)),
+                  ],
+                ),
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                steps.length,
+                (i) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: i == _page ? 18 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: i == _page ? kNyqAccent : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                    backgroundColor: kNyqGreen,
+                    padding: const EdgeInsets.symmetric(vertical: 14)),
+                onPressed: _next,
+                child: Text(_page == steps.length - 1
+                    ? "Got it, let's go"
+                    : 'Next'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 void showAccountSheet(
   BuildContext context,
   Map<String, dynamic>? currentUser,
@@ -2435,6 +2629,21 @@ void showAccountSheet(
                 onTap: () {
                   Navigator.pop(ctx);
                   showChangePasswordDialog(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.help_outline),
+                title: const Text('Help & Guide'),
+                trailing: const Icon(Icons.chevron_right,
+                    size: 18, color: Color(0xFFB0A89F)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            HelpGuideScreen(currentUser: currentUser)),
+                  );
                 },
               ),
               const Divider(height: 8),
@@ -7834,6 +8043,192 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+// ==========================================
+// HELP & GUIDE
+// ==========================================
+class HelpFaq {
+  final IconData icon;
+  final String title;
+  final List<String> points;
+  const HelpFaq(this.icon, this.title, this.points);
+}
+
+const List<HelpFaq> kHelpCustomer = [
+  HelpFaq(Icons.search, 'Finding a shop', [
+    'Shopping lists every product. Marketplace lists every shop.',
+    'Tap Map on the Marketplace to see shops near you, then tap a pin.',
+    'Use the city filter to narrow the list.',
+  ]),
+  HelpFaq(Icons.handshake_outlined, 'Haggling', [
+    'Tap Negotiate on a product to chat with the seller.',
+    'Tap the handshake icon in the chat to send a price offer.',
+    'If the seller accepts, your checkout price locks to it.',
+  ]),
+  HelpFaq(Icons.shopping_cart_checkout, 'Paying', [
+    'Buy Now goes straight to checkout at the listed price.',
+    'Pay the shop by Mobile Money, and the worker in cash on delivery.',
+    'You do not need an ID to buy.',
+  ]),
+  HelpFaq(Icons.receipt_long, 'Tracking an order', [
+    'Open My Orders from the account menu.',
+    'Every status change is visible there.',
+  ]),
+];
+
+const List<HelpFaq> kHelpSeller = [
+  HelpFaq(Icons.add_business_outlined, 'Adding products', [
+    'Open My Shops, then Manage Products to add or edit items.',
+    'Set your shop location so buyers can find you on the map.',
+  ]),
+  HelpFaq(Icons.handshake_outlined, 'Prices and orders', [
+    'Buyers can send price offers in chat. Accept or decline them there.',
+    'Orders appear under Manage Shop. A price below your listing needs your approval.',
+  ]),
+  HelpFaq(Icons.groups_outlined, 'Employees', [
+    'Add staff with a phone number, salary and role.',
+    'Share the temporary password so they can sign in and set their own.',
+    'Staff can clock in and out, and you share a team chat.',
+  ]),
+  HelpFaq(Icons.local_shipping_outlined, 'Shipments', [
+    'Create a shipment and list what was sent from abroad.',
+    'Request delivery to bring it from the port to your shop.',
+  ]),
+];
+
+const List<HelpFaq> kHelpWorker = [
+  HelpFaq(Icons.toggle_on_outlined, 'Going online', [
+    'Toggle online from your Profile to receive jobs.',
+    'You only see jobs while you are online.',
+  ]),
+  HelpFaq(Icons.delivery_dining_outlined, 'Accepting jobs', [
+    'Available deliveries show on your board with the fee and address.',
+    'Accept one, collect the item, then mark it delivered.',
+  ]),
+  HelpFaq(Icons.payments_outlined, 'Fees and payment', [
+    'Chat with the buyer if you want to discuss the fee first.',
+    'You are paid in cash on delivery.',
+  ]),
+];
+
+const List<HelpFaq> kHelpAdmin = [
+  HelpFaq(Icons.people_outline, 'Users and roles', [
+    'Grant or remove seller, worker and company manager roles.',
+    'Suspend accounts that break the rules.',
+  ]),
+  HelpFaq(Icons.badge_outlined, 'KYC review', [
+    'Submitted IDs appear in the KYC tab.',
+    'Approve or reject with a reason. Only approved IDs unlock applications.',
+  ]),
+  HelpFaq(Icons.business_outlined, 'Companies', [
+    'Approve company applications before they can trade.',
+    'You cannot see company payroll - that stays with the owner.',
+  ]),
+  HelpFaq(Icons.receipt_long, 'Invoices', [
+    'Generate invoices and mark NYG commission as received.',
+  ]),
+];
+
+class _HelpSection extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final List<String> points;
+  const _HelpSection(
+      {required this.icon, required this.title, required this.points});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ExpansionTile(
+        leading: Icon(icon, color: kNyqAccent),
+        title: Text(title,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+        shape: const Border(),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        children: points
+            .map((p) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('- ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Expanded(
+                        child: Text(p,
+                            style: TextStyle(
+                                fontSize: 12,
+                                height: 1.4,
+                                color: Colors.grey.shade800)),
+                      ),
+                    ],
+                  ),
+                ))
+            .toList(),
+      ),
+    );
+  }
+}
+
+class HelpGuideScreen extends StatelessWidget {
+  final Map<String, dynamic>? currentUser;
+  const HelpGuideScreen({super.key, this.currentUser});
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = userRoles(currentUser);
+    final isAdmin = roles.contains('admin');
+    final showSeller = isAdmin || roles.contains('seller');
+    final showWorker = isAdmin || roles.contains('worker');
+
+    final tabs = <String>[
+      'Customer',
+      if (showSeller) 'Seller',
+      if (showWorker) 'Worker',
+      if (isAdmin) 'Admin',
+    ];
+
+    return DefaultTabController(
+      length: tabs.length,
+      child: Scaffold(
+        backgroundColor: kNyqSand,
+        appBar: AppBar(
+          title: const Text('Help & Guide'),
+          backgroundColor: kNyqAccent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          bottom: TabBar(
+            isScrollable: true,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
+            tabs: tabs.map((t) => Tab(text: t)).toList(),
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            _helpTab(kHelpCustomer),
+            if (showSeller) _helpTab(kHelpSeller),
+            if (showWorker) _helpTab(kHelpWorker),
+            if (isAdmin) _helpTab(kHelpAdmin),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _helpTab(List<HelpFaq> items) => ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          ...items.map((f) =>
+              _HelpSection(icon: f.icon, title: f.title, points: f.points)),
+          Text('Na You Get - Small Business OS',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+          const SizedBox(height: 20),
+        ],
+      );
+}
+
 class ChangePasswordScreen extends StatefulWidget {
   final Map<String, dynamic> currentUser;
   final VoidCallback onDone;
@@ -8088,6 +8483,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       setState(() {
         _currentUser = user;
         _loadingUser = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showRoleOnboarding(context, _currentUser);
       });
     }
   }
