@@ -274,11 +274,13 @@ Future<String?> uploadKycImage(BuildContext context) async {
   final picker = ImagePicker();
   try {
     final source = kIsWeb ? ImageSource.gallery : ImageSource.camera;
+    // iOS Safari fails on the canvas re-encode that these options trigger
+    // in image_picker_for_web. The server already downscales to 1200px.
     final XFile? picked = await picker.pickImage(
       source: source,
-      maxWidth: 1400,
-      maxHeight: 1400,
-      imageQuality: 85,
+      maxWidth: kIsWeb ? null : 1400,
+      maxHeight: kIsWeb ? null : 1400,
+      imageQuality: kIsWeb ? null : 85,
     );
     if (picked == null) return null;
 
@@ -307,8 +309,15 @@ Future<String?> uploadKycImage(BuildContext context) async {
     }
     return null;
   } catch (e) {
+    debugPrint('KYC picker failed: ' + e.toString());
     if (context.mounted) {
-      showNetworkError(context, 'your ID photo');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open your photo library. ' + e.toString()),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 6),
+        ),
+      );
     }
     return null;
   }
@@ -12246,6 +12255,7 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
   String? _front;
   String? _back;
   String? _selfie;
+  String? _picking;
   bool _saving = false;
 
   @override
@@ -12307,8 +12317,11 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
   }
 
   Future<void> _pick(String slot) async {
+    setState(() => _picking = slot);
     final id = await uploadKycImage(context);
-    if (id == null || !mounted) return;
+    if (!mounted) return;
+    setState(() => _picking = null);
+    if (id == null) return;
     setState(() {
       if (slot == 'front') _front = id;
       if (slot == 'back') _back = id;
@@ -12430,6 +12443,7 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
 
   Widget _tile(String label, String? id, String slot, IconData icon) {
     final done = id != null;
+    final busy = _picking == slot;
     return Expanded(
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -12445,8 +12459,14 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(done ? Icons.check_circle : icon,
-                  color: done ? kNyqGreen : Colors.grey.shade400, size: 24),
+              busy
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(done ? Icons.check_circle : icon,
+                      color: done ? kNyqGreen : Colors.grey.shade400,
+                      size: 24),
               const SizedBox(height: 6),
               Text(label,
                   style: TextStyle(
