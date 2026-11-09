@@ -1819,7 +1819,7 @@ Future<void> showSellerApplicationDialog(
               TextField(
                 controller: city,
                 decoration: const InputDecoration(
-                    labelText: 'Shop Address / City',
+                    labelText: 'Shop Address / City (optional)',
                     border: OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
@@ -6600,11 +6600,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         var employerRequests = 0;
         var approvedPlatform = false;
         var submittedPlatform = false;
+        DateTime? expiry;
         for (final raw in list) {
           final m = Map<String, dynamic>.from(raw as Map);
           final st = (m['status'] ?? '').toString();
           if (m['company_id'] == null) {
-            if (st == 'approved') approvedPlatform = true;
+            if (st == 'approved') {
+              approvedPlatform = true;
+              final e = m['expiry_date']?.toString();
+              if (e != null && e.isNotEmpty) expiry = DateTime.tryParse(e);
+            }
             if (st == 'submitted') submittedPlatform = true;
           } else if (st == 'requested') {
             employerRequests++;
@@ -6618,6 +6623,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 : (submittedPlatform ? 'submitted' : 'none');
             _platformKycUnderReview =
                 approvedPlatform && submittedPlatform;
+            _kycExpiry = expiry;
           });
         }
       }
@@ -6648,6 +6654,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// Flags arrive as int (from the API) or bool (from SharedPreferences),
   /// so never compare against a single type.
   bool _flag(dynamic v) => v == true || v == 1 || v == '1' || v == 'true';
+
+  bool get _kycExpiringSoon {
+    final e = _kycExpiry;
+    if (e == null) return false;
+    return e.difference(DateTime.now()).inDays <= 30;
+  }
 
   bool get _isPrivileged =>
       _flag(widget.currentUser?['is_seller']) ||
@@ -6694,6 +6706,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<dynamic> _shops = [];
   int _kycRequests = 0;
   String _platformKyc = 'none';
+  DateTime? _kycExpiry;
   bool _platformKycUnderReview = false;
 
   @override
@@ -7200,10 +7213,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: kNyqGreen.withValues(alpha: 0.08),
+                  color: (_kycExpiringSoon ? kNyqOchre : kNyqGreen)
+                      .withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(20),
-                  border:
-                      Border.all(color: kNyqGreen.withValues(alpha: 0.35)),
+                  border: Border.all(
+                      color: (_kycExpiringSoon ? kNyqOchre : kNyqGreen)
+                          .withValues(alpha: 0.35)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -7211,10 +7226,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ListTile(
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 2),
-                      leading: const Icon(Icons.verified, color: kNyqGreen),
-                      title: const Text('Identity Verified',
+                      leading: Icon(
+                          _kycExpiringSoon
+                              ? Icons.warning_amber_rounded
+                              : Icons.verified,
+                          color: _kycExpiringSoon ? kNyqOchre : kNyqGreen),
+                      title: Text(
+                          _kycExpiringSoon
+                              ? 'ID Expiring Soon'
+                              : 'Identity Verified',
                           style: TextStyle(
-                              color: kNyqGreen,
+                              color: _kycExpiringSoon
+                                  ? kNyqOchre
+                                  : kNyqGreen,
                               fontWeight: FontWeight.w800,
                               fontSize: 15)),
                       subtitle: TextButton(
@@ -7229,6 +7253,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 fontSize: 12, color: kNyqAccent)),
                       ),
                     ),
+                    if (_kycExpiringSoon)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(52, 0, 16, 10),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.schedule,
+                                size: 12, color: Colors.orange),
+                            const SizedBox(width: 6),
+                            Text(
+                                'Expires in ${_kycExpiry!.difference(DateTime.now()).inDays} days',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.orange.shade900)),
+                          ],
+                        ),
+                      ),
                     if (_platformKycUnderReview)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(52, 0, 16, 10),
@@ -7860,6 +7901,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final phoneCtl = TextEditingController(
         text: (widget.currentUser?['phone_number'] ?? '+232').toString());
     final cityCtl = TextEditingController(text: 'Freetown');
+    double? shopLat;
+    double? shopLng;
     var category = 'Fashion';
     const categories = [
       'Fashion',
@@ -7903,7 +7946,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 TextField(
                   controller: cityCtl,
                   decoration: const InputDecoration(
-                      labelText: 'City', border: OutlineInputBorder()),
+                      labelText: 'Shop Address (Optional)',
+                      hintText: 'Leave blank if you set a map pin',
+                      border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
@@ -7918,6 +7963,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     if (v != null) setDialogState(() => category = v);
                   },
                 ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: kNyqSand,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE0DAD2)),
+                  ),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        height: 110,
+                        child: shopLat == null || shopLng == null
+                            ? Center(
+                                child: Text(
+                                  'A map pin is required so customers can find you',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600),
+                                ),
+                              )
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: FlutterMap(
+                                  options: MapOptions(
+                                    initialCenter: LatLng(shopLat!, shopLng!),
+                                    initialZoom: 15,
+                                    interactionOptions:
+                                        const InteractionOptions(
+                                            flags: InteractiveFlag.none),
+                                  ),
+                                  children: [
+                                    TileLayer(
+                                      urlTemplate: kOsmTileUrl,
+                                      userAgentPackageName: 'com.nyg.app',
+                                    ),
+                                    MarkerLayer(
+                                      markers: [
+                                        Marker(
+                                          point: LatLng(shopLat!, shopLng!),
+                                          width: 28,
+                                          height: 28,
+                                          child: const Icon(Icons.location_on,
+                                              size: 28, color: Colors.red),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.map_outlined, size: 16),
+                          label: Text(shopLat == null
+                              ? 'Pick Location on Map'
+                              : 'Change Location'),
+                          onPressed: () async {
+                            final picked = await Navigator.push<LatLng>(
+                              ctx,
+                              MaterialPageRoute(
+                                builder: (_) => ShopLocationPickerScreen(
+                                  initial: shopLat != null && shopLng != null
+                                      ? LatLng(shopLat!, shopLng!)
+                                      : null,
+                                ),
+                              ),
+                            );
+                            if (picked != null) {
+                              setDialogState(() {
+                                shopLat = picked.latitude;
+                                shopLng = picked.longitude;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -7928,6 +8056,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             FilledButton(
               onPressed: () async {
                 if (nameCtl.text.trim().isEmpty) return;
+                if (shopLat == null || shopLng == null) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(
+                        content: Text(
+                            'Please set your shop location on the map so customers can find you.')),
+                  );
+                  return;
+                }
                 final user = await UserSession.load();
                 final token = user?['token'];
                 if (token == null) return;
@@ -7945,7 +8081,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           'shop_name': nameCtl.text.trim(),
                           'owner_name': ownerCtl.text.trim(),
                           'phone_number': phoneCtl.text.trim(),
-                          'city': cityCtl.text.trim(),
+                          'city': cityCtl.text.trim().isEmpty
+                              ? null
+                              : cityCtl.text.trim(),
+                          'latitude': shopLat,
+                          'longitude': shopLng,
                           'category': category,
                           'theme_colour': '#0D47A1',
                           'background_colour': '#FFFFFF',
@@ -12038,6 +12178,7 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
   final _idNumber = TextEditingController();
   final _fullName = TextEditingController();
   String _idType = 'nin';
+  DateTime? _expiry;
   String? _front;
   String? _back;
   String? _selfie;
@@ -12125,6 +12266,12 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
       );
       return;
     }
+    if (_expiry == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select the expiry date on your ID')),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       final user = await UserSession.load();
@@ -12137,6 +12284,11 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
         },
         body: jsonEncode({
           'id_type': _idType,
+          'expiry_date': _expiry == null
+              ? null
+              : '${_expiry!.year.toString().padLeft(4, '0')}-'
+                  '${_expiry!.month.toString().padLeft(2, '0')}-'
+                  '${_expiry!.day.toString().padLeft(2, '0')}',
           'id_number': _idNumber.text.trim(),
           'full_name_on_id': _fullName.text.trim(),
           'front_image_id': _front,
@@ -12322,6 +12474,37 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
             decoration: const InputDecoration(
                 labelText: 'Name as written on the ID',
                 border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 10),
+          InkWell(
+            onTap: () async {
+              final now = DateTime.now();
+              final picked = await showDatePicker(
+                context: context,
+                firstDate: now.add(const Duration(days: 1)),
+                lastDate: now.add(const Duration(days: 365 * 15)),
+                initialDate: _expiry ?? now.add(const Duration(days: 365)),
+                helpText: 'ID expiry date',
+              );
+              if (picked != null) setState(() => _expiry = picked);
+            },
+            child: InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'ID Expiry Date',
+                border: OutlineInputBorder(),
+                suffixIcon: Icon(Icons.calendar_today, size: 18),
+              ),
+              child: Text(
+                _expiry == null
+                    ? 'Select the expiry date'
+                    : '${_expiry!.day}/${_expiry!.month}/${_expiry!.year}',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: _expiry == null
+                        ? Colors.grey.shade500
+                        : Colors.black87),
+              ),
+            ),
           ),
           const SizedBox(height: 16),
           Row(
@@ -13978,7 +14161,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                 TextField(
                   controller: cityController,
                   decoration: const InputDecoration(
-                    labelText: 'City',
+                    labelText: 'Shop Address (Optional)',
+                    hintText: 'Leave blank if you set a map pin',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -14237,6 +14421,14 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
+                if (shopLat == null || shopLng == null) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(
+                        content: Text(
+                            'Please set your shop location on the map so customers can find you.')),
+                  );
+                  return;
+                }
                 final user = await UserSession.load();
                 final response = await http.put(
                   Uri.parse('$baseUrl/merchants/${shop['id']}'),
@@ -14249,7 +14441,9 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'shop_name': shopNameController.text,
                     'owner_name': ownerNameController.text,
                     'phone_number': phoneController.text,
-                    'city': cityController.text,
+                    'city': cityController.text.trim().isEmpty
+                        ? null
+                        : cityController.text.trim(),
                     'category': selectedCategory,
                     'logo_url': currentLogo,
                     'theme_colour': selectedTheme,
