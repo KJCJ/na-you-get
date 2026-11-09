@@ -12784,6 +12784,16 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
               if (mounted) setState(() => _pendingShipments = n);
             });
           }),
+          _actionCard(Icons.calendar_month, 'Appointments',
+              'Bookings from customers', () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AppointmentListScreen(shop: shop),
+              ),
+            );
+            _refresh();
+          }),
           _actionCard(Icons.settings_outlined, 'Settings',
               'Edit shop details and branding',
               () => _openShop(action: 'settings')),
@@ -12952,6 +12962,219 @@ class _ShopLocationPickerScreenState extends State<ShopLocationPickerScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ==========================================
+// APPOINTMENTS
+// ==========================================
+class AppointmentListScreen extends StatefulWidget {
+  final Map<String, dynamic> shop;
+  const AppointmentListScreen({super.key, required this.shop});
+
+  @override
+  State<AppointmentListScreen> createState() => _AppointmentListScreenState();
+}
+
+class _AppointmentListScreenState extends State<AppointmentListScreen> {
+  List<dynamic> _rows = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    return {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'Authorization': 'Bearer ${user?['token'] ?? ''}',
+    };
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final res = await http.get(
+        Uri.parse(
+            '$baseUrl/shops/${widget.shop['id']}/appointments'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        if (mounted) {
+          setState(() {
+            _rows = jsonDecode(res.body) as List;
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'bookings');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _setStatus(int id, String status) async {
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/appointments/$id/status'),
+        headers: await _headers(),
+        body: jsonEncode({'status': status}),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Booking ${status}'),
+              backgroundColor: kNyqGreen),
+        );
+        _load();
+      } else {
+        String msg = 'Could not update the booking';
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.red.shade700),
+        );
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'the booking');
+    }
+  }
+
+  String _when(String? iso) {
+    if (iso == null) return '';
+    final d = DateTime.tryParse(iso);
+    if (d == null) return '';
+    final local = d.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '${local.day}/${local.month}/${local.year} at $h:$m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: const Text('Appointments'),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _rows.isEmpty
+              ? EmptyState(
+                  icon: Icons.calendar_month,
+                  title: 'No bookings yet',
+                  message:
+                      'Customers can book once you accept bookings.',
+                  actionLabel: 'Refresh',
+                  onAction: _load,
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(12),
+                  children: _rows.map((raw) {
+                    final a = Map<String, dynamic>.from(raw as Map);
+                    final id = (a['id'] as num).toInt();
+                    final status = (a['status'] ?? 'pending').toString();
+                    final confirmed = status == 'confirmed';
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: const Color(0xFFEFE9E0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                    (a['service_name'] ?? '').toString(),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14)),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: (confirmed
+                                          ? kNyqGreen
+                                          : kNyqOchre)
+                                      .withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(status.toUpperCase(),
+                                    style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: confirmed
+                                            ? kNyqGreen
+                                            : Colors.orange.shade900)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(_when(a['appointment_date']?.toString()),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade700)),
+                          Text(
+                              (a['customer_name'] ?? 'Customer').toString() +
+                                  '  ' +
+                                  (a['customer_phone'] ?? '').toString(),
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500)),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              if (!confirmed)
+                                Expanded(
+                                  child: FilledButton(
+                                    style: FilledButton.styleFrom(
+                                        backgroundColor: kNyqGreen,
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 10)),
+                                    onPressed: () =>
+                                        _setStatus(id, 'confirmed'),
+                                    child: const Text('Confirm'),
+                                  ),
+                                ),
+                              if (!confirmed) const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.red.shade700,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 10)),
+                                  onPressed: () => _setStatus(id, 'cancelled'),
+                                  child: const Text('Cancel'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
     );
   }
 }
@@ -14105,6 +14328,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         TextEditingController(text: shop['owner_name'] ?? '');
     final phoneController =
         TextEditingController(text: shop['phone_number'] ?? '');
+    var acceptsBookings =
+        shop['accept_bookings'] == 1 || shop['accept_bookings'] == true;
     final cityController =
         TextEditingController(text: shop['city'] ?? 'Freetown');
     String? currentLogo = shop['logo_url'];
@@ -14158,6 +14383,25 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Accept Bookings'),
+                  subtitle: Text(
+                    (shop['category'] ?? '').toString().toLowerCase() ==
+                            'services'
+                        ? 'Always on for service shops'
+                        : 'Let customers book appointments',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  value: (shop['category'] ?? '').toString().toLowerCase() ==
+                              'services'
+                      ? true
+                      : acceptsBookings,
+                  onChanged: (shop['category'] ?? '').toString().toLowerCase() ==
+                              'services'
+                      ? null
+                      : (v) => setDialogState(() => acceptsBookings = v),
+                ),
                 TextField(
                   controller: cityController,
                   decoration: const InputDecoration(
@@ -14454,6 +14698,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'instagram_url': igController.text.trim(),
                     'tiktok_url': ttController.text.trim(),
                     'twitter_url': xController.text.trim(),
+                    'accept_bookings': acceptsBookings ? 1 : 0,
                     if (shopLat != null) 'latitude': shopLat,
                     if (shopLng != null) 'longitude': shopLng,
                   }),
@@ -14488,6 +14733,155 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
   String get _shopInitial {
     final n = (shop['shop_name'] ?? '').toString().trim();
     return n.isEmpty ? '?' : n[0].toUpperCase();
+  }
+
+  bool get _acceptsBookings {
+    if ((shop['category'] ?? '').toString().trim().toLowerCase() ==
+        'services') {
+      return true;
+    }
+    final v = shop['accept_bookings'];
+    return v == 1 || v == true || v == '1';
+  }
+
+  Future<void> _bookAppointment() async {
+    final user = await UserSession.load();
+    if (user == null) {
+      await guestSignupFlow(context);
+      if (!mounted) return;
+    }
+    final serviceCtl = TextEditingController();
+    DateTime? date;
+    TimeOfDay? time;
+    bool sending = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx2, setD) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Text('Book ' + (shop['shop_name'] ?? 'shop').toString()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: serviceCtl,
+                decoration: const InputDecoration(
+                    labelText: 'Service (e.g. Haircut)',
+                    border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 6),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.event),
+                title: Text(date == null
+                    ? 'Choose a date'
+                    : '${date!.day}/${date!.month}/${date!.year}'),
+                onTap: () async {
+                  final now = DateTime.now();
+                  final picked = await showDatePicker(
+                    context: ctx2,
+                    firstDate: now.add(const Duration(days: 1)),
+                    lastDate: now.add(const Duration(days: 180)),
+                    initialDate: now.add(const Duration(days: 1)),
+                  );
+                  if (picked != null) setD(() => date = picked);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.schedule),
+                title: Text(time == null
+                    ? 'Choose a time'
+                    : time!.format(ctx2)),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                      context: ctx2,
+                      initialTime:
+                          const TimeOfDay(hour: 10, minute: 0));
+                  if (picked != null) setD(() => time = picked);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: kNyqGreen),
+              onPressed: sending
+                  ? null
+                  : () async {
+                      if (serviceCtl.text.trim().isEmpty ||
+                          date == null ||
+                          time == null) {
+                        ScaffoldMessenger.of(ctx2).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  'Add a service, a date and a time')),
+                        );
+                        return;
+                      }
+                      setD(() => sending = true);
+                      final when = DateTime(date!.year, date!.month,
+                          date!.day, time!.hour, time!.minute);
+                      try {
+                        final u = await UserSession.load();
+                        final res = await http.post(
+                          Uri.parse(
+                              '$baseUrl/shops/${shop['id']}/appointments'),
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': apiKey,
+                            'Authorization':
+                                'Bearer ${u?['token'] ?? ''}',
+                          },
+                          body: jsonEncode({
+                            'service_name': serviceCtl.text.trim(),
+                            'appointment_date': when.toIso8601String(),
+                          }),
+                        ).timeout(const Duration(seconds: 12));
+                        if (!ctx.mounted) return;
+                        if (res.statusCode >= 200 &&
+                            res.statusCode < 300) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Booking requested'),
+                                backgroundColor: kNyqGreen),
+                          );
+                        } else {
+                          setD(() => sending = false);
+                          String msg = 'Could not book';
+                          try {
+                            msg =
+                                (jsonDecode(res.body)['detail'] ?? msg)
+                                    .toString();
+                          } catch (_) {}
+                          ScaffoldMessenger.of(ctx2).showSnackBar(
+                            SnackBar(
+                                content: Text(msg),
+                                backgroundColor: Colors.red.shade700),
+                          );
+                        }
+                      } catch (_) {
+                        if (ctx.mounted) setD(() => sending = false);
+                      }
+                    },
+              child: sending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -14539,6 +14933,24 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       ),
       body: Column(
         children: [
+          if (!_isOwner && _acceptsBookings)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: kNyqAccent,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.calendar_month, size: 18),
+                  label: const Text('Book Appointment'),
+                  onPressed: _bookAppointment,
+                ),
+              ),
+            ),
           if ((shop['banner_url'] ?? '').toString().isNotEmpty)
             Image.network(
               shop['banner_url'].toString(),
