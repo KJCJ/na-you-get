@@ -9,6 +9,10 @@ on:
 # Pages instead of being pushed to a gh-pages branch and rebuilt by Pages.
 # The branch-based build started failing on 6 Nov 2026 ("Page build failed")
 # with no visible log, so this path replaces it.
+#
+# Pages deployments intermittently stall on the sync step and time out. A
+# timeout used to mean a 10-minute wait and a manual empty commit, so the
+# deploy step now retries itself once before failing (9 Nov 2026).
 permissions:
   contents: read
   pages: write
@@ -54,4 +58,36 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
+        # Do not fail the job yet: a timeout here is retried below.
+        continue-on-error: true
         uses: actions/deploy-pages@v4
+        with:
+          # Cut the built-in 10-minute wait down to 4: a stuck sync is not
+          # going to recover, and a retry starts sooner.
+          timeout: 240000
+
+      - name: Wait before retry
+        if: steps.deployment.outcome == 'failure'
+        run: |
+          echo "First deploy attempt failed. Waiting 45s before retrying."
+          sleep 45
+
+      - name: Deploy to GitHub Pages (retry)
+        id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        with:
+          timeout: 420000
+
+      - name: Fail if both attempts failed
+        if: steps.deployment.outcome == 'failure' && steps.deployment_retry.outcome == 'failure'
+        run: |
+          echo "::error::Pages deployment failed twice. Push an empty commit to retrigger."
+          exit 1
+
+      - name: Report URL
+        if: always()
+        run: |
+          URL="${{ steps.deployment.outputs.page_url }}"
+          if [ -z "$URL" ]; then URL="${{ steps.deployment_retry.outputs.page_url }}"; fi
+          echo "Deployed to $URL"
