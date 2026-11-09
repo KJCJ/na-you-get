@@ -45,6 +45,32 @@ void showNetworkError(BuildContext context, String action) {
     ),
   );
 }
+const String kTextScaleKey = 'nyg_text_scale';
+
+/// 0 = small, 1 = normal, 2 = large, 3 = extra large
+const List<double> kTextScales = [0.85, 1.0, 1.2, 1.4];
+const List<String> kTextScaleNames = ['Small', 'Normal', 'Large', 'Extra Large'];
+
+final ValueNotifier<int> textScaleIndex = ValueNotifier<int>(1);
+
+Future<void> loadTextScale() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getInt(kTextScaleKey);
+    if (saved != null && saved >= 0 && saved < kTextScales.length) {
+      textScaleIndex.value = saved;
+    }
+  } catch (_) {}
+}
+
+Future<void> saveTextScale(int index) async {
+  textScaleIndex.value = index;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(kTextScaleKey, index);
+  } catch (_) {}
+}
+
 const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785acabfd295';
 const String appVersion = '1.0.0';
 const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk';
@@ -509,7 +535,9 @@ bool showApiError(
 // ==========================================
 // MAIN APP
 // ==========================================
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await loadTextScale();
   runApp(const NaYouGetApp());
 }
 
@@ -518,9 +546,17 @@ class NaYouGetApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return ValueListenableBuilder<int>(
+      valueListenable: textScaleIndex,
+      builder: (context, idx, _) => MaterialApp(
       title: 'Na You Get (NYG)',
       debugShowCheckedModeBanner: false,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(kTextScales[idx]),
+        ),
+        child: child!,
+      ),
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: kNyqSand,
@@ -600,6 +636,7 @@ class NaYouGetApp extends StatelessWidget {
         ),
       ),
       home: const MainNavigationScreen(),
+      ),
     );
   }
 }
@@ -2638,6 +2675,21 @@ void showAccountSheet(
                 onTap: () {
                   Navigator.pop(ctx);
                   showChangePasswordDialog(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.text_fields),
+                title: const Text('Display Settings'),
+                subtitle: const Text('Text size and readability'),
+                trailing: const Icon(Icons.chevron_right,
+                    size: 18, color: Color(0xFFB0A89F)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const DisplaySettingsScreen()),
+                  );
                 },
               ),
               ListTile(
@@ -14104,6 +14156,90 @@ class _AppointmentListScreenState extends State<AppointmentListScreen> {
                     );
                   }).toList(),
                 ),
+    );
+  }
+}
+
+// ==========================================
+// DISPLAY SETTINGS (TEXT SCALING)
+// ==========================================
+class DisplaySettingsScreen extends StatelessWidget {
+  const DisplaySettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: textScaleIndex,
+      builder: (context, idx, _) => Scaffold(
+        backgroundColor: kNyqSand,
+        appBar: AppBar(
+          title: const Text('Display Settings'),
+          backgroundColor: kNyqAccent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text('Text Size',
+                style: TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 15)),
+            const SizedBox(height: 4),
+            Text('Choose a size that is comfortable for you.',
+                style: TextStyle(
+                    fontSize: 12, color: Colors.grey.shade600)),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFEFE9E0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Nasi mi be go na market',
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.grey.shade900)),
+                  const SizedBox(height: 6),
+                  Text('This is how your messages will look.',
+                      style: TextStyle(
+                          fontSize: 13, color: Colors.grey.shade700)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...List.generate(kTextScales.length, (i) {
+              final selected = i == idx;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? kNyqGreen.withValues(alpha: 0.08)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color:
+                          selected ? kNyqGreen : const Color(0xFFEFE9E0)),
+                ),
+                child: ListTile(
+                  onTap: () => saveTextScale(i),
+                  title: Text(kTextScaleNames[i],
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14 * kTextScales[i])),
+                  trailing: selected
+                      ? const Icon(Icons.check_circle, color: kNyqGreen)
+                      : null,
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
     );
   }
 }
