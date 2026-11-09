@@ -4999,14 +4999,19 @@ class _AdminCompaniesScreenState extends State<AdminCompaniesScreen> {
                             Row(
                               children: [
                                 if ((c['owner_kyc_status'] ?? 'none') ==
-                                        'submitted' ||
-                                    (c['owner_kyc_status'] ?? 'none') ==
-                                        'approved')
+                                    'approved')
                                   Text('ID verified',
                                       style: TextStyle(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w700,
                                           color: kNyqGreen))
+                                else if ((c['owner_kyc_status'] ?? 'none') ==
+                                    'submitted')
+                                  Text('ID under review',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.orange.shade900))
                                 else
                                   Text('Owner has no ID',
                                       style: TextStyle(
@@ -5622,8 +5627,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                                   Colors.orange.shade800),
                                         ),
                                       ),
-                                    if ((u['kyc_status'] ?? 'none') == 'submitted' ||
-                                        (u['kyc_status'] ?? 'none') == 'approved')
+                                    if ((u['kyc_status'] ?? 'none') == 'approved')
                                       Container(
                                         margin:
                                             const EdgeInsets.only(right: 4),
@@ -5639,6 +5643,25 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                                 fontSize: 8,
                                                 fontWeight: FontWeight.bold,
                                                 color: kNyqGreen)),
+                                      )
+                                    else if ((u['kyc_status'] ?? 'none') ==
+                                        'submitted')
+                                      Container(
+                                        margin:
+                                            const EdgeInsets.only(right: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: kNyqOchre.withValues(
+                                              alpha: 0.20),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text('UNDER REVIEW',
+                                            style: TextStyle(
+                                                fontSize: 8,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.orange.shade900)),
                                       )
                                     else
                                       Container(
@@ -6310,12 +6333,14 @@ class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic>? currentUser;
   final VoidCallback onUserChanged;
   final VoidCallback? onOpenJobs;
+  final VoidCallback? onGoShopping;
 
   const ProfileScreen({
     super.key,
     required this.currentUser,
     required this.onUserChanged,
     this.onOpenJobs,
+    this.onGoShopping,
   });
 
   @override
@@ -7114,7 +7139,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       style: FilledButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: kNyqAccent),
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: widget.onGoShopping ??
+                          () => Navigator.pop(context),
                       icon: const Icon(Icons.shopping_bag_outlined, size: 18),
                       label: const Text('Start Shopping'),
                     ),
@@ -8129,11 +8155,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final screens = <Widget>[
       MarketplaceScreen(currentUser: _currentUser, onUserChanged: _refreshUser),
       MarketplaceLocationsScreen(
-          currentUser: _currentUser, onUserChanged: _refreshUser),
+          currentUser: _currentUser,
+          onUserChanged: _refreshUser,
+          onGoShopping: () => setState(() => _currentIndex = 0)),
       ProfileScreen(
           currentUser: _currentUser,
           onUserChanged: _refreshUser,
-          onOpenJobs: null),
+          onOpenJobs: null,
+          onGoShopping: () => setState(() => _currentIndex = 0)),
     ];
 
     // Clamp in case someone loses the worker role while on the Jobs tab.
@@ -8754,11 +8783,13 @@ class ShopProductGrid extends StatelessWidget {
 class MarketplaceLocationsScreen extends StatefulWidget {
   final Map<String, dynamic>? currentUser;
   final VoidCallback onUserChanged;
+  final VoidCallback? onGoShopping;
 
   const MarketplaceLocationsScreen({
     super.key,
     required this.currentUser,
     required this.onUserChanged,
+    this.onGoShopping,
   });
 
   @override
@@ -9365,7 +9396,10 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: Image.asset('assets/logo.png', height: 60),
+        title: GestureDetector(
+          onTap: widget.onGoShopping,
+          child: Image.asset('assets/logo.png', height: 60),
+        ),
         actions: [
           AccountButton(
               currentUser: widget.currentUser,
