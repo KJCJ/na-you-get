@@ -15718,8 +15718,14 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
   Future<void> _fetchOrders() async {
     setState(() => isLoading = true);
     try {
+      final session = await UserSession.load();
       final res = await http.get(
         Uri.parse('$baseUrl/orders/customer/${widget.currentUser['id']}'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization':
+              'Bearer ${session?['token'] ?? ''}',
+        },
       );
       if (res.statusCode >= 200 && res.statusCode < 300) {
         setState(() {
