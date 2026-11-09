@@ -6585,6 +6585,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (_) {}
   }
 
+  /// Counts upcoming bookings so the card only appears when meaningful.
+  Future<void> _loadBookingCount() async {
+    try {
+      final user = await UserSession.load();
+      final res = await http.get(
+        Uri.parse('$baseUrl/appointments/mine'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final n = (jsonDecode(res.body) as List).where((r) {
+          final m = Map<String, dynamic>.from(r as Map);
+          final st = (m['status'] ?? '').toString();
+          final d =
+              DateTime.tryParse((m['appointment_date'] ?? '').toString());
+          return st != 'cancelled' &&
+              st != 'completed' &&
+              d != null &&
+              d.isAfter(DateTime.now());
+        }).length;
+        if (mounted) setState(() => _myBookingsCount = n);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadKycBadge() async {
     try {
       final user = await UserSession.load();
@@ -6707,6 +6734,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _kycRequests = 0;
   String _platformKyc = 'none';
   DateTime? _kycExpiry;
+  int _myBookingsCount = 0;
   bool _platformKycUnderReview = false;
 
   @override
@@ -6721,6 +6749,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _load();
     _loadKycBadge();
     _refreshRoles();
+    _loadBookingCount();
     // Pull fresh roles from the server so admin approvals show up immediately.
     widget.onUserChanged();
   }
@@ -7346,6 +7375,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           builder: (_) => const KycUploadScreen()),
                     );
                     _loadKycBadge();
+                  },
+                ),
+              ),
+            ],
+            if (!_isPrivileged || _myBookingsCount > 0) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFEFE9E0)),
+                ),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading:
+                      const Icon(Icons.calendar_month, color: kNyqAccent),
+                  title: const Text('My Bookings',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 15)),
+                  subtitle: Text(
+                    _myBookingsCount > 0
+                        ? '$_myBookingsCount upcoming'
+                        : 'Appointments you have booked',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, size: 18),
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const MyBookingsScreen()),
+                    );
+                    _loadBookingCount();
                   },
                 ),
               ),
@@ -12969,6 +13033,225 @@ class _ShopLocationPickerScreenState extends State<ShopLocationPickerScreen> {
 // ==========================================
 // APPOINTMENTS
 // ==========================================
+class MyBookingsScreen extends StatefulWidget {
+  const MyBookingsScreen({super.key});
+
+  @override
+  State<MyBookingsScreen> createState() => _MyBookingsScreenState();
+}
+
+class _MyBookingsScreenState extends State<MyBookingsScreen> {
+  List<dynamic> _rows = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    return {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'Authorization': 'Bearer ${user?['token'] ?? ''}',
+    };
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/appointments/mine'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final all = (jsonDecode(res.body) as List)
+            .map((r) => Map<String, dynamic>.from(r as Map))
+            .where((a) {
+              final st = (a['status'] ?? '').toString();
+              if (st == 'cancelled' || st == 'completed') return false;
+              final d = DateTime.tryParse(
+                  (a['appointment_date'] ?? '').toString());
+              if (d == null) return false;
+              return d.isAfter(DateTime.now());
+            })
+            .toList();
+        if (mounted) {
+          setState(() {
+            _rows = all;
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'your bookings');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _cancel(Map<String, dynamic> a) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Cancel this booking?'),
+        content: Text((a['service_name'] ?? '').toString() +
+            ' at ' +
+            (a['shop_name'] ?? 'the shop').toString() +
+            ' will be released.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep it')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Cancel booking',
+                  style: TextStyle(color: Colors.red.shade700))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final res = await http.put(
+        Uri.parse('$baseUrl/appointments/${a['id']}/status'),
+        headers: await _headers(),
+        body: jsonEncode({'status': 'cancelled'}),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Booking cancelled'),
+              backgroundColor: kNyqGreen),
+        );
+        _load();
+      } else {
+        String msg = 'Could not cancel the booking';
+        try {
+          msg = (jsonDecode(res.body)['detail'] ?? msg).toString();
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.red.shade700),
+        );
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'the booking');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: const Text('My Bookings'),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _rows.isEmpty
+              ? EmptyState(
+                  icon: Icons.calendar_month,
+                  title: 'No upcoming bookings',
+                  message: 'Book an appointment from any service shop.',
+                  actionLabel: 'Back',
+                  onAction: () => Navigator.pop(context),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(12),
+                  children: _rows.map((raw) {
+                    final a = Map<String, dynamic>.from(raw as Map);
+                    final d = DateTime.tryParse(
+                            (a['appointment_date'] ?? '').toString())
+                        ?.toLocal();
+                    final when = d == null
+                        ? ''
+                        : '${d.day}/${d.month}/${d.year} at '
+                            '${d.hour.toString().padLeft(2, '0')}:'
+                            '${d.minute.toString().padLeft(2, '0')}';
+                    final confirmed = (a['status'] ?? '') == 'confirmed';
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: confirmed
+                                ? kNyqGreen.withValues(alpha: 0.4)
+                                : const Color(0xFFEFE9E0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                    (a['service_name'] ?? '').toString(),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14)),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: (confirmed ? kNyqGreen : kNyqOchre)
+                                      .withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                    (a['status'] ?? '')
+                                        .toString()
+                                        .toUpperCase(),
+                                    style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: confirmed
+                                            ? kNyqGreen
+                                            : Colors.orange.shade900)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text((a['shop_name'] ?? 'Shop').toString(),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade700)),
+                          Text(when,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600)),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.red.shade700,
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 10)),
+                              onPressed: () => _cancel(a),
+                              child: const Text('Cancel booking'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+    );
+  }
+}
+
 class AppointmentListScreen extends StatefulWidget {
   final Map<String, dynamic> shop;
   const AppointmentListScreen({super.key, required this.shop});
