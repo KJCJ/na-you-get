@@ -18,9 +18,12 @@ permissions:
   pages: write
   id-token: write
 
+# Queue deployments instead of cancelling them. With cancel-in-progress: true,
+# two pushes in quick succession killed the first deploy mid-sync, which is
+# what "Deployment cancelled" and the sync timeouts turned out to be.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
