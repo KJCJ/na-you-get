@@ -45,29 +45,29 @@ void showNetworkError(BuildContext context, String action) {
     ),
   );
 }
-const String kTextScaleKey = 'nyg_text_scale';
+const String kZoomKey = 'nyg_zoom_level';
 
-/// 0 = small, 1 = normal, 2 = large, 3 = extra large
-const List<double> kTextScales = [0.85, 1.0, 1.2, 1.4];
-const List<String> kTextScaleNames = ['Small', 'Normal', 'Large', 'Extra Large'];
+/// Browser-style page zoom. 1.0 is untouched.
+const List<double> kZoomLevels = [1.0, 1.25, 1.5, 2.0];
+const List<String> kZoomNames = ['Normal', 'Large', 'Bigger', 'Huge'];
 
-final ValueNotifier<int> textScaleIndex = ValueNotifier<int>(1);
+final ValueNotifier<double> zoomLevel = ValueNotifier<double>(1.0);
 
-Future<void> loadTextScale() async {
+Future<void> loadZoom() async {
   try {
     final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getInt(kTextScaleKey);
-    if (saved != null && saved >= 0 && saved < kTextScales.length) {
-      textScaleIndex.value = saved;
+    final saved = prefs.getDouble(kZoomKey);
+    if (saved != null && kZoomLevels.contains(saved)) {
+      zoomLevel.value = saved;
     }
   } catch (_) {}
 }
 
-Future<void> saveTextScale(int index) async {
-  textScaleIndex.value = index;
+Future<void> saveZoom(double zoom) async {
+  zoomLevel.value = zoom;
   try {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(kTextScaleKey, index);
+    await prefs.setDouble(kZoomKey, zoom);
   } catch (_) {}
 }
 
@@ -537,7 +537,7 @@ bool showApiError(
 // ==========================================
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await loadTextScale();
+  await loadZoom();
   runApp(const NaYouGetApp());
 }
 
@@ -546,17 +546,43 @@ class NaYouGetApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: textScaleIndex,
-      builder: (context, idx, _) => MaterialApp(
+    return ValueListenableBuilder<double>(
+      valueListenable: zoomLevel,
+      builder: (context, zoom, _) => MaterialApp(
       title: 'Na You Get (NYG)',
       debugShowCheckedModeBanner: false,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: TextScaler.linear(kTextScales[idx]),
-        ),
-        child: child!,
-      ),
+      builder: (context, child) {
+        if (zoom <= 1.0) return child!;
+        final mq = MediaQuery.of(context);
+        final w = mq.size.width / zoom;
+        final h = mq.size.height / zoom;
+        return ClipRect(
+          child: Transform.scale(
+            scale: zoom,
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: w,
+              height: h,
+              child: MediaQuery(
+                data: mq.copyWith(
+                  size: Size(w, h),
+                  padding: EdgeInsets.fromLTRB(
+                      mq.padding.left / zoom,
+                      mq.padding.top / zoom,
+                      mq.padding.right / zoom,
+                      mq.padding.bottom / zoom),
+                  viewInsets: EdgeInsets.fromLTRB(
+                      mq.viewInsets.left / zoom,
+                      mq.viewInsets.top / zoom,
+                      mq.viewInsets.right / zoom,
+                      mq.viewInsets.bottom / zoom),
+                ),
+                child: child ?? const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        );
+      },
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: kNyqSand,
@@ -2680,7 +2706,7 @@ void showAccountSheet(
               ListTile(
                 leading: const Icon(Icons.text_fields),
                 title: const Text('Display Settings'),
-                subtitle: const Text('Text size and readability'),
+                subtitle: const Text('Zoom level and readability'),
                 trailing: const Icon(Icons.chevron_right,
                     size: 18, color: Color(0xFFB0A89F)),
                 onTap: () {
@@ -2688,7 +2714,7 @@ void showAccountSheet(
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const DisplaySettingsScreen()),
+                        builder: (_) => const ZoomSettingsScreen()),
                   );
                 },
               ),
@@ -14161,16 +14187,16 @@ class _AppointmentListScreenState extends State<AppointmentListScreen> {
 }
 
 // ==========================================
-// DISPLAY SETTINGS (TEXT SCALING)
+// DISPLAY SETTINGS (ZOOM)
 // ==========================================
-class DisplaySettingsScreen extends StatelessWidget {
-  const DisplaySettingsScreen({super.key});
+class ZoomSettingsScreen extends StatelessWidget {
+  const ZoomSettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: textScaleIndex,
-      builder: (context, idx, _) => Scaffold(
+    return ValueListenableBuilder<double>(
+      valueListenable: zoomLevel,
+      builder: (context, current, _) => Scaffold(
         backgroundColor: kNyqSand,
         appBar: AppBar(
           title: const Text('Display Settings'),
@@ -14181,13 +14207,15 @@ class DisplaySettingsScreen extends StatelessWidget {
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const Text('Text Size',
+            const Text('Zoom Level',
                 style: TextStyle(
                     fontWeight: FontWeight.w800, fontSize: 15)),
             const SizedBox(height: 4),
-            Text('Choose a size that is comfortable for you.',
-                style: TextStyle(
-                    fontSize: 12, color: Colors.grey.shade600)),
+            Text(
+              'Makes everything bigger - text, buttons and pictures. '
+              'Swipe to move around when zoomed in.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(16),
@@ -14205,15 +14233,15 @@ class DisplaySettingsScreen extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                           color: Colors.grey.shade900)),
                   const SizedBox(height: 6),
-                  Text('This is how your messages will look.',
+                  Text('At ${current}x everything looks this big.',
                       style: TextStyle(
                           fontSize: 13, color: Colors.grey.shade700)),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            ...List.generate(kTextScales.length, (i) {
-              final selected = i == idx;
+            ...kZoomLevels.map((z) {
+              final selected = (z - current).abs() < 0.01;
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
@@ -14226,11 +14254,12 @@ class DisplaySettingsScreen extends StatelessWidget {
                           selected ? kNyqGreen : const Color(0xFFEFE9E0)),
                 ),
                 child: ListTile(
-                  onTap: () => saveTextScale(i),
-                  title: Text(kTextScaleNames[i],
+                  onTap: () => saveZoom(z),
+                  title: Text(
+                      '${kZoomNames[kZoomLevels.indexOf(z)]}  (${z}x)',
                       style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          fontSize: 14 * kTextScales[i])),
+                          fontSize: 14 * z.clamp(1.0, 1.4))),
                   trailing: selected
                       ? const Icon(Icons.check_circle, color: kNyqGreen)
                       : null,
@@ -14243,6 +14272,7 @@ class DisplaySettingsScreen extends StatelessWidget {
     );
   }
 }
+
 
 // ==========================================
 // PUBLIC COMPANY PROFILE
