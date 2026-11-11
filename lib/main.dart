@@ -72,7 +72,7 @@ Future<void> saveZoom(double zoom) async {
 }
 
 const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785acabfd295';
-const String appVersion = '1.0.0';
+const String appVersion = '1.0.1';
 const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk';
 
 // ==========================================
