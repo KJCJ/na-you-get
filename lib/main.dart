@@ -2703,21 +2703,25 @@ void showAccountSheet(
                   showChangePasswordDialog(context);
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.text_fields),
-                title: const Text('Display Settings'),
-                subtitle: const Text('Zoom level and readability'),
-                trailing: const Icon(Icons.chevron_right,
-                    size: 18, color: Color(0xFFB0A89F)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const ZoomSettingsScreen()),
-                  );
-                },
-              ),
+              // Web has native pinch-zoom, so the custom zoom is redundant
+              // there. The Android APK renders to a canvas with no native
+              // zoom, so the in-app control is the only magnification.
+              if (!kIsWeb)
+                ListTile(
+                  leading: const Icon(Icons.text_fields),
+                  title: const Text('Display Settings'),
+                  subtitle: const Text('Zoom level and readability'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 18, color: Color(0xFFB0A89F)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const ZoomSettingsScreen()),
+                    );
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.help_outline),
                 title: const Text('Help & Guide'),
@@ -3845,11 +3849,7 @@ class _ChatScreenState extends State<ChatScreen> {
               tooltip: 'Make an offer',
               onPressed: _makeOffer,
             ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: _load,
-          ),
+
         ],
       ),
       body: Column(
