@@ -73,6 +73,30 @@ Future<void> saveZoom(double zoom) async {
 
 const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785acabfd295';
 const String appVersion = '1.0.1';
+/// True only when [remote] is a strictly newer release than [local].
+/// Handles "1.0.1", "v1.0.1", "1.0.1+2" and "1.0.1-beta".
+bool isNewerVersion(String remote, String local) {
+  List<int> parse(String v) {
+    final cleaned = v.trim().replaceFirst(RegExp(r'^[vV]'), '');
+    final core = cleaned.split('+').first.split('-').first;
+    if (core.isEmpty) return [0];
+    return core
+        .split('.')
+        .map((p) => int.tryParse(p.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0)
+        .toList();
+  }
+
+  final a = parse(remote);
+  final b = parse(local);
+  final len = a.length > b.length ? a.length : b.length;
+  for (var i = 0; i < len; i++) {
+    final x = i < a.length ? a[i] : 0;
+    final y = i < b.length ? b[i] : 0;
+    if (x != y) return x > y;
+  }
+  return false;
+}
+
 const String apkDownloadUrl = 'https://github.com/KJCJ/na-you-get/releases/latest/download/NaYouGet.apk';
 
 // ==========================================
@@ -8901,6 +8925,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   Map<String, dynamic>? _currentUser;
   bool _loadingUser = true;
+  bool _updateChecked = false;
 
   @override
   void initState() {
@@ -8911,7 +8936,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _checkForUpdate();
+    if (!_updateChecked) {
+      _updateChecked = true;
+      _checkForUpdate();
+    }
   }
 
   Future<void> _checkForUpdate() async {
@@ -8920,7 +8948,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final data = jsonDecode(res.body);
         final latest = data['version']?.toString() ?? appVersion;
-        if (latest != appVersion) {
+        if (!kIsWeb && isNewerVersion(latest, appVersion)) {
           if (!mounted) return;
           _showUpdateDialog(latest);
         }
