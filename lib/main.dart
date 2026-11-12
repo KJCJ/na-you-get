@@ -72,7 +72,7 @@ Future<void> saveZoom(double zoom) async {
 }
 
 const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785acabfd295';
-const String appVersion = '1.0.6';
+const String appVersion = '1.0.7';
 /// True only when [remote] is a strictly newer release than [local].
 /// Handles "1.0.1", "v1.0.1", "1.0.1+2" and "1.0.1-beta".
 bool isNewerVersion(String remote, String local) {
