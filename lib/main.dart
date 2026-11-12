@@ -570,43 +570,10 @@ class NaYouGetApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<double>(
-      valueListenable: zoomLevel,
-      builder: (context, zoom, _) => MaterialApp(
+    return MaterialApp(
       title: 'Na You Get (NYG)',
       debugShowCheckedModeBanner: false,
-      builder: (context, child) {
-        if (zoom <= 1.0) return child!;
-        final mq = MediaQuery.of(context);
-        final w = mq.size.width / zoom;
-        final h = mq.size.height / zoom;
-        return ClipRect(
-          child: Transform.scale(
-            scale: zoom,
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: w,
-              height: h,
-              child: MediaQuery(
-                data: mq.copyWith(
-                  size: Size(w, h),
-                  padding: EdgeInsets.fromLTRB(
-                      mq.padding.left / zoom,
-                      mq.padding.top / zoom,
-                      mq.padding.right / zoom,
-                      mq.padding.bottom / zoom),
-                  viewInsets: EdgeInsets.fromLTRB(
-                      mq.viewInsets.left / zoom,
-                      mq.viewInsets.top / zoom,
-                      mq.viewInsets.right / zoom,
-                      mq.viewInsets.bottom / zoom),
-                ),
-                child: child ?? const SizedBox.shrink(),
-              ),
-            ),
-          ),
-        );
-      },
+
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: kNyqSand,
@@ -686,7 +653,6 @@ class NaYouGetApp extends StatelessWidget {
         ),
       ),
       home: const MainNavigationScreen(),
-      ),
     );
   }
 }
@@ -9121,7 +9087,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           },
           child: Scaffold(
       body: KenteBackground(
-        child: IndexedStack(index: safeIndex, children: screens),
+        child: ZoomViewport(
+          child: IndexedStack(index: safeIndex, children: screens),
+        ),
       ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -10079,6 +10047,7 @@ class MarketplaceLocationsScreen extends StatefulWidget {
 
 class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen> {
   List<dynamic> shops = [];
+  String _shopQuery = '';
   List<dynamic> _companies = [];
   List<String> cities = [];
   bool isLoading = true;
@@ -10157,10 +10126,24 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
   }
 
   List<dynamic> get _filteredShops {
-    if (selectedCity == 'All Cities') return shops;
-    return shops
-        .where((s) => (s['city'] ?? '').toString().trim() == selectedCity)
-        .toList();
+    final list = (selectedCity == 'All Cities')
+        ? shops
+        : shops
+            .where((s) =>
+                (s['city'] ?? '').toString().trim() == selectedCity)
+            .toList();
+    final q = _shopQuery.trim().toLowerCase();
+    if (q.isEmpty) return list;
+    return list.where((s) {
+      final name = (s['shop_name'] ?? '').toString().toLowerCase();
+      final city = (s['city'] ?? '').toString().toLowerCase();
+      final cat = (s['category'] ?? '').toString().toLowerCase();
+      final desc = (s['description'] ?? '').toString().toLowerCase();
+      return name.contains(q) ||
+          city.contains(q) ||
+          cat.contains(q) ||
+          desc.contains(q);
+    }).toList();
   }
 
   void _openShop(Map<String, dynamic> shop) {
@@ -10748,7 +10731,9 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
                             size: 80, color: Colors.grey.shade400),
                         const SizedBox(height: 16),
                         Text(
-                          'No shops in this city yet',
+                          _shopQuery.trim().isEmpty
+                              ? 'No shops in this city yet'
+                              : 'No shops match "' + _shopQuery.trim() + '"',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -10778,9 +10763,19 @@ class _MarketplaceLocationsScreenState extends State<MarketplaceLocationsScreen>
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: GestureDetector(
-          onTap: widget.onGoShopping,
-          child: Image.asset('assets/logo.png', height: 60),
+        leadingWidth: 96,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 10, right: 4),
+          child: GestureDetector(
+            onTap: widget.onGoShopping,
+            child: Image.asset('assets/logo.png',
+                height: 40, fit: BoxFit.contain),
+          ),
+        ),
+        titleSpacing: 0,
+        title: appBarSearchField(
+          hint: 'Search shops, cities',
+          onChanged: (v) => setState(() => _shopQuery = v),
         ),
         actions: [
           AccountButton(
@@ -14270,6 +14265,120 @@ class _AppointmentListScreenState extends State<AppointmentListScreen> {
 // ==========================================
 // DISPLAY SETTINGS (ZOOM)
 // ==========================================
+/// Scales and pans the tab content only. The bottom navigation bar is a
+/// sibling of this widget, so it never scales and stays reachable at 2x.
+/// Renders [child] untouched when zoom is 1.0.
+class ZoomViewport extends StatefulWidget {
+  final Widget child;
+  const ZoomViewport({super.key, required this.child});
+
+  @override
+  State<ZoomViewport> createState() => _ZoomViewportState();
+}
+
+class _ZoomViewportState extends State<ZoomViewport> {
+  final TransformationController _ctl = TransformationController();
+
+  @override
+  void initState() {
+    super.initState();
+    zoomLevel.addListener(_syncScale);
+    _applyScale();
+  }
+
+  @override
+  void dispose() {
+    zoomLevel.removeListener(_syncScale);
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  void _applyScale() {
+    final z = zoomLevel.value;
+    _ctl.value = Matrix4.identity()..scale(z, z, 1.0);
+  }
+
+  void _syncScale() {
+    _applyScale();
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final zoom = zoomLevel.value;
+    if (zoom <= 1.0) return widget.child;
+
+    final mq = MediaQuery.of(context);
+    final w = mq.size.width / zoom;
+    final h = mq.size.height / zoom;
+
+    return ClipRect(
+      child: InteractiveViewer(
+        transformationController: _ctl,
+        constrained: false,
+        panEnabled: true,
+        scaleEnabled: false,
+        boundaryMargin: const EdgeInsets.all(double.infinity),
+        child: SizedBox(
+          width: w,
+          height: h,
+          child: MediaQuery(
+            data: mq.copyWith(
+              size: Size(w, h),
+              viewInsets: EdgeInsets.fromLTRB(
+                mq.viewInsets.left / zoom,
+                mq.viewInsets.top / zoom,
+                mq.viewInsets.right / zoom,
+                mq.viewInsets.bottom / zoom,
+              ),
+            ),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact search field sized to sit inside a 56px AppBar.
+Widget appBarSearchField({
+  required String hint,
+  required ValueChanged<String> onChanged,
+}) {
+  return SizedBox(
+    height: 38,
+    child: TextField(
+      onChanged: onChanged,
+      textAlignVertical: TextAlignVertical.center,
+      style: const TextStyle(fontSize: 13),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+        prefixIcon: const Icon(Icons.search, size: 18),
+        prefixIconConstraints:
+            const BoxConstraints(minWidth: 34, minHeight: 34),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        filled: true,
+        fillColor: const Color(0xFFF1F1F1),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: kNyqGreen, width: 1.5),
+        ),
+      ),
+    ),
+  );
+}
+
 class ZoomSettingsScreen extends StatelessWidget {
   const ZoomSettingsScreen({super.key});
 
@@ -17956,7 +18065,17 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: Image.asset('assets/logo.png', height: 60),
+        leadingWidth: 96,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 10, right: 4),
+          child: Image.asset('assets/logo.png',
+              height: 40, fit: BoxFit.contain),
+        ),
+        titleSpacing: 0,
+        title: appBarSearchField(
+          hint: 'Search products, shops',
+          onChanged: (v) => setState(() => searchQuery = v),
+        ),
         actions: [
           AccountButton(
               currentUser: widget.currentUser,
@@ -17975,36 +18094,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: TextField(
-                    onChanged: (v) => setState(() => searchQuery = v),
-                    decoration: InputDecoration(
-                      hintText: 'Search products, shops, categories...',
-                      hintStyle:
-                          TextStyle(color: Colors.grey.shade500, fontSize: 14),
-                      prefixIcon:
-                          Icon(Icons.search, color: Colors.grey.shade500),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(
-                            color: Color(0xFF1B5E20), width: 1.5),
-                      ),
-                      filled: true,
-                      fillColor: const Color(0xFFF5F5F5),
-                      contentPadding: const EdgeInsets.symmetric(
-                          vertical: 18, horizontal: 16),
-                    ),
-                  ),
-                ),
+
                 const SizedBox(height: 8),
                 const SizedBox(height: 8),
                 SizedBox(
