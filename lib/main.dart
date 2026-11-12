@@ -72,7 +72,7 @@ Future<void> saveZoom(double zoom) async {
 }
 
 const String apiKey = '3269e65be9a1970f8dc3874d4da06407e19e12d63427e75213bff1785acabfd295';
-const String appVersion = '1.0.5';
+const String appVersion = '1.0.6';
 /// True only when [remote] is a strictly newer release than [local].
 /// Handles "1.0.1", "v1.0.1", "1.0.1+2" and "1.0.1-beta".
 bool isNewerVersion(String remote, String local) {
@@ -16587,6 +16587,31 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
       ),
       body: Column(
         children: [
+          if (!_isOwner &&
+              (shop['location_note'] ?? '').toString().isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: kNyqSand,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE0DAD2)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_outline,
+                      size: 15, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                        (shop['location_note'] ?? '').toString(),
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade700)),
+                  ),
+                ],
+              ),
+            ),
           if (!_isOwner && _acceptsBookings)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
