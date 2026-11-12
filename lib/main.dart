@@ -5352,6 +5352,9 @@ class AdminDashboardScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Admin Dashboard'),
           bottom: const TabBar(
+            // Six tabs no longer fit on a phone, so the bar scrolls.
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             labelColor: kNyqGreen,
             indicatorColor: kNyqGreen,
             tabs: [
@@ -6892,6 +6895,8 @@ class _AdminEarningsScreenState extends State<AdminEarningsScreen> {
                       _countRow('Sellers', _data!['total_sellers']),
                       _countRow('Shops', _data!['total_shops']),
                       _countRow('Products', _data!['total_products']),
+            _countRow('Workers', _data!['total_workers']),
+            _countRow('Jobs', _data!['total_jobs']),
                       _countRow('Users', _data!['total_users']),
                       const SizedBox(height: 24),
                       Text(
