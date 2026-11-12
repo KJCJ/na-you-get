@@ -15,6 +15,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'core/theme.dart';
+// Browser tab title. Kept behind a conditional import so the Android build
+// never sees dart:js_interop, which does not exist on the VM.
+import 'web_title_stub.dart'
+    if (dart.library.js_interop) 'web_title_web.dart';
 import 'core/widgets/management_hub.dart';
 
 const String baseUrl = 'https://random.taila91e03.ts.net';
@@ -1330,6 +1334,7 @@ const int kSupportUserId = 7;
 
 /// Unread message count for the badges on the Profile tab and Messages tile.
 final ValueNotifier<int> unreadMessages = ValueNotifier<int>(0);
+final ValueNotifier<int> pendingBookings = ValueNotifier<int>(0);
 
 Future<void> refreshUnreadMessages() async {
   final inbox = await MessageSession.getInbox();
@@ -1340,6 +1345,23 @@ Future<void> refreshUnreadMessages() async {
     if (n is num) total += n.toInt();
   }
   unreadMessages.value = total;
+
+  try {
+    final user = await UserSession.load();
+    if (user == null) return;
+    final res = await http.get(
+      Uri.parse('$baseUrl/notifications/unread'),
+      headers: {
+        'x-api-key': apiKey,
+        'Authorization': 'Bearer ${user['token']}',
+      },
+    ).timeout(const Duration(seconds: 8));
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final d = jsonDecode(res.body) as Map;
+      pendingBookings.value =
+          (d['pending_bookings'] as num?)?.toInt() ?? 0;
+    }
+  } catch (_) {}
 }
 
 class SupportSession {
@@ -3414,10 +3436,13 @@ class _MessagesScreenState extends State<MessagesScreen> {
         widget.currentUser['is_admin'] == true;
     if (isAdmin) {
       // Each person who messaged NYG Support is a separate ticket.
+      // Insert newest-first at the TOP: appending after the sort buried
+      // them below every ordinary conversation, which is why the admin
+      // could not find them.
       final tickets = await SupportSession.tickets();
-      for (final t in tickets) {
-        list.add({
-          ...Map<String, dynamic>.from(t as Map),
+      for (var i = tickets.length - 1; i >= 0; i--) {
+        list.insert(0, {
+          ...Map<String, dynamic>.from(tickets[i] as Map),
           '_kind': 'support_ticket',
         });
       }
@@ -9323,6 +9348,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     super.initState();
     _loadUser();
     refreshUnreadMessages();
+    unreadMessages.addListener(_notifyTitle);
+    pendingBookings.addListener(_notifyTitle);
     _unreadTimer =
         Timer.periodic(const Duration(seconds: 20), (_) {
       refreshUnreadMessages();
@@ -9332,7 +9359,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void dispose() {
     _unreadTimer?.cancel();
+    unreadMessages.removeListener(_notifyTitle);
+    pendingBookings.removeListener(_notifyTitle);
     super.dispose();
+  }
+
+  void _notifyTitle() {
+    final total = unreadMessages.value + pendingBookings.value;
+    setBrowserTitle(total > 0 ? '($total) Na You Get' : 'Na You Get');
   }
 
   @override
@@ -9519,9 +9553,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           NavigationDestination(
               icon: ValueListenableBuilder<int>(
                 valueListenable: unreadMessages,
-                builder: (_, n, __) => n > 0
-                    ? const Badge(child: Icon(Icons.person_outline))
-                    : const Icon(Icons.person_outline),
+                builder: (_, msgs, __) => ValueListenableBuilder<int>(
+                  valueListenable: pendingBookings,
+                  builder: (_, books, __) {
+                    final n = msgs + books;
+                    return n > 0
+                        ? Badge(
+                            label: Text('$n'),
+                            child: const Icon(Icons.person_outline))
+                        : const Icon(Icons.person_outline);
+                  },
+                ),
               ),
               selectedIcon: const Icon(Icons.person),
               label: 'Profile'),
@@ -13851,6 +13893,7 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
   int _products = 0;
   int _employees = 0;
   int _pendingShipments = 0;
+  int _pendingAppointments = 0;
 
   @override
   void initState() {
@@ -13861,11 +13904,32 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
     fetchIncomingShipmentCount().then((n) {
       if (mounted) setState(() => _pendingShipments = n);
     });
+    _loadPendingAppointments();
   }
 
   String get _initial {
     final n = (shop['shop_name'] ?? '').toString().trim();
     return n.isEmpty ? '?' : n[0].toUpperCase();
+  }
+
+  Future<void> _loadPendingAppointments() async {
+    try {
+      final user = await UserSession.load();
+      final res = await http.get(
+        Uri.parse('$baseUrl/shops/${shop['id']}/appointments'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user?['token'] ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final rows = jsonDecode(res.body) as List;
+        final n = rows
+            .where((a) => (a['status'] ?? '').toString() == 'pending')
+            .length;
+        if (mounted) setState(() => _pendingAppointments = n);
+      }
+    } catch (_) {}
   }
 
   Future<void> _refresh() async {
@@ -14059,7 +14123,9 @@ class _ShopManagementScreenState extends State<ShopManagementScreen> {
             });
           }),
           _actionCard(Icons.calendar_month, 'Appointments',
-              'Bookings from customers', () async {
+              _pendingAppointments > 0
+                  ? '$_pendingAppointments waiting for you'
+                  : 'Bookings from customers', () async {
             await Navigator.push(
               context,
               MaterialPageRoute(
