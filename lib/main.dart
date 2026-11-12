@@ -5347,7 +5347,7 @@ class AdminDashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Admin Dashboard'),
@@ -5357,6 +5357,7 @@ class AdminDashboardScreen extends StatelessWidget {
             tabs: [
               Tab(text: 'Users', icon: Icon(Icons.people_outline)),
               Tab(text: 'Invoices', icon: Icon(Icons.receipt_long)),
+              Tab(text: 'Shops', icon: Icon(Icons.storefront_outlined)),
           Tab(text: 'Companies', icon: Icon(Icons.business_outlined)),
               Tab(text: 'KYC', icon: Icon(Icons.badge_outlined)),
               Tab(text: 'Overview', icon: Icon(Icons.insights_outlined)),
@@ -5367,6 +5368,7 @@ class AdminDashboardScreen extends StatelessWidget {
           children: [
             AdminUsersScreen(embedded: true),
             InvoicesScreen(isAdmin: true, embedded: true),
+            AdminShopsScreen(embedded: true),
           AdminCompaniesScreen(embedded: true),
             AdminKycScreen(embedded: true),
             AdminEarningsScreen(embedded: true),
@@ -5782,6 +5784,144 @@ class _AdminKycReviewScreenState extends State<AdminKycReviewScreen> {
           const SizedBox(height: 20),
         ],
       ),
+    );
+  }
+}
+
+class AdminShopsScreen extends StatefulWidget {
+  final bool embedded;
+  const AdminShopsScreen({super.key, this.embedded = false});
+
+  @override
+  State<AdminShopsScreen> createState() => _AdminShopsScreenState();
+}
+
+class _AdminShopsScreenState extends State<AdminShopsScreen> {
+  List<dynamic> _shops = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<Map<String, String>> _headers() async {
+    final user = await UserSession.load();
+    return {
+      'x-api-key': apiKey,
+      'Authorization': 'Bearer ${user?['token'] ?? ''}',
+    };
+  }
+
+  Future<void> _fetch() async {
+    setState(() => _loading = true);
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/admin/shops'),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        if (mounted) {
+          setState(() {
+            _shops = jsonDecode(res.body) as List;
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) showNetworkError(context, 'shops');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _shops.isEmpty
+            ? EmptyState(
+                icon: Icons.storefront_outlined,
+                title: 'No shops yet',
+                message: 'Shops appear here as sellers create them.',
+                actionLabel: 'Refresh',
+                onAction: _fetch,
+              )
+            : RefreshIndicator(
+                onRefresh: _fetch,
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: _shops.length,
+                  itemBuilder: (ctx, i) {
+                    final s = Map<String, dynamic>.from(_shops[i] as Map);
+                    final company = (s['company_name'] ?? '').toString();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: const Color(0xFFEFE9E0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                    (s['shop_name'] ?? '').toString(),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14)),
+                              ),
+                              if (company.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: kNyqGreen.withValues(
+                                        alpha: 0.12),
+                                    borderRadius:
+                                        BorderRadius.circular(6),
+                                  ),
+                                  child: Text('Linked to ' + company,
+                                      style: const TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: kNyqGreen)),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                              (s['owner_name'] ?? '').toString() +
+                                  ' · ' +
+                                  (s['city'] ?? '').toString(),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600)),
+                          Text(
+                              (s['category'] ?? '').toString() +
+                                  ' · ' +
+                                  (s['location_visibility'] ?? 'public')
+                                      .toString(),
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade400)),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              );
+    if (widget.embedded) return body;
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(title: const Text('All Shops')),
+      body: body,
     );
   }
 }
@@ -16545,6 +16685,27 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         shop['accept_bookings'] == 1 || shop['accept_bookings'] == true;
     var locationVisibility =
         (shop['location_visibility'] ?? 'public').toString();
+    int? linkedCompanyId = (shop['company_id'] as num?)?.toInt();
+    List<dynamic> myCompanies = [];
+    bool companiesRequested = false;
+    Future<void> loadMyCompanies(StateSetter setDialogState) async {
+      try {
+        final user = await UserSession.load();
+        final res = await http.get(
+          Uri.parse('$baseUrl/companies/my-companies'),
+          headers: {
+            'x-api-key': apiKey,
+            'Authorization': 'Bearer ${user?['token'] ?? ''}',
+          },
+        ).timeout(const Duration(seconds: 8));
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          final list = jsonDecode(res.body) as List;
+          if (mounted) {
+            setDialogState(() => myCompanies = list);
+          }
+        }
+      } catch (_) {}
+    }
     final cityController =
         TextEditingController(text: shop['city'] ?? 'Freetown');
     String? currentLogo = shop['logo_url'];
@@ -16568,7 +16729,12 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
+        builder: (context, setDialogState) {
+          if (!companiesRequested) {
+            companiesRequested = true;
+            loadMyCompanies(setDialogState);
+          }
+          return AlertDialog(
           title: const Text('Edit Shop Info'),
           content: SingleChildScrollView(
             child: Column(
@@ -16598,6 +16764,30 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
+                if (myCompanies.isNotEmpty)
+                  Column(
+                    children: [
+                      DropdownButtonFormField<int?>(
+                        initialValue: linkedCompanyId,
+                        decoration: const InputDecoration(
+                            labelText: 'Link to Company (Optional)',
+                            border: OutlineInputBorder()),
+                        items: [
+                          const DropdownMenuItem<int?>(
+                              value: null, child: Text('Not linked')),
+                          ...myCompanies.map((c) => DropdownMenuItem<int?>(
+                                value: (c['id'] as num).toInt(),
+                                child: Text(
+                                    (c['name'] ?? '').toString()),
+                              )),
+                        ],
+                        onChanged: (v) {
+                          setDialogState(() => linkedCompanyId = v);
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                  ),
                 DropdownButtonFormField<String>(
                   initialValue: locationVisibility,
                   decoration: const InputDecoration(
@@ -16938,6 +17128,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'twitter_url': xController.text.trim(),
                     'accept_bookings': acceptsBookings ? 1 : 0,
                     'location_visibility': locationVisibility,
+                    'company_id': linkedCompanyId ?? 0,
                     if (shopLat != null) 'latitude': shopLat,
                     if (shopLng != null) 'longitude': shopLng,
                   }),
@@ -16964,7 +17155,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
               child: const Text('Save'),
             ),
           ],
-        ),
+        );
+        },
       ),
     );
   }
