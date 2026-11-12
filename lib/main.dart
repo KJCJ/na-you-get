@@ -894,7 +894,10 @@ class UserSession {
     }
   }
 
+  static String? lastUpdateError;
+
   static Future<bool> update(Map<String, dynamic> updates) async {
+    lastUpdateError = null;
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('user_token');
     if (token == null) return false;
@@ -934,7 +937,15 @@ class UserSession {
         if (user['photo_url'] != null) {
           await prefs.setString('user_photo', user['photo_url']);
         }
+        await prefs.setString('user_bio', (user['bio'] ?? '').toString());
         return true;
+      }
+      try {
+        lastUpdateError =
+            (jsonDecode(res.body)['detail'] ?? '').toString();
+      } catch (_) {}
+      if (lastUpdateError != null && lastUpdateError!.isEmpty) {
+        lastUpdateError = null;
       }
     } catch (_) {}
     return false;
@@ -2702,6 +2713,7 @@ void showAccountSheet(
               ListTile(
                 leading: const Icon(Icons.edit),
                 title: const Text('Edit Profile'),
+                subtitle: const Text('Name, phone, photo and bio'),
                 trailing: const Icon(Icons.chevron_right,
                     size: 18, color: Color(0xFFB0A89F)),
                 onTap: () {
@@ -2727,11 +2739,11 @@ void showAccountSheet(
                   showChangePasswordDialog(context);
                 },
               ),
-              // Web has native pinch-zoom, so the custom zoom is redundant
-              // there. The Android APK renders to a canvas with no native
-              // zoom, so the in-app control is the only magnification.
-              if (!kIsWeb)
-                ListTile(
+
+              // Flutter renders to a canvas, so browser pinch-zoom does not
+              // reach the app reliably. The in-app zoom is offered on every
+              // platform for that reason.
+              ListTile(
                   leading: const Icon(Icons.text_fields),
                   title: const Text('Display Settings'),
                   subtitle: const Text('Zoom level and readability'),
@@ -2878,6 +2890,7 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _nameController;
+  late TextEditingController _bioController;
   late TextEditingController _phoneController;
   String? _photoUrl;
   bool _saving = false;
@@ -2887,6 +2900,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.currentUser['name'] ?? '');
+    _bioController =
+        TextEditingController(text: (widget.currentUser['bio'] ?? '').toString());
     _phoneController = TextEditingController(text: widget.currentUser['phone_number'] ?? '');
     _photoUrl = widget.currentUser['photo_url'];
   }
@@ -2894,6 +2909,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _bioController.dispose();
     _phoneController.dispose();
     super.dispose();
   }
@@ -2904,6 +2920,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       'name': _nameController.text.trim(),
       'phone_number': _phoneController.text.trim(),
       'photo_url': _photoUrl,
+      'bio': _bioController.text.trim(),
     });
     setState(() => _saving = false);
     if (!mounted) return;
@@ -2915,7 +2932,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not update profile')),
+        SnackBar(
+            content: Text(UserSession.lastUpdateError ??
+                'Could not update profile')),
       );
     }
   }
@@ -3030,6 +3049,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 labelText: 'Full Name',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.person),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _bioController,
+              maxLines: 3,
+              maxLength: 200,
+              decoration: const InputDecoration(
+                labelText: 'About Me (optional)',
+                hintText: 'Tell people a little about yourself',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.info_outline),
               ),
             ),
             const SizedBox(height: 16),
@@ -9720,6 +9751,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   double? _lat;
   double? _lng;
   bool _bookings = false;
+  String _visibility = 'public';
   bool _isPublic = true;
   bool _saving = false;
 
@@ -9755,6 +9787,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     _lat = (c['latitude'] as num?)?.toDouble();
     _lng = (c['longitude'] as num?)?.toDouble();
     _bookings = (c['accept_bookings'] ?? 0) == 1;
+    _visibility = (c['location_visibility'] ?? 'public').toString();
     _isPublic = (c['is_public'] ?? 1) == 1;
   }
 
@@ -9794,6 +9827,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
           'latitude': _lat,
           'longitude': _lng,
           'accept_bookings': _bookings ? 1 : 0,
+          'location_visibility': _visibility,
           'is_public': _isPublic ? 1 : 0,
         }),
       ).timeout(const Duration(seconds: 12));
@@ -9964,6 +9998,25 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: _visibility,
+            decoration: const InputDecoration(
+                labelText: 'Location Privacy',
+                border: OutlineInputBorder()),
+            items: const [
+              DropdownMenuItem(
+                  value: 'public', child: Text('Public - show exact pin')),
+              DropdownMenuItem(
+                  value: 'approximate',
+                  child: Text('Approximate - my area only')),
+              DropdownMenuItem(
+                  value: 'hidden', child: Text('Hidden - share on booking')),
+            ],
+            onChanged: (v) {
+              if (v != null) setState(() => _visibility = v);
+            },
           ),
           const SizedBox(height: 10),
           SwitchListTile(
@@ -14662,7 +14715,36 @@ class _PublicCompanyScreenState extends State<PublicCompanyScreen> {
                           height: 1.4,
                           color: Colors.grey.shade800)),
                 ],
-                if (lat != null && lng != null) ...[
+                if (lat == null || lng == null) ...[
+                  if ((c['location_note'] ?? '').toString().isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    const Text('Location',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 14)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: kNyqSand,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.lock_outline,
+                              size: 16, color: Colors.grey),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                                (c['location_note'] ?? '').toString(),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade700)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ] else ...[
                   const SizedBox(height: 18),
                   const Text('Location',
                       style: TextStyle(
@@ -15876,6 +15958,8 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
         TextEditingController(text: shop['phone_number'] ?? '');
     var acceptsBookings =
         shop['accept_bookings'] == 1 || shop['accept_bookings'] == true;
+    var locationVisibility =
+        (shop['location_visibility'] ?? 'public').toString();
     final cityController =
         TextEditingController(text: shop['city'] ?? 'Freetown');
     String? currentLogo = shop['logo_url'];
@@ -15929,6 +16013,29 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: locationVisibility,
+                  decoration: const InputDecoration(
+                      labelText: 'Location Privacy',
+                      border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'public',
+                        child: Text('Public - show my exact pin')),
+                    DropdownMenuItem(
+                        value: 'approximate',
+                        child: Text('Approximate - my area only')),
+                    DropdownMenuItem(
+                        value: 'hidden',
+                        child: Text('Hidden - share on booking')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) {
+                      setDialogState(() => locationVisibility = v);
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Accept Bookings'),
@@ -16245,6 +16352,7 @@ class _ShopPageScreenState extends State<ShopPageScreen> {
                     'tiktok_url': ttController.text.trim(),
                     'twitter_url': xController.text.trim(),
                     'accept_bookings': acceptsBookings ? 1 : 0,
+                    'location_visibility': locationVisibility,
                     if (shopLat != null) 'latitude': shopLat,
                     if (shopLng != null) 'longitude': shopLng,
                   }),
