@@ -1326,6 +1326,93 @@ class ShopSession {
   }
 }
 
+const int kSupportUserId = 7;
+
+/// Unread message count for the badges on the Profile tab and Messages tile.
+final ValueNotifier<int> unreadMessages = ValueNotifier<int>(0);
+
+Future<void> refreshUnreadMessages() async {
+  final inbox = await MessageSession.getInbox();
+  var total = 0;
+  for (final c in inbox) {
+    final m = Map<String, dynamic>.from(c as Map);
+    final n = m['unread_count'];
+    if (n is num) total += n.toInt();
+  }
+  unreadMessages.value = total;
+}
+
+class SupportSession {
+  static Future<List<dynamic>> tickets() async {
+    final user = await UserSession.load();
+    if (user == null) return [];
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/support/tickets'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        return jsonDecode(res.body) as List;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  static Future<List<dynamic>> ticketMessages(int userId) async {
+    final user = await UserSession.load();
+    if (user == null) return [];
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/support/tickets/$userId'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        return jsonDecode(res.body) as List;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  static Future<bool> reply(int userId, String text) async {
+    final user = await UserSession.load();
+    if (user == null) return false;
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/support/reply'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+        body: jsonEncode({'user_id': userId, 'text': text}),
+      ).timeout(const Duration(seconds: 10));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> markRead(int userId) async {
+    final user = await UserSession.load();
+    if (user == null) return;
+    try {
+      await http.put(
+        Uri.parse('$baseUrl/support/tickets/$userId/read'),
+        headers: {
+          'x-api-key': apiKey,
+          'Authorization': 'Bearer ${user['token']}',
+        },
+      ).timeout(const Duration(seconds: 8));
+    } catch (_) {}
+  }
+}
+
 // ==========================================
 // MESSAGE SESSION
 // ==========================================
@@ -2582,10 +2669,32 @@ void showAccountSheet(
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.chat_bubble_outline),
+                leading: ValueListenableBuilder<int>(
+                  valueListenable: unreadMessages,
+                  builder: (_, n, __) => n > 0
+                      ? const Badge(
+                          child: Icon(Icons.chat_bubble_outline))
+                      : const Icon(Icons.chat_bubble_outline),
+                ),
                 title: const Text('Messages'),
-                trailing: const Icon(Icons.chevron_right,
-                    size: 18, color: Color(0xFFB0A89F)),
+                trailing: ValueListenableBuilder<int>(
+                  valueListenable: unreadMessages,
+                  builder: (_, n, __) => Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (n > 0)
+                        Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.chevron_right,
+                          size: 18, color: Color(0xFFB0A89F)),
+                    ],
+                  ),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   Navigator.push(
@@ -3080,6 +3189,175 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 // ==========================================
 // MESSAGES SCREEN (conversation list)
 // ==========================================
+class SupportChatScreen extends StatefulWidget {
+  final int userId;
+  final String userName;
+  const SupportChatScreen(
+      {super.key, required this.userId, required this.userName});
+
+  @override
+  State<SupportChatScreen> createState() => _SupportChatScreenState();
+}
+
+class _SupportChatScreenState extends State<SupportChatScreen> {
+  List<dynamic> _msgs = [];
+  bool _loading = true;
+  bool _sending = false;
+  final TextEditingController _ctl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final rows = await SupportSession.ticketMessages(widget.userId);
+    await SupportSession.markRead(widget.userId);
+    refreshUnreadMessages();
+    if (!mounted) return;
+    setState(() {
+      _msgs = rows;
+      _loading = false;
+    });
+  }
+
+  Future<void> _send() async {
+    final text = _ctl.text.trim();
+    if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    final ok = await SupportSession.reply(widget.userId, text);
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (ok) {
+      _ctl.clear();
+      _load();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not send the reply')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kNyqSand,
+      appBar: AppBar(
+        title: Text('Support: ' + widget.userName),
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _msgs.isEmpty
+                    ? const Center(
+                        child: Text('No messages in this ticket yet'))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: _msgs.length,
+                        itemBuilder: (ctx, i) {
+                          final m =
+                              Map<String, dynamic>.from(_msgs[i] as Map);
+                          final fromSupport =
+                              (m['sender_id'] as num?)?.toInt() ==
+                                  kSupportUserId;
+                          return Align(
+                            alignment: fromSupport
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              constraints: const BoxConstraints(
+                                  maxWidth: 280),
+                              decoration: BoxDecoration(
+                                color: fromSupport
+                                    ? kNyqGreen.withValues(alpha: 0.15)
+                                    : Colors.white,
+                                borderRadius:
+                                    BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  if (fromSupport)
+                                    const Text('NYG Support',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight:
+                                                FontWeight.bold,
+                                            color: kNyqGreen)),
+                                  Text((m['text'] ?? '').toString(),
+                                      style: const TextStyle(
+                                          fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _ctl,
+                      minLines: 1,
+                      maxLines: 4,
+                      decoration: InputDecoration(
+                        hintText: 'Reply as NYG Support...',
+                        isDense: true,
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    style: IconButton.styleFrom(
+                        backgroundColor: kNyqGreen),
+                    onPressed: _sending ? null : _send,
+                    icon: _sending
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.send, size: 18),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class MessagesScreen extends StatefulWidget {
   final Map<String, dynamic> currentUser;
   const MessagesScreen({super.key, required this.currentUser});
@@ -3131,6 +3409,38 @@ class _MessagesScreenState extends State<MessagesScreen> {
       final db2 = (b['last_at'] ?? '').toString();
       return db2.compareTo(da);
     });
+
+    final isAdmin = widget.currentUser['is_admin'] == 1 ||
+        widget.currentUser['is_admin'] == true;
+    if (isAdmin) {
+      // Each person who messaged NYG Support is a separate ticket.
+      final tickets = await SupportSession.tickets();
+      for (final t in tickets) {
+        list.add({
+          ...Map<String, dynamic>.from(t as Map),
+          '_kind': 'support_ticket',
+        });
+      }
+    } else {
+      // One pinned thread with NYG Support, always at the top.
+      Map<String, dynamic>? existing;
+      for (final c in list) {
+        final o = c['other_user'];
+        if (o is Map && (o['id'] as num?)?.toInt() == kSupportUserId) {
+          existing = Map<String, dynamic>.from(c as Map);
+        }
+      }
+      list.removeWhere((c) {
+        final o = c['other_user'];
+        return o is Map && (o['id'] as num?)?.toInt() == kSupportUserId;
+      });
+      list.insert(0, {
+        '_kind': 'support_pinned',
+        'last_message': existing?['last_message'] ??
+            'Ask us anything about NYG',
+        'unread_count': existing?['unread_count'] ?? 0,
+      });
+    }
     if (!mounted) return;
     setState(() {
       _conversations = list;
@@ -3161,6 +3471,89 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   itemCount: _conversations.length,
                   itemBuilder: (ctx, i) {
                     final c = _conversations[i];
+                    final kind = (c['_kind'] ?? 'direct').toString();
+                    if (kind == 'support_pinned') {
+                      final unread = c['unread_count'] ?? 0;
+                      return ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: kNyqAccent,
+                          child: Icon(Icons.support_agent,
+                              color: Colors.white, size: 20),
+                        ),
+                        title: const Text('NYG Support',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold)),
+                        subtitle: Text(
+                          (c['last_message'] ?? '').toString(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: unread > 0
+                            ? CircleAvatar(
+                                radius: 12,
+                                backgroundColor: Colors.red,
+                                child: Text('$unread',
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11)),
+                              )
+                            : const Icon(Icons.chevron_right, size: 18),
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                otherUserId: kSupportUserId,
+                                otherUserName: 'NYG Support',
+                              ),
+                            ),
+                          );
+                          _load();
+                        },
+                      );
+                    }
+                    if (kind == 'support_ticket') {
+                      final unread = c['unread_count'] ?? 0;
+                      return ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Colors.orange,
+                          child: Icon(Icons.support_agent,
+                              color: Colors.white, size: 20),
+                        ),
+                        title: Text(
+                            'Support: ' + (c['name'] ?? '').toString(),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold)),
+                        subtitle: Text(
+                          (c['last_message'] ?? '').toString(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: unread > 0
+                            ? CircleAvatar(
+                                radius: 12,
+                                backgroundColor: Colors.red,
+                                child: Text('$unread',
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11)),
+                              )
+                            : const Icon(Icons.chevron_right, size: 18),
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SupportChatScreen(
+                                userId: (c['user_id'] as num).toInt(),
+                                userName:
+                                    (c['name'] ?? 'User').toString(),
+                              ),
+                            ),
+                          );
+                          _load();
+                        },
+                      );
+                    }
                     if ((c['_kind'] ?? 'direct') == 'thread') {
                       return ListTile(
                         leading: const CircleAvatar(
@@ -8923,11 +9316,23 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Map<String, dynamic>? _currentUser;
   bool _loadingUser = true;
   bool _updateChecked = false;
+  Timer? _unreadTimer;
 
   @override
   void initState() {
     super.initState();
     _loadUser();
+    refreshUnreadMessages();
+    _unreadTimer =
+        Timer.periodic(const Duration(seconds: 20), (_) {
+      refreshUnreadMessages();
+    });
+  }
+
+  @override
+  void dispose() {
+    _unreadTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -9111,9 +9516,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               icon: Icon(Icons.location_on_outlined),
               selectedIcon: Icon(Icons.location_on),
               label: 'Marketplace'),
-          const NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
+          NavigationDestination(
+              icon: ValueListenableBuilder<int>(
+                valueListenable: unreadMessages,
+                builder: (_, n, __) => n > 0
+                    ? const Badge(child: Icon(Icons.person_outline))
+                    : const Icon(Icons.person_outline),
+              ),
+              selectedIcon: const Icon(Icons.person),
               label: 'Profile'),
         ],
           ),
@@ -18064,6 +18474,21 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: kNyqAccent,
+        foregroundColor: Colors.white,
+        tooltip: 'Chat with NYG Support',
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              otherUserId: kSupportUserId,
+              otherUserName: 'NYG Support',
+            ),
+          ),
+        ),
+        child: const Icon(Icons.support_agent),
+      ),
       appBar: AppBar(
         leadingWidth: 96,
         leading: Padding(
